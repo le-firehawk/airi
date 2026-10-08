@@ -238,7 +238,11 @@ export const useChatStore = defineStore('chat', () => {
   const activeSendSessionId = shallowRef<string>()
   const activeStreamingMessage = computed(() => chatStream.activeTurns.find(turn => turn.sessionId === activeSendSessionId.value)?.message)
   const pendingQueuedSendCount = shallowRef(0)
-  let ownedActiveTurnSpan: typeof activeTurnSpan.value
+  /**
+   * Interaction turn spans that this store started, keyed by `JSON.stringify([sessionId, turnId])`.
+   * Concurrent sessions each own one trace. `onSendSettled` ends the span of its own turn only.
+   */
+  const ownedTurnSpans = new Map<string, NonNullable<typeof activeTurnSpan.value>>()
   let stopLeadershipListener: (() => void) | undefined
   const analyticsHooks = createChatAnalyticsHooks({
     getSessionMessages: sessionId => chatSession.getSessionMessages(sessionId),
@@ -314,12 +318,18 @@ export const useChatStore = defineStore('chat', () => {
       return headers
     }
 
-    const hadExistingTurn = !!activeTurnSpan.value
-    if (!hadExistingTurn) {
-      const turnSpan = startSpan(IOSpanNames.InteractionTurn)
-      activeTurnSpan.value = turnSpan
-      ownedActiveTurnSpan = turnSpan
+    // The runtime always correlates its turns. A call without correlation has no settle event, so it starts no turn span.
+    const turnKey = options?.requestCorrelation
+      ? JSON.stringify([options.requestCorrelation.conversationId, options.requestCorrelation.turnId])
+      : undefined
+    let turnSpan = turnKey ? ownedTurnSpans.get(turnKey) : activeTurnSpan.value
+    if (!turnSpan && turnKey) {
+      turnSpan = startSpan(IOSpanNames.InteractionTurn)
+      ownedTurnSpans.set(turnKey, turnSpan)
     }
+    // Speech recognition, speech output, and streaming control attach to the most recently started turn.
+    if (turnSpan)
+      activeTurnSpan.value = turnSpan
 
     const visionStore = useVisionStore()
     // NOTICE:
@@ -460,7 +470,7 @@ export const useChatStore = defineStore('chat', () => {
 
     const resolveStep = options?.resolveStep
 
-    const llmSpan = startSpan(IOSpanNames.LLMInference, activeTurnSpan.value, {
+    const llmSpan = startSpan(IOSpanNames.LLMInference, turnSpan, {
       [IOAttributes.Subsystem]: IOSubsystems.LLM,
       [IOAttributes.GenAIRequestModel]: model,
       [IOAttributes.LLMInputMessageCount]: providerMessages.length,
@@ -519,14 +529,17 @@ export const useChatStore = defineStore('chat', () => {
     pendingQueuedSendCount.value = state.pendingQueuedSendCount
   }
 
-  function settleOwnedActiveTurnSpan() {
-    if (!ownedActiveTurnSpan)
+  function settleOwnedTurnSpan(turn: { sessionId: string, turnId: string }) {
+    const key = JSON.stringify([turn.sessionId, turn.turnId])
+    const span = ownedTurnSpans.get(key)
+    if (!span)
       return
 
-    ownedActiveTurnSpan.end()
-    if (activeTurnSpan.value === ownedActiveTurnSpan)
-      activeTurnSpan.value = undefined
-    ownedActiveTurnSpan = undefined
+    span.end()
+    ownedTurnSpans.delete(key)
+    // Another session can still generate. Its turn becomes the active one again.
+    if (activeTurnSpan.value === span)
+      activeTurnSpan.value = [...ownedTurnSpans.values()].at(-1)
   }
 
   /** The character that owns a session. A queued turn keeps it when another window selects a different card. */
@@ -603,7 +616,7 @@ export const useChatStore = defineStore('chat', () => {
     unwrapMessage: message => toRaw(message),
     onStateChange: syncRuntimeState,
     onSendSettled: (event) => {
-      settleOwnedActiveTurnSpan()
+      settleOwnedTurnSpan(event)
       getSpeechBusContext().emit(voiceGenerationEnded, event)
     },
     ...analyticsHooks,

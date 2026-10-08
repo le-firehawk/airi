@@ -195,12 +195,14 @@ export const useChatSessionStore = defineStore('chat-session', () => {
     return next
   }
 
-  function generateInitialMessageFromPrompt(prompt: string) {
-    const content = codeBlockSystemPrompt + mathSyntaxSystemPrompt + prompt
+  function systemPromptFrom(characterPrompt: string) {
+    return codeBlockSystemPrompt + mathSyntaxSystemPrompt + characterPrompt
+  }
 
+  function generateInitialMessageFromPrompt(prompt: string) {
     return {
       role: 'system',
-      content,
+      content: systemPromptFrom(prompt),
       id: nanoid(),
       createdAt: Date.now(),
     } satisfies ChatHistoryItem
@@ -208,6 +210,25 @@ export const useChatSessionStore = defineStore('chat-session', () => {
 
   function generateInitialMessage() {
     return generateInitialMessageFromPrompt(systemPrompt.value)
+  }
+
+  /**
+   * Returns the current system prompt of the character that owns the session.
+   * The selected character does not change it. Chat requests read it again before each model step.
+   */
+  function getSessionSystemPrompt(sessionId: string) {
+    // A session without metadata has no owner yet. The selected character creates and owns it.
+    const characterId = sessionMetas.value[sessionId]?.characterId ?? getCurrentCharacterId()
+    return systemPromptFrom(cards.getSystemPrompt(characterId))
+  }
+
+  function generateInitialMessageForSession(sessionId: string) {
+    return {
+      role: 'system',
+      content: getSessionSystemPrompt(sessionId),
+      id: nanoid(),
+      createdAt: Date.now(),
+    } satisfies ChatHistoryItem
   }
 
   function refreshActiveSessionSystemMessage() {
@@ -947,7 +968,7 @@ export const useChatSessionStore = defineStore('chat-session', () => {
           cloudChatId: remote.id,
         }
         sessionMetas.value[remote.id] = adoptedMeta
-        sessionMessages.value[remote.id] = [generateInitialMessage()]
+        sessionMessages.value[remote.id] = [generateInitialMessageForSession(remote.id)]
         ensureGeneration(remote.id)
 
         if (!index.value)
@@ -1402,7 +1423,7 @@ export const useChatSessionStore = defineStore('chat-session', () => {
   function ensureSession(sessionId: string) {
     ensureGeneration(sessionId)
     if (!sessionMessages.value[sessionId] || sessionMessages.value[sessionId].length === 0) {
-      replaceSessionMessages(sessionId, [generateInitialMessage()], { persist: false })
+      replaceSessionMessages(sessionId, [generateInitialMessageForSession(sessionId)], { persist: false })
     }
   }
 
@@ -1489,7 +1510,7 @@ export const useChatSessionStore = defineStore('chat-session', () => {
   function cleanupMessages(sessionId = activeSessionId.value) {
     ensureGeneration(sessionId)
     sessionGenerations.value[sessionId] += 1
-    setSessionMessages(sessionId, [generateInitialMessage()])
+    setSessionMessages(sessionId, [generateInitialMessageForSession(sessionId)])
   }
 
   function getAllSessions() {
@@ -1710,6 +1731,7 @@ export const useChatSessionStore = defineStore('chat-session', () => {
     recordInterruption,
     persistSessionMessages,
     getSessionMessages,
+    getSessionSystemPrompt,
     getSessionMessagesIfLoaded,
     sessionMessages,
     sessionMetas,

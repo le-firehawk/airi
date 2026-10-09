@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { authorizeHandoffTarget } from './session-handoff-target'
 
 describe('authorizeHandoffTarget', () => {
-  const base = 'https://airi-server-dev.up.railway.app'
+  const base = 'https://api-dev.airi.build'
 
   it('accepts this server\'s authorize URL', () => {
     expect(authorizeHandoffTarget(

@@ -57,7 +57,7 @@ jobs:
           S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
           S3_REGION: ${{ secrets.S3_REGION }}
           WARP_DRIVE_PUBLIC_BASE: ${{ secrets.WARP_DRIVE_PUBLIC_BASE }}
-          VITE_SERVER_URL: 'https://airi-server-dev.up.railway.app'
+          VITE_SERVER_URL: 'https://api-dev.airi.build'
           # Public Web Billing sandbox key. It ships in the client bundle.
           # Use it only for the server-dev build. Production keeps its own key.
           VITE_REVENUECAT_WEB_KEY: 'rcb_sb_qXsxugxuxUCrbWIUpDDikHCpI'
@@ -120,7 +120,7 @@ jobs:
       - name: Build ui-server-auth
         run: pnpm -F @proj-airi/ui-server-auth run build
         env:
-          VITE_SERVER_URL: 'https://airi-server-dev.up.railway.app'
+          VITE_SERVER_URL: 'https://api-dev.airi.build'
           VITE_WEB_APP_URL: 'https://airi.moeru.ai/'
 
       - name: Wrangler Pages Deploy

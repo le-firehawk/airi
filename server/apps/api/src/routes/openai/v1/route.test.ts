@@ -5,7 +5,6 @@ import type { BillingService as WalletBillingService } from '../../../services/d
 import type { LlmBillingService } from '../../../services/domain/billing/llm-billing'
 import type { FluxService } from '../../../services/domain/flux'
 import type { LlmRouterService } from '../../../services/domain/llm-router'
-import type { ChatGenerationTrace, TtsGenerationTrace } from '../../../services/domain/llm-tracing'
 import type { ProductEventService } from '../../../services/domain/product-events'
 import type { ProviderCatalogService } from '../../../services/domain/provider-catalog'
 import type { RequestLogService } from '../../../services/domain/request-log'
@@ -160,12 +159,12 @@ function createMockTtsMeter(unitsPerFlux = 1000, initialBalance = 100) {
 
 function createMockLlmTracing() {
   return {
-    startChatGeneration: vi.fn((): ChatGenerationTrace => ({
+    startChatGeneration: vi.fn(() => ({
       appendStreamChunk: vi.fn(),
       succeed: vi.fn(),
       fail: vi.fn(),
     })),
-    startTtsGeneration: vi.fn((): TtsGenerationTrace => ({
+    startTtsGeneration: vi.fn(() => ({
       succeed: vi.fn(),
       fail: vi.fn(),
     })),
@@ -387,7 +386,7 @@ function createTestApp(
   requestLogService?: RequestLogService,
   speechBilling?: ReturnType<typeof createMockTtsMeter>,
   llmRouter?: LlmRouterService,
-  llmTracing = createMockLlmTracing(),
+  _llmTracing = createMockLlmTracing(),
   productEventService = createMockProductEventService(),
   voicePackService = createMockVoicePackService(),
   providerCatalogService = createMockProviderCatalogService(),
@@ -409,7 +408,6 @@ function createTestApp(
     genAi,
     revenue: null,
     rateLimitMetrics: null,
-    llmTracing,
   })
   const app = new Hono<HonoEnv>()
 
@@ -1081,7 +1079,7 @@ describe('v1CompletionsRoutes', () => {
       }
     })
 
-    it('records Langfuse usage without forwarding generations to product analytics', async () => {
+    it('does not forward gateway generations to product analytics', async () => {
       const llmRouter = createMockLlmRouter({
         route: vi.fn(async (_req, ctx) => {
           if (ctx) {
@@ -1097,7 +1095,6 @@ describe('v1CompletionsRoutes', () => {
           })
         }) as any,
       })
-      const llmTracing = createMockLlmTracing()
       const productEventService = createMockProductEventService()
       const app = createTestApp(
         createMockFluxService(),
@@ -1106,7 +1103,7 @@ describe('v1CompletionsRoutes', () => {
         undefined,
         undefined,
         llmRouter,
-        llmTracing,
+        createMockLlmTracing(),
         productEventService,
       )
 
@@ -1124,14 +1121,6 @@ describe('v1CompletionsRoutes', () => {
         { user: testUser } as any,
       )
 
-      expect(llmTracing.startChatGeneration).toHaveBeenCalledWith(
-        expect.objectContaining({
-          model: 'openai/gpt-4o-mini',
-          requestId: expect.any(String),
-          userId: 'user-1',
-        }),
-      )
-      expect(llmTracing.startChatGeneration).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'conversation-1' }))
       expect(productEventService.track).not.toHaveBeenCalled()
     })
 
@@ -2961,7 +2950,6 @@ describe('issue #2479 hosted Responses', () => {
     expect(harness.billing.settleLlmCost).toHaveBeenCalledTimes(1)
     expect(harness.billing.settleLlmCost).toHaveBeenCalledWith(expect.objectContaining({ usage: expect.objectContaining({ costUsd: 0.003, promptTokens: 100, completionTokens: 50 }), model: 'openai/gpt-5-mini' }))
     expect(harness.logs.logRequest).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }))
-    expect(harness.tracing.startChatGeneration).toHaveBeenCalledWith(expect.objectContaining({ protocol: 'responses' }))
   })
 
   it('forwards provider reasoning extensions without rebuilding input items', async () => {

@@ -111,7 +111,13 @@ function hasAssistantOutput(message: StreamingAssistantMessage) {
 /** Encoded attachments belong to one user message. Media capture and storage stay outside chat orchestration. */
 export type ChatAttachment
   = { type: 'image', data: string, mimeType: string }
-    | { type: 'audio', data: string, mimeType: 'audio/wav' | 'audio/mpeg' }
+    | {
+      type: 'audio'
+      data: string
+      mimeType: 'audio/wav' | 'audio/mpeg'
+      /** Speech recognized while the recording was captured. Text-only models receive it instead of the audio. */
+      transcript?: string
+    }
 
 /** Options accepted by the chat orchestrator runtime for one user send. */
 export interface ChatOrchestratorSendOptions {
@@ -122,6 +128,8 @@ export interface ChatOrchestratorSendOptions {
   supportsVisionInput?: boolean
   /** Request-owned character instructions, captured before waiting in the session queue. */
   systemPromptSupplement?: string
+  /** Eligible catalog for this request. Omission disables stickers. The queue copies entries before waiting. */
+  stickers?: readonly { id: string, description: string }[]
   /** Stable user-message identity. Retries acknowledge the existing message without generating another reply. */
   messageId?: string
   /** Cancellation belongs to this request, including queued work and provider generation. */
@@ -698,6 +706,8 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
       }
 
       const finalContent = contentParts.length > 1 ? contentParts : sendingMessage
+      // Transcripts follow audio part order, which is the cache key that text-only projection reads.
+      const audioTranscripts = options.attachments?.filter(attachment => attachment.type === 'audio').map(attachment => attachment.transcript ?? '')
       if (!streamingMessageContext.input) {
         streamingMessageContext.input = {
           type: 'input:text',
@@ -726,6 +736,7 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
         id: roundId,
         ...(replyToMessageId ? { replyToMessageId } : {}),
         ...(options.toolReferences?.length ? { tools: options.toolReferences } : {}),
+        ...(audioTranscripts?.some(Boolean) ? { audioTranscripts } : {}),
       }
       const receipt = await deps.session.commitUserMessage(sessionId, userMessage)
       accepted.resolve({ sessionId, messageId: receipt.messageId })
@@ -756,6 +767,8 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
 
       const categorizer = createStreamingCategorizer(activeProvider)
       let streamPosition = 0
+      const stickers = options.stickers
+      let stickerEmitted = false
 
       const parser = useLlmmarkerParser({
         onLiteral: async (literal) => {
@@ -791,13 +804,29 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
           if (shouldAbort())
             return
 
+          if (/^<\|STICKER\b/.test(special)) {
+            // Text-based reasoning can contain markers too. Only visible speech can select an image.
+            if (!categorizer.filterToSpeech(special, streamPosition))
+              return
+            const id = /^<\|STICKER ([a-z0-9-]+)\|>$/.exec(special)?.[1]
+            if (!stickerEmitted && id && stickers?.some(sticker => sticker.id === id)) {
+              buildingMessage.slices.push({ type: 'sticker', stickerId: id })
+              stickerEmitted = true
+              updateStream(sessionId, buildingMessage)
+            }
+            // Sticker markers are UI data, including invalid IDs. Speech and plugins must not execute them.
+            return
+          }
+
           await hooks.emitTokenSpecialHooks(special, streamingMessageContext)
         },
         onEnd: async (fullText) => {
           if (shouldAbort())
             return
 
-          const finalCategorization = categorizeResponse(fullText, activeProvider)
+          // Strip only sticker markers, including the escaped form accepted by the parser.
+          const speechText = fullText.replace(/<(?:\||\{'\|'\})STICKER\b[\s\S]*?(?:(?:\||\{'\|'\})>|$)/g, '')
+          const finalCategorization = categorizeResponse(speechText, activeProvider)
 
           const reasoningContentField = buildingMessage.categorization?.reasoning?.trim()
           buildingMessage.categorization = {
@@ -831,7 +860,16 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
       })
 
       const context = buildContext(sessionMessagesForSend)
-      const systemPromptSupplement = options.systemPromptSupplement?.trim()
+      const stickerPrompt = stickers?.length
+        ? [
+            'You can send one optional sticker per reply with a marker from this catalog.',
+            'Use stickers when the user requests one or when a lighthearted response fits. Avoid them in serious conversations.',
+            'Keep your text complete. Never invent sticker IDs or image URLs.',
+            'Choose the ID whose name and emotion tags best fit the conversation.',
+            ...stickers.map(sticker => `<|STICKER ${sticker.id}|>: ${sticker.description}`),
+          ].join('\n')
+        : ''
+      const systemPromptSupplement = [options.systemPromptSupplement?.trim(), stickerPrompt].filter(Boolean).join('\n\n')
       if (systemPromptSupplement) {
         const systemMessage = context.turns.find(turn => turn.type === 'system' && turn.authority === 'system')
         if (systemMessage?.type === 'system')
@@ -1015,6 +1053,7 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
 
       if (!shouldAbort() && (buildingMessage.slices.length > 0 || generatedTurn?.rounds.length)) {
         const finalAssistant = buildingMessage
+        finalAssistant.completedAt = now()
         deps.session.appendSessionMessage(sessionId, finalAssistant)
         assistantStored = true
         deps.onAssistantMessageAppended?.({
@@ -1084,7 +1123,7 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
       if (!assistantStored && !generationCompleted && hasAssistantOutput(buildingMessage)) {
         // Keep received output local, but do not run completion hooks or cloud
         // sync for an assistant turn that never reached a terminal event.
-        deps.session.appendSessionMessage(sessionId, { ...cloneStreamingMessage(buildingMessage), interrupted: true })
+        deps.session.appendSessionMessage(sessionId, { ...cloneStreamingMessage(buildingMessage), interrupted: true, completedAt: now() })
       }
       resetForegroundStream(sessionId)
 
@@ -1115,7 +1154,7 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
         && abortSignal.aborted
         && !isStaleGeneration()
         && hasAssistantOutput(buildingMessage)) {
-        deps.session.appendSessionMessage(sessionId, { ...cloneStreamingMessage(buildingMessage), interrupted: true })
+        deps.session.appendSessionMessage(sessionId, { ...cloneStreamingMessage(buildingMessage), interrupted: true, completedAt: now() })
         resetForegroundStream(sessionId)
       }
       activeSends.delete(sessionId)
@@ -1200,7 +1239,11 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
     queueFor(sessionId).enqueue({
       providerId: options.providerId ?? deps.getActiveProvider?.() ?? '',
       sendingMessage,
-      options: { ...options, systemPromptSupplement: options.systemPromptSupplement ?? deps.getSystemPromptSupplement?.() },
+      options: {
+        ...options,
+        systemPromptSupplement: options.systemPromptSupplement ?? deps.getSystemPromptSupplement?.(),
+        stickers: options.stickers?.map(({ id, description }) => ({ id, description })),
+      },
       generation,
       sessionId,
       accepted,

@@ -28,11 +28,11 @@ catalogs:
       specifier: ^0.18.5
       version: 0.18.5
     '@auv-js/cli':
-      specifier: 0.0.16
-      version: 0.0.16
+      specifier: 0.0.28
+      version: 0.0.28
     '@auv-js/sdk':
-      specifier: 0.0.16
-      version: 0.0.16
+      specifier: 0.0.28
+      version: 0.0.28
     '@aws-sdk/client-s3':
       specifier: ^3.1135.0
       version: 3.1139.0
@@ -234,12 +234,6 @@ catalogs:
     '@intlify/unplugin-vue-i18n':
       specifier: ^11.2.5
       version: 11.2.5
-    '@langfuse/otel':
-      specifier: ^5.10.1
-      version: 5.10.1
-    '@langfuse/tracing':
-      specifier: ^5.10.1
-      version: 5.10.1
     '@laplace.live/event-bridge-sdk':
       specifier: ^1.1.0
       version: 1.1.0
@@ -431,10 +425,7 @@ catalogs:
       version: 3.0.0
     '@revenuecat/purchases-js':
       specifier: ^1.15.0
-      version: 1.65.0
-    '@ricky0123/vad-web':
-      specifier: ^0.0.30
-      version: 0.0.30
+      version: 1.68.0
     '@rive-app/canvas-lite':
       specifier: ^2.40.1
       version: 2.40.1
@@ -1898,10 +1889,10 @@ importers:
     dependencies:
       '@auv-js/cli':
         specifier: 'catalog:'
-        version: 0.0.16
+        version: 0.0.28
       '@auv-js/sdk':
         specifier: 'catalog:'
-        version: 0.0.16
+        version: 0.0.28
       '@date-fns/utc':
         specifier: 'catalog:'
         version: 2.1.1
@@ -2693,9 +2684,6 @@ importers:
       mediabunny:
         specifier: 'catalog:'
         version: 1.55.2
-      nanoid:
-        specifier: 'catalog:'
-        version: 6.0.1
       node-vibrant:
         specifier: 'catalog:'
         version: 4.0.4
@@ -4058,6 +4046,15 @@ importers:
       '@moeru/std':
         specifier: 'catalog:'
         version: 0.1.0-beta.17
+      '@proj-airi/pipelines-audio':
+        specifier: workspace:*
+        version: link:../pipelines-audio
+      mediabunny:
+        specifier: 'catalog:'
+        version: 1.55.2
+      nanoid:
+        specifier: 'catalog:'
+        version: 6.0.1
     devDependencies:
       '@types/audioworklet':
         specifier: 'catalog:'
@@ -4415,6 +4412,9 @@ importers:
       clustr:
         specifier: 'catalog:'
         version: 1.0.2
+      nanoid:
+        specifier: 'catalog:'
+        version: 6.0.1
 
   packages/plugin-protocol:
     dependencies:
@@ -4521,6 +4521,9 @@ importers:
       unspeech:
         specifier: catalog:xsai
         version: 0.1.16
+      valibot:
+        specifier: 'catalog:'
+        version: 1.4.2(typescript@6.0.3)
       xsschema:
         specifier: 'catalog:'
         version: 0.5.1(@valibot/to-json-schema@1.7.1(valibot@1.4.2(typescript@6.0.3)))(zod-to-json-schema@3.25.2(zod@4.4.3))(zod@4.4.3)
@@ -4797,6 +4800,9 @@ importers:
       '@proj-airi/ccc':
         specifier: workspace:*
         version: link:../ccc
+      '@proj-airi/core-agent':
+        specifier: workspace:^
+        version: link:../core-agent
       '@proj-airi/i18n':
         specifier: workspace:*
         version: link:../i18n
@@ -5089,10 +5095,7 @@ importers:
         version: link:../vite-plugin-sherpaw
       '@revenuecat/purchases-js':
         specifier: 'catalog:'
-        version: 1.65.0
-      '@ricky0123/vad-web':
-        specifier: 'catalog:'
-        version: 0.0.30
+        version: 1.68.0
       '@sherpaw/xsai-transcription':
         specifier: 'catalog:'
         version: 0.2.1(electron@43.4.1(supports-color@10.2.2))(onnxruntime-web@1.27.0)(web-worker@1.5.0)
@@ -6139,15 +6142,6 @@ importers:
         specifier: 'catalog:'
         version: 0.5.1(@valibot/to-json-schema@1.7.1(valibot@1.4.2(typescript@6.0.3)))(zod-to-json-schema@3.25.2(zod@4.4.3))(zod@4.4.3)
 
-  plugins/airi-plugin-homeassistant:
-    dependencies:
-      '@guiiai/logg':
-        specifier: 'catalog:'
-        version: 1.2.12
-      '@proj-airi/server-sdk':
-        specifier: workspace:*
-        version: link:../../packages/server-sdk
-
   plugins/airi-plugin-web-extension:
     devDependencies:
       '@iconify-json/solar':
@@ -6222,12 +6216,6 @@ importers:
       '@hono/otel':
         specifier: 'catalog:'
         version: 1.1.2(hono@4.13.3)
-      '@langfuse/otel':
-        specifier: 'catalog:'
-        version: 5.10.1(@opentelemetry/api@1.9.1)(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-trace-otlp-http@0.221.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.10.0(@opentelemetry/api@1.9.1))
-      '@langfuse/tracing':
-        specifier: 'catalog:'
-        version: 5.10.1(@opentelemetry/api@1.9.1)
       '@moeru/eventa':
         specifier: 'catalog:'
         version: 1.0.2(electron@43.4.1(supports-color@10.2.2))(h3@2.0.1-rc.29(crossws@0.4.12(srvx@0.12.7)))(hono@4.13.3)(web-worker@1.5.0)
@@ -6751,47 +6739,53 @@ packages:
   '@asamuzakjp/nwsapi@2.3.9':
     resolution: {integrity: sha512-n8GuYSrI9bF7FFZ/SjhwevlHc8xaVlb/7HmHelnc/PZXBD2ZR49NnN9sMMuDdEGPeeRQ5d0hqlSlEpgCX3Wl0Q==}
 
-  '@auv-js/api-client@0.0.16':
-    resolution: {integrity: sha512-02uUXhJLgolpYeFP5Y0FPoFBCt8ZxRH0HcSIj9Ac3aXfHNJdXFWxDtiWhtVIcviW8oEPyMWJkqCl5/f3IUFB2w==}
+  '@auv-js/api-client@0.0.28':
+    resolution: {integrity: sha512-dM/41Bymh9AeK+ePORUF+IJ9d1U2eguOO1ywyFYmAsDdLZqm2/C6mAkiqNFXj3UKYuNo2eL8z+pQNrmS3BSoFg==}
 
-  '@auv-js/cli-darwin-arm64@0.0.16':
-    resolution: {integrity: sha512-hBHOxWzZjsrPukczXxAWc65LR+tZcE2oEpJVI7yBSqOQtVHNomHWStXGT/ezArxWfPSmNi7qOqlvL3VTsp87Hw==}
+  '@auv-js/cli-darwin-arm64@0.0.28':
+    resolution: {integrity: sha512-mgwnJuzHeAX3KfQSrcR0sniZBCRmXU/FSoBH6dF5jTm+uzeRY37EPJY7YwxvZXsS6TAHLDIjA9JpAzKN1HzRKQ==}
     engines: {node: '>=20.19.0'}
     cpu: [arm64]
     os: [darwin]
 
-  '@auv-js/cli-darwin-x64@0.0.16':
-    resolution: {integrity: sha512-JMGECPuQqVTq4eHPN4MWUWQuLt5jueiZR+apMvzYabc+MmZ4GxZQYFwgqQdi221izI9DaeePMVYr80K4ievJzA==}
+  '@auv-js/cli-darwin-x64@0.0.28':
+    resolution: {integrity: sha512-3ZSziSCV2AZF/F1hUauu7fYVlChQ96+4oHgp/fv7OZobAq+/EiAQqyrbatvYE4O27NcjamiNDdMq6SBdcJCvOw==}
     engines: {node: '>=20.19.0'}
     cpu: [x64]
     os: [darwin]
 
-  '@auv-js/cli-linux-arm64-gnu@0.0.16':
-    resolution: {integrity: sha512-7IWFqrt3kXZacoToP/fCV7ExTSXwaJYi3C3lVZmBK6AybpNo/urtdRmzCRUim76K1B3Bysrjkjqvjp0+SXZ2VQ==}
+  '@auv-js/cli-linux-arm64-gnu@0.0.28':
+    resolution: {integrity: sha512-x4WVMjqysLyqFZlBfSQI7d5pWBeiY48twodcYaBa49c8xagzfSs1adrJfXqYDW6hptPhtooKRsdFU3HbLsrkgQ==}
     engines: {node: '>=20.19.0'}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@auv-js/cli-linux-x64-gnu@0.0.16':
-    resolution: {integrity: sha512-IO0WDFMbW2su0FWQGSjkcZ7lVBS0iJmgGUpqULmpa3EKC9iunaCa14DaTOVGXpBnlonxmf0LHylVF1eoJE33qA==}
+  '@auv-js/cli-linux-x64-gnu@0.0.28':
+    resolution: {integrity: sha512-rvKrKQ+C/K/JetZef8WroXsC3ZZThv96Szjye/w15+vvJVPujNOcoGeiRc112MrJ6PktKsxbJQXC+B4krZkFWQ==}
     engines: {node: '>=20.19.0'}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@auv-js/cli-win32-x64-msvc@0.0.16':
-    resolution: {integrity: sha512-o+WaLSTLTamEYkOnhmy9kOS9yxp5j7HqoZexBucoyN4SlteKxJ+ICeX/Zn0CxjJH87qYZbB1XPmkayGcIbZdrw==}
+  '@auv-js/cli-win32-arm64-msvc@0.0.28':
+    resolution: {integrity: sha512-R9Nu9TUT2heshiDWbaDOZiuXs/H4yd0RQdatuX/uKSsTnEhgPfKmdYj7hpGqtJf6b52pENbdvUs8ZlOyV5rRJQ==}
+    engines: {node: '>=20.19.0'}
+    cpu: [arm64]
+    os: [win32]
+
+  '@auv-js/cli-win32-x64-msvc@0.0.28':
+    resolution: {integrity: sha512-AwVXaJBqfqidq8VWdQNXfmvkhXDKu4ZwmljBG4y4KxD74zHWVGRPDO3ANRE72HBZuU0sSEP3a8LDUCSo5Ycz2w==}
     engines: {node: '>=20.19.0'}
     cpu: [x64]
     os: [win32]
 
-  '@auv-js/cli@0.0.16':
-    resolution: {integrity: sha512-150MGYEsLLayQkFjGGGDD3F9tJZxE080Mp1z9vPYnd7AOlnJrCtIFpDKgQ6Wnzv+cjiDpE5KAdzPJg3DwaJT9A==}
+  '@auv-js/cli@0.0.28':
+    resolution: {integrity: sha512-ZgLD6e0ruwjaxObls1yldzYFiyiXnwrv5Uoo2vOi6nnycxcHGcYa6C/3Paq9R+48QnDzH1HaLZMXbrPLbFRfLA==}
     hasBin: true
 
-  '@auv-js/sdk@0.0.16':
-    resolution: {integrity: sha512-0pm+8Y1N2dNtApHQJZvglJatBtVUew8lfkaIqYNHCluwIq+wAtfcsryrwnqxtXluZYcAgiBNmmD9+uHuWB5XGg==}
+  '@auv-js/sdk@0.0.28':
+    resolution: {integrity: sha512-Moknh7kgfTH5eaLqbny1X5u4oDxvJrxhRwQHhaUARo1a6FrdWbwsG821VbXPcYlyUJWD+7XItchdt7o0Rqu0Rw==}
 
   '@aws-sdk/checksums@3.1001.1':
     resolution: {integrity: sha512-x12Q17KYlJAd3nKf8LV5LV0vt8sh8/6YfQLGPtrGnQf/tW4jqxPGq5GPpuVitpQYM3eUR4XB7CbxZf751NMbLw==}
@@ -9089,26 +9083,6 @@ packages:
 
   '@kwsites/promise-deferred@1.1.1':
     resolution: {integrity: sha512-GaHYm+c0O9MjZRu0ongGBRbinu8gVAMd2UZjji6jVmqKtZluZnptXGWhz1E8j8D2HJ3f/yMxKAUC0b+57wncIw==}
-
-  '@langfuse/core@5.10.1':
-    resolution: {integrity: sha512-W8UArizWSy1DdeLGTsTwJwl7bkA7OQQcGZW8RtoopXyJZ93O0rwG7wzzeiZjhjpj5OtWOUTEaJuNkwOrF31UDw==}
-    peerDependencies:
-      '@opentelemetry/api': ^1.9.0
-
-  '@langfuse/otel@5.10.1':
-    resolution: {integrity: sha512-F2153e4PoJ1cN+5tM/xnsS44aQCQwK3p0nPk4NEpITV5pMTqiQVyvpkAvly8GKQ5Qjjr7heJ1dFtghW43ysyPQ==}
-    engines: {node: '>=20'}
-    peerDependencies:
-      '@opentelemetry/api': ^1.9.0
-      '@opentelemetry/core': ^2.0.1
-      '@opentelemetry/exporter-trace-otlp-http': '>=0.202.0 <1.0.0'
-      '@opentelemetry/sdk-trace-base': ^2.0.1
-
-  '@langfuse/tracing@5.10.1':
-    resolution: {integrity: sha512-m2kK4D0MsH8g4Og6KpnlYk8NLdQTYe0JR5M4KKpfNj99XXLlbdpXE/g3uJSqkcrWFhpiIb+3cyS9+uV6wQ6WtA==}
-    engines: {node: '>=20'}
-    peerDependencies:
-      '@opentelemetry/api': ^1.9.0
 
   '@laplace.live/event-bridge-sdk@1.1.0':
     resolution: {integrity: sha512-cqvh8JCGmplIHed8WkzdEbPvzJMlfUWecDyBHdHyEYOAg5sWaSWB0Nsq5EjzxqPYUvpVIMka4v8ijLDVQHbeUQ==}
@@ -11466,11 +11440,8 @@ packages:
   '@radix-ui/colors@3.0.0':
     resolution: {integrity: sha512-FUOsGBkHrYJwCSEtWRCIfQbZG7q1e6DgxCIOe1SUQzDe/7rXXeA47s8yCn6fuTNQAj1Zq4oTFi9Yjp3wzElcxg==}
 
-  '@revenuecat/purchases-js@1.65.0':
-    resolution: {integrity: sha512-eSaZYbPd9ht09UZc6hza2BEiqYcrVE9ckzGFh5BMNWunwkr0wrbnvoPzZ46Fk/N0ScBRIAQOJJmEpwxirbHAwg==}
-
-  '@ricky0123/vad-web@0.0.30':
-    resolution: {integrity: sha512-cJyYrh4YeeUBJcbR9Bic/bFDyB9qBkAepvpuWM3vLxnAi7bC3VHzf51UeNdT+OtY4D7MLAgV8iJMc4z41ZnaWg==}
+  '@revenuecat/purchases-js@1.68.0':
+    resolution: {integrity: sha512-1z8S2PWp2EJNljxZbrxY7hU+JrAgEl1kYKZ/xF82t6LVuLQFJrlTSihjC44Zp16i5A6LR4SB8FLANN2UIh9Fvg==}
 
   '@rive-app/canvas-lite@2.40.1':
     resolution: {integrity: sha512-gnlvjeI344tC9vBqYW8lV9o9g8FJPtaTq6UjmFmn4q9wLXloN/u3XqdXHsdU/5uBgCd8G6fFFQh7TqtnwzRSfA==}
@@ -21305,34 +21276,40 @@ snapshots:
 
   '@asamuzakjp/nwsapi@2.3.9': {}
 
-  '@auv-js/api-client@0.0.16': {}
+  '@auv-js/api-client@0.0.28': {}
 
-  '@auv-js/cli-darwin-arm64@0.0.16':
+  '@auv-js/cli-darwin-arm64@0.0.28':
     optional: true
 
-  '@auv-js/cli-darwin-x64@0.0.16':
+  '@auv-js/cli-darwin-x64@0.0.28':
     optional: true
 
-  '@auv-js/cli-linux-arm64-gnu@0.0.16':
+  '@auv-js/cli-linux-arm64-gnu@0.0.28':
     optional: true
 
-  '@auv-js/cli-linux-x64-gnu@0.0.16':
+  '@auv-js/cli-linux-x64-gnu@0.0.28':
     optional: true
 
-  '@auv-js/cli-win32-x64-msvc@0.0.16':
+  '@auv-js/cli-win32-arm64-msvc@0.0.28':
     optional: true
 
-  '@auv-js/cli@0.0.16':
-    optionalDependencies:
-      '@auv-js/cli-darwin-arm64': 0.0.16
-      '@auv-js/cli-darwin-x64': 0.0.16
-      '@auv-js/cli-linux-arm64-gnu': 0.0.16
-      '@auv-js/cli-linux-x64-gnu': 0.0.16
-      '@auv-js/cli-win32-x64-msvc': 0.0.16
+  '@auv-js/cli-win32-x64-msvc@0.0.28':
+    optional: true
 
-  '@auv-js/sdk@0.0.16':
+  '@auv-js/cli@0.0.28':
     dependencies:
-      '@auv-js/api-client': 0.0.16
+      std-env: 4.2.0
+    optionalDependencies:
+      '@auv-js/cli-darwin-arm64': 0.0.28
+      '@auv-js/cli-darwin-x64': 0.0.28
+      '@auv-js/cli-linux-arm64-gnu': 0.0.28
+      '@auv-js/cli-linux-x64-gnu': 0.0.28
+      '@auv-js/cli-win32-arm64-msvc': 0.0.28
+      '@auv-js/cli-win32-x64-msvc': 0.0.28
+
+  '@auv-js/sdk@0.0.28':
+    dependencies:
+      '@auv-js/api-client': 0.0.28
       '@bufbuild/protobuf': 2.13.0
       '@grpc/grpc-js': 1.14.4
       '@moeru/std': 0.1.0-beta.20
@@ -24008,23 +23985,6 @@ snapshots:
 
   '@kwsites/promise-deferred@1.1.1': {}
 
-  '@langfuse/core@5.10.1(@opentelemetry/api@1.9.1)':
-    dependencies:
-      '@opentelemetry/api': 1.9.1
-
-  '@langfuse/otel@5.10.1(@opentelemetry/api@1.9.1)(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-trace-otlp-http@0.221.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.10.0(@opentelemetry/api@1.9.1))':
-    dependencies:
-      '@langfuse/core': 5.10.1(@opentelemetry/api@1.9.1)
-      '@opentelemetry/api': 1.9.1
-      '@opentelemetry/core': 2.10.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/exporter-trace-otlp-http': 0.221.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/sdk-trace-base': 2.10.0(@opentelemetry/api@1.9.1)
-
-  '@langfuse/tracing@5.10.1(@opentelemetry/api@1.9.1)':
-    dependencies:
-      '@langfuse/core': 5.10.1(@opentelemetry/api@1.9.1)
-      '@opentelemetry/api': 1.9.1
-
   '@laplace.live/event-bridge-sdk@1.1.0(typescript@6.0.3)':
     dependencies:
       '@laplace.live/event-types': 2.0.21(typescript@6.0.3)
@@ -26061,11 +26021,7 @@ snapshots:
 
   '@radix-ui/colors@3.0.0': {}
 
-  '@revenuecat/purchases-js@1.65.0': {}
-
-  '@ricky0123/vad-web@0.0.30':
-    dependencies:
-      onnxruntime-web: 1.27.0
+  '@revenuecat/purchases-js@1.68.0': {}
 
   '@rive-app/canvas-lite@2.40.1': {}
 

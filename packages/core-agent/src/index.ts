@@ -51,6 +51,7 @@ export type {
   ChatHistoryItem,
   ChatMessage,
   ChatSlices,
+  ChatSlicesSticker,
   ChatSlicesText,
   ChatSlicesToolCall,
   ChatSlicesToolCallResult,
@@ -68,3 +69,4 @@ export type {
   StreamFromOptions,
   StreamOptions,
 } from './types/llm'
+export * from './voice'

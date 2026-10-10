@@ -1,6 +1,5 @@
 import type { createContext } from '@moeru/eventa/adapters/electron/main'
 import type { ShortcutBinding, ShortcutRegistrationResult } from '@proj-airi/stage-shared/global-shortcut'
-import type { BrowserWindow } from 'electron'
 
 import type { UiohookDriver } from './global-shortcut-uiohook'
 
@@ -20,9 +19,10 @@ import { onAppBeforeQuit } from '../../libs/bootkit/lifecycle'
 
 export type EventaContext = ReturnType<typeof createContext>['context']
 
+/** Connects shortcut IPC to one renderer and its window-close lifecycle. */
 export interface RegisterWindowParams {
   context: EventaContext
-  window: Pick<BrowserWindow, 'on'>
+  onClosed: (listener: () => void) => void
 }
 
 export interface RegisterMainShortcutParams {
@@ -173,9 +173,9 @@ export function setupGlobalShortcutService(): GlobalShortcutService {
     }
   }
 
-  const registerWindow: GlobalShortcutService['registerWindow'] = ({ context, window }) => {
+  const registerWindow: GlobalShortcutService['registerWindow'] = ({ context, onClosed }) => {
     contexts.add(context)
-    window.on('closed', () => {
+    onClosed(() => {
       contexts.delete(context)
     })
 

@@ -63,7 +63,10 @@ export async function setupSettingsWindowInvokes(params: {
   params.settingsWindow.once('closed', stopIOTraceRecording)
 
   // Register the global shortcut service for the settings window.
-  params.globalShortcut.registerWindow({ context, window: params.settingsWindow })
+  params.globalShortcut.registerWindow({
+    context,
+    onClosed: listener => params.settingsWindow.on('closed', listener),
+  })
 
   defineInvokeHandler(context, electronCenterMainWindow, () => centerWindowOnDisplay(params.getMainWindow?.()))
   defineInvokeHandler(context, electronSpotlightShortcutGet, () => params.spotlightWindow.getShortcutAccelerator())

@@ -201,6 +201,13 @@ function addServer() {
     testRowId.value = server.rowId
 }
 
+function toggleExpanded(rowId: string) {
+  if (expandedIds.value.has(rowId))
+    expandedIds.value.delete(rowId)
+  else
+    expandedIds.value.add(rowId)
+}
+
 function removeServer(rowId: string) {
   const i = servers.value.findIndex(s => s.rowId === rowId)
   if (i >= 0) {
@@ -392,6 +399,7 @@ onMounted(async () => {
             type="button"
             class="flex items-center justify-center rounded-md p-1 text-neutral-500 transition-colors hover:bg-neutral-200/60 hover:text-neutral-800 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
             :aria-label="expandedIds.has(server.rowId) ? tn('actions.collapse') : tn('actions.expand')"
+            :aria-expanded="expandedIds.has(server.rowId)"
             @click="toggleExpanded(server.rowId)"
           >
             <span :class="expandedIds.has(server.rowId) ? 'i-solar:alt-arrow-down-line-duotone' : 'i-solar:alt-arrow-right-line-duotone'" class="block size-4" />

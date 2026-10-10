@@ -1,3 +1,5 @@
+import type { AppUpdater } from 'electron-updater'
+
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const appMock = vi.hoisted(() => ({
@@ -20,17 +22,27 @@ const updaterState = vi.hoisted(() => ({
 }))
 
 function createUpdaterMock() {
+  let channel: AppUpdater['channel'] = null
+
   return {
-    on: vi.fn(),
+    on: vi.fn<AppUpdater['on']>().mockReturnThis(),
     autoDownload: true,
     allowPrerelease: false,
-    channel: undefined as string | undefined,
-    logger: undefined as any,
+    get channel() {
+      return channel
+    },
+    set channel(value: AppUpdater['channel']) {
+      // Electron Updater rejects an empty or non-string channel after the first assignment.
+      if (channel !== null && (typeof value !== 'string' || value.length === 0))
+        throw new TypeError('Channel must be a non-empty string')
+      channel = value
+    },
+    logger: null,
     forceDevUpdateConfig: false,
-    setFeedURL: vi.fn(),
-    checkForUpdates: vi.fn().mockResolvedValue(undefined),
-    downloadUpdate: vi.fn().mockResolvedValue(undefined),
-    quitAndInstall: vi.fn(),
+    setFeedURL: vi.fn<AppUpdater['setFeedURL']>(),
+    checkForUpdates: vi.fn<AppUpdater['checkForUpdates']>().mockResolvedValue(null),
+    downloadUpdate: vi.fn<AppUpdater['downloadUpdate']>().mockResolvedValue([]),
+    quitAndInstall: vi.fn<AppUpdater['quitAndInstall']>(),
   }
 }
 
@@ -223,6 +235,50 @@ describe('setupAutoUpdater', () => {
       provider: 'generic',
       url: 'https://github.com/moeru-ai/airi/releases/download/v0.8.9',
     })
+  })
+
+  it('preserves the architecture channel and fork feed when the release lane changes', async () => {
+    process.env.AIRI_RELEASE_REPOSITORY = 'le-firehawk/airi'
+    const fetchSpy = mockGitHubReleasesFetch(matrixReleases)
+    const setStoredUpdateLane = vi.fn()
+    const { setupAutoUpdater } = await import('./auto-updater')
+    const service = setupAutoUpdater({ setStoredUpdateLane })
+    await service.checkForUpdates()
+
+    await service.setPreferredUpdateLane('stable')
+
+    expect(service.getPreferredUpdateLane()).toBe('stable')
+    expect(setStoredUpdateLane).toHaveBeenCalledWith('stable')
+    expect(updaterState.instance.channel).toBe(expectedChannelByArch)
+    expect(service.state.status).toBe('idle')
+    await service.checkForUpdates()
+    expect(updaterState.instance.setFeedURL).toHaveBeenLastCalledWith({
+      provider: 'generic',
+      url: 'https://github.com/le-firehawk/airi/releases/download/v0.9.9',
+    })
+
+    await service.setPreferredUpdateLane('nightly')
+    await service.checkForUpdates()
+
+    expect(updaterState.instance.channel).toBe(expectedChannelByArch)
+    expect(updaterState.instance.setFeedURL).toHaveBeenLastCalledWith({
+      provider: 'generic',
+      url: 'https://github.com/le-firehawk/airi/releases/download/v0.9.12-nightly.7',
+    })
+
+    await service.setPreferredUpdateLane(undefined)
+    await service.checkForUpdates()
+
+    expect(service.getPreferredUpdateLane()).toBeUndefined()
+    expect(setStoredUpdateLane).toHaveBeenLastCalledWith(undefined)
+    expect(updaterState.instance.channel).toBe(expectedChannelByArch)
+    expect(updaterState.instance.setFeedURL).toHaveBeenLastCalledWith({
+      provider: 'generic',
+      url: 'https://github.com/le-firehawk/airi/releases/download/v0.9.10-beta.3',
+    })
+    expect(fetchSpy).toHaveBeenCalledTimes(4)
+    for (const [url] of fetchSpy.mock.calls)
+      expect(url).toBe('https://api.github.com/repos/le-firehawk/airi/releases?per_page=100')
   })
 
   it.each(laneMatrix)('supports AIRI_UPDATE_CHANNEL override for lane=%s', async (lane) => {

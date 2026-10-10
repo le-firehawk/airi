@@ -1,7 +1,7 @@
 import type { createContext } from '@moeru/eventa/adapters/electron/main'
 import type { AutoUpdaterState } from '@proj-airi/electron-eventa/electron-updater'
 import type { BrowserWindow } from 'electron'
-import type { UpdateInfo } from 'electron-updater'
+import type { AppUpdater, UpdateInfo } from 'electron-updater'
 
 import type { ElectronUpdaterChannel } from '../../../shared/eventa'
 
@@ -223,22 +223,10 @@ function extractReleaseTagsFromAtom(atom: string) {
   return tags
 }
 
-export interface AppUpdaterLike {
-  on: (event: string, listener: (...args: any[]) => void) => any
-  checkForUpdates: () => Promise<any>
-  downloadUpdate: () => Promise<any>
-  quitAndInstall: (isSilent?: boolean, isForceRunAfter?: boolean) => Promise<void> | void
-  setFeedURL?: (options: { provider: 'generic', url: string }) => void
-  logger?: any
-  allowPrerelease?: boolean
-  autoDownload?: boolean
-  channel?: string
-  forceDevUpdateConfig?: boolean
-}
-
 // NOTICE: this part of code is copied from https://www.electron.build/auto-update
 // Or https://github.com/electron-userland/electron-builder/blob/b866e99ccd3ea9f85bc1e840f0f6a6a162fca388/pages/auto-update.md?plain=1#L57-L66
-export function fromImported(): AppUpdaterLike {
+/** Selects the development simulator or the platform updater without erasing their event contracts. */
+export function fromImported(): AppUpdater | MockAutoUpdater {
   if (is.dev && !getUpdateServerOverride())
     return new MockAutoUpdater()
 
@@ -398,10 +386,10 @@ export function setupAutoUpdater(options: AutoUpdaterOptions = {}): AutoUpdater 
     if (feedUrlOverride)
       return
 
+    // The manifest channel selects architecture. Release lanes only change the feed URL.
     activeFeedUrlOverride = undefined
     resolvedReleaseTag = undefined
     prepareFeedPromise = undefined
-    autoUpdater.channel = undefined
   }
 
   async function resolveGitHubReleaseTagForLane(lane: UpdateLane) {

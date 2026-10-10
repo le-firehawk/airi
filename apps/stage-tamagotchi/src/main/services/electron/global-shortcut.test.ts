@@ -1,7 +1,7 @@
 import type { ElectronMainContextExtensions, ElectronMainEmitOptions } from '@moeru/eventa/adapters/electron/main'
 import type { ShortcutBinding } from '@proj-airi/stage-shared/global-shortcut'
 
-import type { GlobalShortcutService } from './global-shortcut'
+import type { GlobalShortcutService, RegisterWindowParams } from './global-shortcut'
 
 import { createContext } from '@moeru/eventa'
 import { ShortcutFailureReasons } from '@proj-airi/stage-shared/global-shortcut'
@@ -18,7 +18,7 @@ function exampleBinding(id: string, key = 'KeyK'): ShortcutBinding {
 type MockContext = ReturnType<typeof createMockContext>
 
 interface MockWindow {
-  on: ReturnType<typeof vi.fn>
+  onClosed: RegisterWindowParams['onClosed']
   /** Manually trigger the registered `closed` handler. */
   close: () => void
 }
@@ -31,16 +31,11 @@ function createMockContext() {
   })
 }
 
-// NOTICE:
-// MockWindow only models what the driver touches: subscribing to a
-// `'closed'` event. The mock exposes a manual `close()` so tests can
-// assert the auto-cleanup path.
 function createMockWindow(): MockWindow {
   let closedHandler: (() => void) | undefined
   const window = {
-    on: vi.fn((event: string, handler: () => void) => {
-      if (event === 'closed')
-        closedHandler = handler
+    onClosed: vi.fn<RegisterWindowParams['onClosed']>((listener) => {
+      closedHandler = listener
     }),
     close() {
       closedHandler?.()
@@ -51,7 +46,7 @@ function createMockWindow(): MockWindow {
 
 function registerMockWindow(service: GlobalShortcutService, ctx: MockContext): MockWindow {
   const window = createMockWindow()
-  service.registerWindow({ context: ctx, window })
+  service.registerWindow({ context: ctx, onClosed: window.onClosed })
   return window
 }
 
@@ -357,11 +352,12 @@ describe('setupGlobalShortcutService', () => {
     const ctxB = createMockContext()
     const winA = registerMockWindow(service, ctxA)
     registerMockWindow(service, ctxB)
+    expect(winA.onClosed).toHaveBeenCalledOnce()
 
     const handler = ctxA.invokeHandlers.get('eventa:invoke:electron:shortcut:register')!
     handler(exampleBinding('toggle'))
 
-    // ctxA's window closes; subsequent triggers should only reach ctxB
+    // After the first window closes, only the second context receives triggers.
     winA.close()
     const callback = m.triggerCallbacks.get('CmdOrCtrl+Shift+K')!
     callback()

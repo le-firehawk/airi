@@ -1,4 +1,4 @@
-import { DialogContent, DialogPortal, DialogRoot, TooltipContent, TooltipPortal, TooltipProvider, TooltipRoot, TooltipTrigger } from 'reka-ui'
+import { DialogContent, DialogDescription, DialogPortal, DialogRoot, DialogTitle, TooltipContent, TooltipPortal, TooltipProvider, TooltipRoot, TooltipTrigger } from 'reka-ui'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createApp, defineComponent, h, nextTick } from 'vue'
 
@@ -90,12 +90,21 @@ describe('stage painted mask overlays', () => {
     expect(cellAt(alpha, column, row)).toBe(255)
   })
 
+  // https://github.com/le-firehawk/airi/actions/runs/38017667646/job/114111461965
+  // ROOT CAUSE:
+  // The fixture omitted the accessible title and description. It now supplies both through Reka.
   it('covers a dialog that reka-ui portals onto the body', async () => {
     mount(defineComponent(() => () => h(DialogRoot, { defaultOpen: true }, () => h(DialogPortal, () => h(DialogContent, {
       style: 'position: fixed; left: 200px; top: 200px; width: 100px; height: 100px',
-    }, () => 'dialog')))))
+    }, () => [
+      h(DialogTitle, () => 'Stage overlay'),
+      h(DialogDescription, () => 'An opaque dialog over the character.'),
+    ])))))
     await nextTick()
 
+    const dialog = document.querySelector('[role="dialog"]')!
+    expect(document.getElementById(dialog.getAttribute('aria-labelledby')!)?.textContent).toBe('Stage overlay')
+    expect(document.getElementById(dialog.getAttribute('aria-describedby')!)?.textContent).toBe('An opaque dialog over the character.')
     const alpha = readMask()
 
     expect(cellAt(alpha, 25, 25)).toBe(255)

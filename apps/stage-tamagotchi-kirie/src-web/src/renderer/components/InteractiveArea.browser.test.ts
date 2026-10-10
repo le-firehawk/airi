@@ -66,7 +66,10 @@ async function renderArea(component: Component = InteractiveArea) {
   }
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/', component: { template: '<div />' } }],
+    routes: [
+      { path: '/', component: defineComponent(() => () => h('div')) },
+      { path: '/settings', component: defineComponent(() => () => h('div')) },
+    ],
   })
   await router.push('/')
   await router.isReady()
@@ -184,13 +187,8 @@ describe('interactive area synchronized state', () => {
 
   it('centers the mobile textarea when no reply preview is visible', async () => {
     // ROOT CAUSE:
-    //
-    // Without a reply preview, the 40px bubble has spare height around its
-    // 32px textarea and borders. Before the fix, justify-end put all spare
-    // height above the textarea: 6px above and 2px below.
-    //
-    // We fixed this with justify-center. The empty and single-line textarea
-    // now has 4px on each side, and multiline input stays centered.
+    // justify-end placed all spare bubble height above the textarea.
+    // justify-center gives empty, single-line, and multiline input equal space on each side.
     await page.viewport(390, 844)
     const { screen } = await renderArea(MobileInteractiveArea)
     const bubble = screen.getByTestId('mobile-input-bubble').element()
@@ -226,12 +224,8 @@ describe('interactive area synchronized state', () => {
     const drawerTitle = screen.getByRole('heading', { name: 'stage.mobile-tools.title' }).element()
     const accountContent = account.querySelector<HTMLElement>('.basic-button-content')
     // ROOT CAUSE:
-    //
-    // The account row relied on scoped descendant CSS to stretch
-    // BasicButton's content wrapper. The combined browser bundle could leave
-    // that wrapper at its content width, centering the label inward. Comparing
-    // text coordinates was also unstable while the drawer portal animated, so
-    // assert the owned row and content geometry directly.
+    // Scoped descendant CSS left BasicButton content at its intrinsic width in the combined browser bundle.
+    // Assert row and content geometry directly because portal animation makes text coordinates unstable.
     expect(accountContent).not.toBeNull()
     await expect.poll(() => getComputedStyle(account).paddingLeft).toBe('0px')
     expect(account.getBoundingClientRect().left).toBe(drawerTitle.getBoundingClientRect().left)
@@ -442,11 +436,8 @@ describe('interactive area synchronized state', () => {
 
   it('keeps the empty mobile input compact and aligns the send action with its bubble', async () => {
     // ROOT CAUSE:
-    //
-    // The hierarchy redesign removed the input bubble's compact maximum width.
-    // The 40px bubble also top-aligned its 32px textarea while the send action
-    // aligned to the bottom of the same row. The reply container now owns the
-    // visible border, so the action aligns with the bubble instead of its inset textarea.
+    // The redesign removed the compact maximum width and top-aligned the textarea.
+    // The reply container now owns the border, so the send action aligns with the bubble instead of its inset textarea.
     await page.viewport(390, 844)
     const { screen } = await renderArea(MobileInteractiveArea)
     const composer = screen.getByTestId('mobile-message-composer').element()
@@ -646,12 +637,8 @@ describe('interactive area synchronized state', () => {
 
   // https://github.com/moeru-ai/airi/actions/runs/34448585692/job/102804067154
   // ROOT CAUSE:
-  //
-  // The test scrolled as soon as the reply started to expand. Each later resize
-  // queued a tail scroll, which could unmount the message selected by the test.
-  // Virtua then retried that tail scroll when older rows were first measured.
-  // Wait for the transition, measurements, and pending scroll before the jitter.
-  // A slower transition exposes this race without depending on CI load.
+  // Reply resizes and initial Virtua measurements queued tail scrolls that unmounted the selected message.
+  // Wait for transitions, measurements, and pending scroll before adding jitter. A slower transition exposes the race without CI load.
   it.each(['200ms', '1s'])('keeps the history scrollport behind the floating composer (%s reply)', async (duration) => {
     const { chatSession, screen } = await renderArea()
     const layout = screen.getByTestId('chat-viewport-layout').element() as HTMLElement

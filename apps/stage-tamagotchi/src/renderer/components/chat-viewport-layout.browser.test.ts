@@ -7,7 +7,7 @@ import { ScrollableArea } from '@proj-airi/ui'
 import { createPinia, disposePinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render } from 'vitest-browser-vue'
-import { defineComponent, shallowRef } from 'vue'
+import { defineComponent, h, shallowRef } from 'vue'
 import { createI18n } from 'vue-i18n'
 
 import ChatViewportLayout from './chat-viewport-layout.vue'
@@ -33,25 +33,14 @@ function createEnglishI18n() {
 
 describe('desktop chat viewport layout', () => {
   it('keeps history behind the fixed translucent composer', async () => {
-    const TestHost = defineComponent({
-      components: { ChatViewportLayout, ScrollableArea },
-      template: `
-        <ChatViewportLayout style="height: 320px; width: 240px">
-          <template #history>
-            <ScrollableArea
-              type="always"
-              viewport-class="chat-history-list"
-              style="height: 100%; width: 100%"
-            >
-              <div style="height: 640px">Long chat history</div>
-            </ScrollableArea>
-          </template>
-          <template #composer>
-            <div style="height: 80px">Fixed composer</div>
-          </template>
-        </ChatViewportLayout>
-      `,
-    })
+    const TestHost = defineComponent(() => () => h(ChatViewportLayout, { style: 'height: 320px; width: 240px' }, {
+      history: () => h(ScrollableArea, {
+        type: 'always',
+        viewportClass: 'chat-history-list',
+        style: 'height: 100%; width: 100%',
+      }, () => h('div', { style: 'height: 640px' }, 'Long chat history')),
+      composer: () => h('div', { style: 'height: 80px' }, 'Fixed composer'),
+    }))
 
     const screen = await render(TestHost)
     const layout = screen.getByTestId('chat-viewport-layout').element() as HTMLElement
@@ -108,27 +97,15 @@ describe('desktop chat viewport layout', () => {
     })))
     const sending = shallowRef(false)
     const streamingMessage = shallowRef<StreamingAssistantMessage>()
-    const TestHost = defineComponent({
-      components: { ChatHistory, ChatViewportLayout },
-      setup() {
-        return { messages, sending, streamingMessage }
-      },
-      template: `
-        <ChatViewportLayout style="height: 320px; width: 240px">
-          <template #history="{ tailInset }">
-            <ChatHistory
-              :messages="messages"
-              :sending="sending"
-              :streaming-message="streamingMessage"
-              :tail-inset="tailInset"
-            />
-          </template>
-          <template #composer>
-            <div style="height: 80px">Fixed composer</div>
-          </template>
-        </ChatViewportLayout>
-      `,
-    })
+    const TestHost = defineComponent(() => () => h(ChatViewportLayout, { style: 'height: 320px; width: 240px' }, {
+      history: ({ tailInset }: { tailInset: number }) => h(ChatHistory, {
+        messages: messages.value,
+        sending: sending.value,
+        streamingMessage: streamingMessage.value,
+        tailInset,
+      }),
+      composer: () => h('div', { style: 'height: 80px' }, 'Fixed composer'),
+    }))
 
     const screen = await render(TestHost, {
       global: {
@@ -177,35 +154,20 @@ describe('desktop chat viewport layout', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // Virtua bottom-aligns a short list with transforms. Transforms do not add to
-  // the viewport's scroll size, so the composer spacer cannot reveal a message
-  // that the transform placed behind the composer.
-  //
-  // The short-list transform must reserve the composer inset. Long histories
-  // still use the viewport spacer and can scroll behind the translucent layer.
+  // Virtua transforms short lists without changing scroll size, so the composer spacer cannot
+  // reveal obscured messages.
+  // The short-list transform now reserves the composer inset. Long histories retain the viewport
+  // spacer and can scroll behind the translucent layer.
   it('keeps a short virtualized history above the fixed composer', async () => {
     const messages: ChatHistoryItem[] = [{
       id: 'short-history-message',
       role: 'user',
       content: 'Short message',
     }]
-    const TestHost = defineComponent({
-      components: { ChatHistory, ChatViewportLayout },
-      setup() {
-        return { messages }
-      },
-      template: `
-        <ChatViewportLayout style="height: 320px; width: 240px">
-          <template #history="{ tailInset }">
-            <ChatHistory :messages="messages" :tail-inset="tailInset" />
-          </template>
-          <template #composer>
-            <div style="height: 80px">Fixed composer</div>
-          </template>
-        </ChatViewportLayout>
-      `,
-    })
+    const TestHost = defineComponent(() => () => h(ChatViewportLayout, { style: 'height: 320px; width: 240px' }, {
+      history: ({ tailInset }: { tailInset: number }) => h(ChatHistory, { messages, tailInset }),
+      composer: () => h('div', { style: 'height: 80px' }, 'Fixed composer'),
+    }))
 
     const screen = await render(TestHost, {
       global: {

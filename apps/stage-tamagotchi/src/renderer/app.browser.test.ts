@@ -38,7 +38,9 @@ import {
   electronMcpListTools,
   i18nGetLocale,
   i18nSetLocale,
+  ioTraceRecordingGet,
 } from '../shared/eventa'
+import { homeAssistantGetConfig } from '../shared/eventa/home-assistant'
 import { electronPluginUpdateCapability, pluginProtocolListProviders, pluginProtocolListProvidersEventName } from '../shared/eventa/plugin/capabilities'
 import { electronPluginListXsaiTools } from '../shared/eventa/plugin/tools'
 import { resolveRendererWindowContext } from './window-context'
@@ -201,6 +203,13 @@ async function renderStage(routePath: string, search: string) {
   }))
   defineInvokeHandler(bridge.main, electronMcpListTools, () => [])
   defineInvokeHandler(bridge.main, electronPluginListXsaiTools, () => ({ prompts: [], tools: [] }))
+  // https://github.com/le-firehawk/airi/actions/runs/38017667646/job/114111461965
+  // Startup reads both services even when their optional features are disabled.
+  // Missing replies leave real RPCs pending until teardown aborts the transports.
+  const getHomeAssistantConfig = vi.fn(() => ({ baseUrl: '', hasToken: false, tokenPreview: '' }))
+  const getIOTraceRecordingState = vi.fn(() => ({ directory: '', enabled: false }))
+  defineInvokeHandler(bridge.main, homeAssistantGetConfig, getHomeAssistantConfig)
+  defineInvokeHandler(bridge.main, ioTraceRecordingGet, getIOTraceRecordingState)
 
   const pinia = createPinia()
   const synced = setupSynced({ leadership: windowContext.leadership })
@@ -259,11 +268,18 @@ async function renderStage(routePath: string, search: string) {
   }
 
   const initializeCharacter = vi.fn()
+  const refreshHomeAssistant = vi.fn()
   pinia.use(({ store }) => {
     if (store.$id === 'character-orchestrator') {
       store.$onAction(({ name }) => {
         if (name === 'initialize')
           initializeCharacter()
+      })
+    }
+    if (store.$id === 'tamagotchi-home-assistant-tools') {
+      store.$onAction(({ name, after }) => {
+        if (name === 'refresh')
+          after(() => refreshHomeAssistant())
       })
     }
   })
@@ -326,12 +342,15 @@ async function renderStage(routePath: string, search: string) {
 
   return {
     errors,
+    getHomeAssistantConfig,
+    getIOTraceRecordingState,
     getWindowLifecycleState,
     initializeCharacter,
     leader,
     listProviders: defineInvoke(bridge.main, pluginProtocolListProviders),
     pinia,
     reports,
+    refreshHomeAssistant,
     runtime: rendererRuntime,
   }
 }
@@ -367,6 +386,9 @@ describe('renderer startup', () => {
     })
     expect(stage.runtime.isLeader()).toBe(true)
     expect(stage.initializeCharacter).toHaveBeenCalledTimes(1)
+    await expect.poll(() => stage.getHomeAssistantConfig.mock.calls.length).toBe(1)
+    await expect.poll(() => stage.getIOTraceRecordingState.mock.calls.length).toBe(1)
+    await expect.poll(() => stage.refreshHomeAssistant.mock.calls.length).toBe(1)
     await expect(stage.listProviders()).resolves.toContainEqual({ name: 'Kokoro TTS' })
     await expect.poll(() => inference.loadModel.mock.calls, { timeout: 5000 }).toHaveLength(1)
     expect(inference.loadModel).toHaveBeenCalledWith('q8', 'wasm', { signal: expect.any(AbortSignal) })

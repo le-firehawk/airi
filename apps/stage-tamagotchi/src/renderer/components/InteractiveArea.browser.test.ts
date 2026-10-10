@@ -76,7 +76,10 @@ async function renderArea(component: Component = InteractiveArea, options: { pro
   onTestFinished(() => localStorage.clear())
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/', component: { template: '<div />' } }],
+    routes: [
+      { path: '/', component: defineComponent(() => () => h('div')) },
+      { path: '/settings', component: defineComponent(() => () => h('div')) },
+    ],
   })
   await router.push('/')
   await router.isReady()
@@ -194,13 +197,9 @@ describe('interactive area synchronized state', () => {
 
   it('centers the mobile textarea when no reply preview is visible', async () => {
     // ROOT CAUSE:
-    //
-    // Without a reply preview, the 40px bubble has spare height around its
-    // 32px textarea and borders. Before the fix, justify-end put all spare
-    // height above the textarea: 6px above and 2px below.
-    //
-    // We fixed this with justify-center. The empty and single-line textarea
-    // now has 4px on each side, and multiline input stays centered.
+    // justify-end placed the bubble's spare height above its textarea: 6px above and 2px below.
+    // justify-center gives empty and single-line input 4px on each side and keeps multiline input
+    // centered.
     await page.viewport(390, 844)
     const { screen } = await renderArea(MobileInteractiveArea)
     const bubble = screen.getByTestId('mobile-input-bubble').element()
@@ -763,12 +762,10 @@ describe('interactive area synchronized state', () => {
 
   // https://github.com/moeru-ai/airi/actions/runs/34448585692/job/102804067154
   // ROOT CAUSE:
-  //
-  // The test scrolled as soon as the reply started to expand. Each later resize
-  // queued a tail scroll, which could unmount the message selected by the test.
-  // Virtua then retried that tail scroll when older rows were first measured.
-  // Wait for the transition, measurements, and pending scroll before the jitter.
-  // A slower transition exposes this race without depending on CI load.
+  // Reply expansion queued tail scrolls that unmounted the selected message. Virtua retried
+  // scrolling as older rows gained measurements.
+  // Wait for transitions, measurements, and pending scrolls before jitter. A slower transition
+  // reproduces the race independently of CI load.
   it.each(['200ms', '1s'])('keeps the history scrollport behind the floating composer (%s reply)', async (duration) => {
     const { chatSession, screen } = await renderArea()
     const layout = screen.getByTestId('chat-viewport-layout').element() as HTMLElement

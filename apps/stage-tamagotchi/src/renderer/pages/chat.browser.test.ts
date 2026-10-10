@@ -1,22 +1,16 @@
 import { ScrollableArea } from '@proj-airi/ui'
 import { describe, expect, it } from 'vitest'
 import { render } from 'vitest-browser-vue'
-import { defineComponent } from 'vue'
+import { defineComponent, h } from 'vue'
 
 import ChatPageShell from './chat-page-shell.vue'
 
 describe('desktop chat page scrolling', () => {
   it('leaves scrolling to the rendered chat history viewport', async () => {
-    const TestHost = defineComponent({
-      components: { ChatPageShell, ScrollableArea },
-      template: `
-        <ChatPageShell style="height: 160px; width: 240px">
-          <ScrollableArea data-testid="history-area" style="height: 100%">
-            <div style="height: 320px">Long chat history</div>
-          </ScrollableArea>
-        </ChatPageShell>
-      `,
-    })
+    const TestHost = defineComponent(() => () => h(ChatPageShell, { style: 'height: 160px; width: 240px' }, () => h(ScrollableArea, {
+      'data-testid': 'history-area',
+      'style': 'height: 100%',
+    }, () => h('div', { style: 'height: 320px' }, 'Long chat history'))))
     const screen = await render(TestHost)
     const shell = screen.getByTestId('desktop-chat-page-shell').element() as HTMLElement
     const viewport = screen.container.querySelector<HTMLElement>('[data-reka-scroll-area-viewport]')

@@ -105,11 +105,11 @@ export class DiscordAdapter {
         log.log('Received Discord configuration:', event.data.config)
 
         if (isDiscordConfig(event.data.config)) {
-          const config = event.data.config as DiscordConfig
+          const config = event.data.config
           const { token, enabled } = config
 
           if (enabled === false) {
-            if (this.discordClient.isReady) {
+            if (this.discordClient.isReady()) {
               log.log('Disabling Discord bot as per configuration...')
               await this.discordClient.destroy()
             }
@@ -119,16 +119,16 @@ export class DiscordAdapter {
           // If enabled, but no token is provided, stop the bot if it's running.
           if (!token) {
             log.warn('Discord bot enabled, but no token provided. Stopping bot.')
-            if (this.discordClient.isReady) {
+            if (this.discordClient.isReady()) {
               await this.discordClient.destroy()
             }
             return
           }
 
           // Connect or reconnect if token changed or client is not ready.
-          if (this.discordToken !== token || !this.discordClient.isReady) {
+          if (this.discordToken !== token || !this.discordClient.isReady()) {
             this.discordToken = token
-            if (this.discordClient.isReady) {
+            if (this.discordClient.isReady()) {
               log.log('Reconnecting Discord client with new token...')
               await this.discordClient.destroy()
             }
@@ -142,7 +142,7 @@ export class DiscordAdapter {
         }
       }
       catch (error) {
-        log.withError(error as Error).error('Failed to apply Discord configuration.')
+        log.withError(error).error('Failed to apply Discord configuration.')
       }
       finally {
         this.isReconnecting = false
@@ -159,10 +159,10 @@ export class DiscordAdapter {
     // Handle output from AIRI system (IA response)
     this.airiClient.onEvent('output:gen-ai:chat:message', async (event) => {
       try {
-        const message = (event.data as { message?: { content: string } }).message
-        const discordContext = (event.data)['gen-ai:chat'].input.data.discord
+        const message = event.data.message
+        const discordContext = event.data['gen-ai:chat']?.input?.data.discord
 
-        if (message?.content && discordContext?.channelId) {
+        if (typeof message.content === 'string' && message.content && discordContext?.channelId) {
           const channel = await this.discordClient.channels.fetch(discordContext.channelId)
           if (channel?.isTextBased() && 'send' in channel && typeof channel.send === 'function') {
             const content = message.content
@@ -196,7 +196,7 @@ export class DiscordAdapter {
         }
       }
       catch (error) {
-        log.withError(error as Error).error('Failed to send response to Discord')
+        log.withError(error).error('Failed to send response to Discord')
       }
     })
 

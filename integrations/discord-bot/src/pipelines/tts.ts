@@ -1,6 +1,6 @@
 import type { Buffer } from 'node:buffer'
 
-import type { PipelineType } from '@huggingface/transformers'
+import type { AutomaticSpeechRecognitionPipeline, PretrainedModelOptions } from '@huggingface/transformers'
 
 import { env } from 'node:process'
 
@@ -13,11 +13,11 @@ import { createOpenAI } from '@xsai-ext/providers/create'
 import { generateTranscription } from '@xsai/generate-transcription'
 
 class WhisperPipeline {
-  task: PipelineType = 'automatic-speech-recognition'
+  readonly task = 'automatic-speech-recognition'
   model = 'Xenova/whisper-medium.en'
-  instance: Awaited<ReturnType<typeof pipeline>> | null = null
+  instance: AutomaticSpeechRecognitionPipeline | null = null
 
-  async getInstance(progress_callback = null) {
+  async getInstance(progress_callback?: PretrainedModelOptions['progress_callback']) {
     if (this.instance === null) {
       this.instance = await pipeline(this.task, this.model, { progress_callback })
     }
@@ -29,31 +29,17 @@ class WhisperPipeline {
 export const WhisperLargeV3Pipeline = new WhisperPipeline()
 
 export function textFromResult(result: Array<{ text: string }> | { text: string }) {
-  if (Array.isArray(result)) {
-    const arrayResult = result as { text: string }[]
-    if (arrayResult.length === 0) {
-      return ''
-    }
-
-    return result[0].text
-  }
-  else {
-    if ('text' in result) {
-      return result.text
-    }
-    else {
-      return ''
-    }
-  }
+  // An empty batch contains no speech.
+  return Array.isArray(result) ? result[0]?.text ?? '' : result.text
 }
 
 export async function transcribe(pcmBuffer: Buffer) {
   const log = useLogg('Memory:Transcribe').useGlobalConfig()
 
-  const pcmConvertedWav = toWav(pcmBuffer.buffer, 48000, 2)
+  const pcmConvertedWav = toWav(Uint8Array.from(pcmBuffer).buffer, 48000, 2)
   log.withFields({ from: pcmBuffer.byteLength, to: pcmConvertedWav.byteLength }).log('Audio data received')
 
-  const transcriber = await WhisperLargeV3Pipeline.getInstance() as (audio: Float32Array | Float64Array) => Promise<Array<{ text: string }> | { text: string }>
+  const transcriber = await WhisperLargeV3Pipeline.getInstance()
   log.log('Transcribing audio')
 
   const wav = new wavefile.WaveFile(new Uint8Array(pcmConvertedWav))
@@ -77,12 +63,19 @@ export async function openaiTranscribe(wavBuffer: Buffer) {
 
   log.log('Transcribing audio...')
 
-  const wavFile = new Blob([wavBuffer], { type: 'audio/wav' })
-  const openai = createOpenAI(env.OPENAI_STT_API_KEY, env.OPENAI_STT_API_BASE_URL)
-
   try {
+    // Local OpenAI-compatible endpoints can accept requests without authentication.
+    const apiKey = env.OPENAI_STT_API_KEY?.trim() || undefined
+    const model = env.OPENAI_STT_MODEL?.trim()
+    if (!model) {
+      throw new Error('OPENAI_STT_MODEL is required')
+    }
+
+    const wavFile = new Blob([Uint8Array.from(wavBuffer)], { type: 'audio/wav' })
+    const openai = createOpenAI(apiKey ?? '', env.OPENAI_STT_API_BASE_URL || undefined)
     const result = await generateTranscription({
-      ...openai.transcription(env.OPENAI_STT_MODEL),
+      ...openai.transcription(model),
+      apiKey,
       file: wavFile,
     })
 

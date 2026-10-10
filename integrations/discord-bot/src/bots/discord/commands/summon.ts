@@ -81,7 +81,7 @@ export class VoiceManager extends EventEmitter {
 
   // Track event listeners for cleanup
   private connectionListeners: Map<string, {
-    stateChange: (oldState: any, newState: any) => Promise<void>
+    stateChange: (oldState: VoiceConnectionState, newState: VoiceConnectionState) => Promise<void>
     error: (error: Error) => void
     speakingStart: (userId: string) => void
     speakingEnd: (userId: string) => void
@@ -144,18 +144,18 @@ export class VoiceManager extends EventEmitter {
           this.logger.withError(error).error('Failed to fetch user')
         }
       }
-      if (user && !user?.user.bot) {
+      if (user && !user.user.bot) {
         this.logger.log(`User speaking: ${user.displayName}`)
-        this.monitorMember(user as GuildMember, channel.id)
+        await this.monitorMember(user, channel.id)
         this.streams.get(userId)?.emit('speakingStarted')
       }
     }
   }
 
   handleAudioReceiveStreamEnd(channel: BaseGuildVoiceChannel): (userId: string) => void {
-    return async (userId: string) => {
+    return (userId) => {
       const user = channel.members.get(userId)
-      if (!user?.user.bot) {
+      if (user && !user.user.bot) {
         this.logger.log(`User stopped speaking: ${user.displayName}`)
         this.streams.get(userId)?.emit('speakingStopped')
       }
@@ -163,9 +163,12 @@ export class VoiceManager extends EventEmitter {
   }
 
   async joinChannel(interaction: ChatInputCommandInteraction<CacheType>, channel: BaseGuildVoiceChannel) {
-    const oldConnection = this.getVoiceConnection(
-      channel.guildId as string,
-    )
+    const clientUser = this.client.user
+    if (!clientUser) {
+      throw new Error('Discord client is not logged in')
+    }
+
+    const oldConnection = this.getVoiceConnection(channel.guildId)
     if (oldConnection) {
       try {
         oldConnection.destroy()
@@ -181,10 +184,10 @@ export class VoiceManager extends EventEmitter {
     const connection = joinVoiceChannel({
       channelId: channel.id,
       guildId: channel.guild.id,
-      adapterCreator: channel.guild.voiceAdapterCreator as any,
+      adapterCreator: channel.guild.voiceAdapterCreator,
       selfDeaf: false,
       selfMute: false,
-      group: this.client.user.id,
+      group: clientUser.id,
     })
 
     try {
@@ -221,7 +224,13 @@ export class VoiceManager extends EventEmitter {
   }
 
   private getVoiceConnection(guildId: string) {
-    const connections = getVoiceConnections(this.client.user.id)
+    const clientUser = this.client.user
+    if (!clientUser) {
+      this.logger.warn('Discord client is not logged in')
+      return
+    }
+
+    const connections = getVoiceConnections(clientUser.id)
     if (!connections) {
       this.logger.warn('No voice connections found')
       return
@@ -240,16 +249,17 @@ export class VoiceManager extends EventEmitter {
     member: GuildMember,
     channelId: string,
   ) {
-    const userId = member?.id
-    const connection = this.getVoiceConnection(member?.guild?.id)
-    const receiveStream = connection?.receiver.subscribe(userId, {
+    const userId = member.id
+    const connection = this.getVoiceConnection(member.guild.id)
+    if (!connection) {
+      this.logger.warn('No voice connection for member')
+      return
+    }
+
+    const receiveStream = connection.receiver.subscribe(userId, {
       autoDestroy: true,
       emitClose: true,
     })
-    if (!receiveStream) {
-      this.logger.warn('No voice data received')
-      return
-    }
 
     const opusDecoder = new OpusDecoder(DECODE_SAMPLE_RATE, 1)
     const volumeBuffer: number[] = []
@@ -282,30 +292,33 @@ export class VoiceManager extends EventEmitter {
     }
 
     this.streams.set(userId, opusDecoder)
-    this.connections.set(userId, connection as VoiceConnection)
+    this.connections.set(userId, connection)
 
-    const errorHandler = err => this.logger.withError(err).error('Opus decoding error')
+    const errorHandler = (err: unknown) => this.logger.withError(err).error('Opus decoding error')
     const streamCloseHandler = () => {
-      this.logger.withField('displayName', member?.displayName).log('Voice stream closed')
+      this.logger.withField('displayName', member.displayName).log('Voice stream closed')
 
       this.streams.delete(userId)
       this.connections.delete(userId)
     }
     const closeHandler = () => {
-      this.logger.withField('displayName', member?.displayName).log('Opus decoder closed')
+      this.logger.withField('displayName', member.displayName).log('Opus decoder closed')
 
       opusDecoder.removeListener('data', dataHandler)
       opusDecoder.removeListener('error', errorHandler)
       opusDecoder.removeListener('close', closeHandler)
-      receiveStream?.removeListener('close', streamCloseHandler)
+      receiveStream.removeListener('close', streamCloseHandler)
     }
 
     opusDecoder.on('data', dataHandler)
     opusDecoder.on('error', errorHandler)
     opusDecoder.on('close', closeHandler)
-    receiveStream?.on('close', streamCloseHandler)
+    receiveStream.on('close', streamCloseHandler)
 
     pipeline(receiveStream, opusDecoder, (err) => {
+      if (!err)
+        return
+
       this.logger.withError(err).error('Opus decoding pipeline error')
       if (err.message.includes('memory access out of bounds')) {
         throw err
@@ -474,7 +487,11 @@ export class VoiceManager extends EventEmitter {
         const discordContext = {
           channelId,
           guildId,
-          guildMember: member,
+          guildMember: {
+            id: member.id,
+            displayName: member.displayName,
+            nickname: member.nickname ?? member.displayName,
+          },
         } satisfies Discord
 
         this.airiClient.send({
@@ -523,7 +540,7 @@ export class VoiceManager extends EventEmitter {
     })
 
     audioPlayer.on('error', error => this.logger.withError(error).log('Audio player error'))
-    audioPlayer.on('stateChange', (_oldState: any, newState: { status: string }) => {
+    audioPlayer.on('stateChange', (_oldState, newState) => {
       if (newState.status === 'idle') {
         const idleTime = Date.now()
         this.logger.withField('elapsed', idleTime - audioStartTime).log(`Audio playback done`)
@@ -533,7 +550,7 @@ export class VoiceManager extends EventEmitter {
     audioPlayer.play(resource)
   }
 
-  cleanupAudioPlayer(audioPlayer: AudioPlayer) {
+  cleanupAudioPlayer(audioPlayer: AudioPlayer | null) {
     if (!audioPlayer)
       return
 

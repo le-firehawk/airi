@@ -67,6 +67,9 @@ jobs:
       - name: Test CI diagnostic gates
         if: ${{ !cancelled() && steps.repository-types.outcome == 'success' }}
         run: pnpm exec vitest run --configLoader runner --project github-scripts .github/scripts/run-godot-checked.test.ts
+      - name: Test shared scrollbar styles
+        if: ${{ !cancelled() && steps.repository-types.outcome == 'success' }}
+        run: pnpm -F @proj-airi/stage-shared exec vitest run --configLoader runner --project stage-shared:node src/uno-scrollbar.test.ts
       - name: Test Telegram integration regressions
         if: ${{ !cancelled() && steps.repository-types.outcome == 'success' }}
         run: pnpm -F @proj-airi/telegram-bot exec vitest run --configLoader runner --project node --maxWorkers=1

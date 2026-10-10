@@ -139,6 +139,22 @@ export function sharedUnoConfig() {
         },
       }),
     ],
+    // NOTICE:
+    // Preset 4.0.0 references compatibility-only utilities even with compatible: false.
+    // Keep its WebKit colors, dimensions, and radius without enabling standard scrollbar properties.
+    // Source: node_modules/unocss-preset-scrollbar/dist/index.mjs, compatRules and scrollbar shortcuts.
+    // Remove these overrides when upstream conditions both shortcuts on compatible.
+    shortcuts: {
+      'scrollbar': [
+        { overflow: 'auto' },
+        'scrollbar-custom-property',
+        'scrollbar-track:scrollbar-background-color-[var(--scrollbar-track)]',
+        'scrollbar-thumb:scrollbar-background-color-[var(--scrollbar-thumb)]',
+        'scrollbar:scrollbar-width-[var(--scrollbar-width)]',
+        'scrollbar:scrollbar-height-[var(--scrollbar-height)]',
+      ],
+      'scrollbar-thin': 'scrollbar-w-8px scrollbar-h-8px',
+    },
     transformers: [
       transformerDirectives({
         applyVariable: ['--at-apply'],

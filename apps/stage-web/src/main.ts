@@ -1,4 +1,3 @@
-import type { Plugin } from 'vue'
 import type { Router, RouteRecordRaw } from 'vue-router'
 
 import Tres from '@tresjs/core'
@@ -63,8 +62,7 @@ router.afterEach(() => {
 createApp(App)
   .use(synced.vue)
   .use(MotionPlugin)
-  // TODO: Fix autoAnimatePlugin type error
-  .use(autoAnimatePlugin as unknown as Plugin)
+  .use(autoAnimatePlugin)
   .use(router)
   .use(pinia)
   .use(PiniaColada)

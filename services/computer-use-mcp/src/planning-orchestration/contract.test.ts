@@ -203,7 +203,7 @@ describe('planning orchestration contract', () => {
   })
 
   it('does not produce workspace memory plast-mem or archive export shapes', () => {
-    const summary = summarizePlanStateForProjection(state) as unknown as Record<string, unknown>
+    const summary = summarizePlanStateForProjection(state)
 
     expect(summary.scope).toBe('current_run_plan_state')
     for (const forbiddenKey of [

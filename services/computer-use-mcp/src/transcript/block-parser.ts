@@ -66,12 +66,7 @@ export function parseTranscriptBlocks(entries: readonly TranscriptEntry[]): Tran
         // ToolInteractionBlock: assistant + all matching tool results
         const claimedIds = new Set<string>(entry.toolCalls.map(tc => tc.id))
         const toolResults: TranscriptEntry[] = []
-        // NOTICE: seenResultIds guards against duplicate tool result rows for the
-        // same tool_call_id. In normal flow the store is append-only and won't
-        // produce duplicates, but retry/replay edge cases can surface them.
-        // Deduplicating here (keeping the first occurrence) ensures projection
-        // never emits multiple tool messages for the same id, which most
-        // providers reject as invalid conversation state.
+        // Retry or replay can duplicate tool results. Keep the first occurrence of each tool_call_id because providers reject duplicate result messages.
         const seenResultIds = new Set<string>()
         let lastId = entry.id
         let j = i + 1
@@ -87,12 +82,7 @@ export function parseTranscriptBlocks(entries: readonly TranscriptEntry[]): Tran
           }
 
           if (seenResultIds.has(toolEntry.toolCallId)) {
-            // NOTICE: Duplicate tool result row for an already-consumed id.
-            // In normal append-only flow this should not occur, but retry/replay
-            // can surface it. We skip the duplicate (j++) rather than break so
-            // that later valid results for other declared tool_call_ids are still
-            // attached to this block. Example: [tc1, tc1(dup), tc2] → tc2 must
-            // still be consumed here, not left orphaned for the next block.
+            // Skip duplicate results without ending this block. Later results for other declared tool calls must remain attached instead of becoming orphaned.
             j++
             continue
           }

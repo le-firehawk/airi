@@ -96,18 +96,11 @@ defineExpose({
   set hearingDialogOpen(v: boolean) { setOverlay('hearing', v) },
 })
 
-// NOTICE: On native Wayland, `isOutsideByCursor` can get permanently stuck
-// because it is driven by Electron's screen.getCursorScreenPoint(), which
-// Chromium's Ozone/Wayland backend cannot query reliably the way X11 does.
-// Source: https://github.com/moeru-ai/airi/issues/2521 (CachyOS + KDE
-// Plasma, Flatpak). OR it with the DOM-based `isOutsideByDom`
-// (useMouseInElement), which self-corrects on every pointermove and needs
-// no OS-level cursor query, so a broken cursor signal cannot force a false
-// collapse. The Electron-cursor signal stays the one used elsewhere (e.g.
-// hit-testing over click-through regions, where DOM events never reach the
-// renderer). Removal condition: once Ozone/Wayland reports the absolute
-// cursor position reliably upstream, or the click-through hit-testing no
-// longer depends on this composable.
+// NOTICE:
+// Wayland can leave Electron cursor coordinates stale. DOM hover prevents false collapse.
+// Click-through regions still require the Electron signal.
+// Source: https://github.com/moeru-ai/airi/issues/2521
+// Remove this combination when Wayland reports reliable absolute coordinates or click-through no longer requires them.
 const { isOutside: isOutsideByCursor } = useHostMouseInElement(islandElement)
 const { isOutside: isOutsideByDom } = useMouseInElement(islandElement)
 const isOutside = computed(() => isOutsideByCursor.value && isOutsideByDom.value)
@@ -228,9 +221,7 @@ function startDraggingWindow() {
     .catch(error => console.error('[host-context] Failed to begin moving the host window.', error))
 }
 
-function refreshWindow() {
-  window.location.reload()
-}
+const browserWindow = window
 
 /**
  * Requests the main process to move the AIRI desktop window back to screen center.
@@ -335,7 +326,7 @@ function resetMainWindowPosition() {
                       v-track-button="{ name: 'controls_island_action', action: 'refresh_window' }"
                       :button-style="adjustStyleClasses.button"
                       :aria-label="t('tamagotchi.stage.controls-island.refresh')"
-                      @click="refreshWindow"
+                      @click="browserWindow.location.reload()"
                     >
                       <div i-solar:refresh-linear :class="adjustStyleClasses.icon" text="neutral-800 dark:neutral-300" />
                     </ControlButton>

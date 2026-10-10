@@ -144,11 +144,9 @@ export function useIframeMessagePort(
 
   function onIframeLoad() {
     // NOTICE:
-    // A host component can mount after an already-loaded iframe during dev HMR
-    // or renderer remounts, which means the iframe's one-shot ready event may
-    // have already been emitted. Treat load as the point where invokes may be
-    // attempted; Eventa still owns request timeout/error handling if the iframe
-    // has not registered its handler yet.
+    // HMR or remounts can miss an iframe ready event emitted before host mounting.
+    // Treat load as readiness. Eventa still owns invoke timeouts and errors until handlers register.
+    // Remove this fallback when iframe readiness supports replay.
     iframeReady.value = true
     iframeLoadError.value = undefined
     emitInitPayload()

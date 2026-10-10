@@ -1,5 +1,5 @@
 /**
- * Terminal Lane v1 — comprehensive tests.
+ * Terminal Lane v1 tests.
  *
  * Covers:
  * 1. State: surface decisions, step bindings, Open Grant, audit

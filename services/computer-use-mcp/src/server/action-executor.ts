@@ -402,6 +402,7 @@ export function createExecuteAction(runtime: ComputerUseServerRuntime): ExecuteA
     }
 
     try {
+      let terminalResult: TerminalCommandResult | undefined
       let backendResult: Record<string, unknown> = {}
       let clipboardStructuredContent: Record<string, unknown> | undefined
       let secretStructuredContent: Record<string, unknown> | undefined
@@ -610,6 +611,7 @@ export function createExecuteAction(runtime: ComputerUseServerRuntime): ExecuteA
         }
         case 'terminal_exec': {
           const result = await runtime.terminalRunner.execute(normalizedAction.input)
+          terminalResult = result
           runtime.session.setTerminalState(runtime.terminalRunner.getState())
           runtime.stateManager.updateTerminalResult(result)
           backendResult = {
@@ -705,7 +707,7 @@ export function createExecuteAction(runtime: ComputerUseServerRuntime): ExecuteA
       const outcome = explainActionOutcome({
         action: normalizedAction,
         succeeded: true,
-        terminalResult: normalizedAction.kind === 'terminal_exec' ? (backendResult as unknown as TerminalCommandResult) : undefined,
+        terminalResult,
         context,
       })
 

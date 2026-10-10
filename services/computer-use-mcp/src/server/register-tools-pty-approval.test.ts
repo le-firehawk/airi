@@ -1,5 +1,4 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-
+import type { PendingActionRecord } from '../types'
 import type { ComputerUseServerRuntime } from './runtime'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -8,6 +7,8 @@ import { RunStateManager } from '../state'
 import { createPtySession, isPtyAvailable } from '../terminal/pty-runner'
 import { createTestConfig } from '../test-fixtures'
 import { registerComputerUseTools } from './register-tools'
+import { createTestRuntime } from './test-fixtures'
+import { createTestServer } from './test-server'
 
 vi.mock('../terminal/pty-runner', () => ({
   createPtySession: vi.fn(),
@@ -21,35 +22,13 @@ vi.mock('../terminal/pty-runner', () => ({
   writeToPty: vi.fn(),
 }))
 
-type ToolHandler = (args: Record<string, unknown>) => Promise<any>
-
-function createMockServer() {
-  const handlers = new Map<string, ToolHandler>()
-
-  return {
-    server: {
-      tool(name: string, _schema: unknown, handler: ToolHandler) {
-        handlers.set(name, handler)
-      },
-    } as unknown as McpServer,
-    async invoke(name: string, args: Record<string, unknown> = {}) {
-      const handler = handlers.get(name)
-      if (!handler) {
-        throw new Error(`Missing registered tool: ${name}`)
-      }
-
-      return await handler(args)
-    },
-  }
-}
-
 describe('registerComputerUseTools: PTY approval bridge', () => {
   let runtime: ComputerUseServerRuntime
-  let pendingActions: Map<string, Record<string, unknown>>
+  let pendingActions: Map<string, PendingActionRecord>
 
   beforeEach(() => {
     pendingActions = new Map()
-    runtime = {
+    runtime = createTestRuntime({
       config: createTestConfig({ approvalMode: 'actions' }),
       stateManager: new RunStateManager(),
       session: {
@@ -72,11 +51,10 @@ describe('registerComputerUseTools: PTY approval bridge', () => {
         triggerEvent: vi.fn(),
         clickSelector: vi.fn(),
         waitForElement: vi.fn(),
-        getStatus: vi.fn(() => ({ enabled: false, connected: false })),
+        getStatus: vi.fn(() => ({ enabled: false, connected: false, host: '127.0.0.1', port: 8765, pendingRequests: 0 })),
         supportsAction: vi.fn(() => true),
       },
       cdpBridgeManager: {
-        getAvailability: vi.fn(),
         probeAvailability: vi.fn().mockResolvedValue({
           endpoint: undefined,
           connected: false,
@@ -90,11 +68,11 @@ describe('registerComputerUseTools: PTY approval bridge', () => {
       },
       desktopSessionController: {
         getSession: vi.fn(() => null),
-        begin: vi.fn(() => ({ id: 'desktop-session-1' })),
+        begin: vi.fn(() => ({ id: 'desktop-session-1', ownedWindows: [], createdAt: new Date().toISOString(), lastActiveAt: new Date().toISOString() })),
         addOwnedWindow: vi.fn(),
       },
       taskMemory: {},
-    } as unknown as ComputerUseServerRuntime
+    })
     vi.clearAllMocks()
   })
 
@@ -135,7 +113,7 @@ describe('registerComputerUseTools: PTY approval bridge', () => {
       },
     })
 
-    const { server, invoke } = createMockServer()
+    const { server, invoke } = createTestServer()
     registerComputerUseTools({
       server,
       runtime,
@@ -203,7 +181,7 @@ describe('registerComputerUseTools: PTY approval bridge', () => {
     })
 
     const executeAction = vi.fn()
-    const { server, invoke } = createMockServer()
+    const { server, invoke } = createTestServer()
     registerComputerUseTools({
       server,
       runtime,
@@ -237,7 +215,7 @@ describe('registerComputerUseTools: PTY approval bridge', () => {
       pendingRequests: 0,
     })
 
-    const { server, invoke } = createMockServer()
+    const { server, invoke } = createTestServer()
     registerComputerUseTools({
       server,
       runtime,
@@ -269,7 +247,7 @@ describe('registerComputerUseTools: PTY approval bridge', () => {
     })
     ;(runtime.browserDomBridge.supportsAction as any).mockImplementation((action: string) => action !== 'clickAt')
 
-    const { server, invoke } = createMockServer()
+    const { server, invoke } = createTestServer()
     registerComputerUseTools({
       server,
       runtime,
@@ -299,7 +277,7 @@ describe('registerComputerUseTools: PTY approval bridge', () => {
       new Error('selector "#submit" did not match any element'),
     )
 
-    const { server, invoke } = createMockServer()
+    const { server, invoke } = createTestServer()
     registerComputerUseTools({
       server,
       runtime,
@@ -312,7 +290,7 @@ describe('registerComputerUseTools: PTY approval bridge', () => {
     })
 
     expect(result.isError).toBe(true)
-    expect(result.content[0].text).toContain('Re-read the page DOM')
+    expect(result.content.find(block => block.type === 'text')?.text).toContain('Re-read the page DOM')
     expect(result.structuredContent).toMatchObject({
       status: 'error',
       selector: '#submit',
@@ -334,7 +312,7 @@ describe('registerComputerUseTools: PTY approval bridge', () => {
       new Error('timed out waiting for selector'),
     )
 
-    const { server, invoke } = createMockServer()
+    const { server, invoke } = createTestServer()
     registerComputerUseTools({
       server,
       runtime,
@@ -348,7 +326,7 @@ describe('registerComputerUseTools: PTY approval bridge', () => {
     })
 
     expect(result.isError).toBe(true)
-    expect(result.content[0].text).toContain('browser_dom_wait_for_element')
+    expect(result.content.find(block => block.type === 'text')?.text).toContain('browser_dom_wait_for_element')
     expect(result.structuredContent).toMatchObject({
       status: 'error',
       selector: '.toast',
@@ -370,7 +348,7 @@ describe('registerComputerUseTools: PTY approval bridge', () => {
     })
     ;(runtime.browserDomBridge.supportsAction as any).mockImplementation((action: string) => action !== 'triggerEvent')
 
-    const { server, invoke } = createMockServer()
+    const { server, invoke } = createTestServer()
     registerComputerUseTools({
       server,
       runtime,

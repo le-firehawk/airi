@@ -82,9 +82,6 @@ function applyLoadedConfig(config: ElectronMcpStdioConfigFile) {
 const savedServers = computed(() => servers.value.filter(s => savedIds.value.has(s.rowId)))
 const pendingServers = computed(() => servers.value.filter(s => !savedIds.value.has(s.rowId)))
 
-function isExpanded(id: string) {
-  return expandedIds.value.has(id)
-}
 function toggleExpanded(id: string) {
   if (expandedIds.value.has(id))
     expandedIds.value.delete(id)
@@ -124,10 +121,6 @@ const RUNTIME_BADGE: Record<'running' | 'stopped' | 'error', string> = {
 
 function badgeClass(state: 'running' | 'stopped' | 'error' | undefined) {
   return RUNTIME_BADGE[state ?? 'stopped']
-}
-
-function commandPreview(s: ServerForm) {
-  return previewServerCommand(s)
 }
 
 const PANEL = 'flex flex-col gap-3 rounded-xl border-2 border-solid border-neutral-100 bg-white p-4 md:p-5 dark:border-neutral-900 dark:bg-neutral-900/30'
@@ -403,10 +396,10 @@ onMounted(async () => {
           <button
             type="button"
             class="flex items-center justify-center rounded-md p-1 text-neutral-500 transition-colors hover:bg-neutral-200/60 hover:text-neutral-800 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
-            :aria-label="isExpanded(server.rowId) ? tn('actions.collapse') : tn('actions.expand')"
+            :aria-label="expandedIds.has(server.rowId) ? tn('actions.collapse') : tn('actions.expand')"
             @click="toggleExpanded(server.rowId)"
           >
-            <span :class="isExpanded(server.rowId) ? 'i-solar:alt-arrow-down-line-duotone' : 'i-solar:alt-arrow-right-line-duotone'" class="block size-4" />
+            <span :class="expandedIds.has(server.rowId) ? 'i-solar:alt-arrow-down-line-duotone' : 'i-solar:alt-arrow-right-line-duotone'" class="block size-4" />
           </button>
 
           <div class="min-w-0 flex flex-1 flex-col gap-0.5">
@@ -423,7 +416,7 @@ onMounted(async () => {
               </span>
             </div>
             <div class="truncate text-xs text-neutral-500 font-mono dark:text-neutral-400">
-              {{ commandPreview(server) || '-' }}
+              {{ previewServerCommand(server) || '-' }}
             </div>
           </div>
 
@@ -434,7 +427,7 @@ onMounted(async () => {
         </div>
 
         <TransitionVertical>
-          <div v-if="isExpanded(server.rowId)" class="border-t border-neutral-200/70 pt-3 dark:border-neutral-800">
+          <div v-if="expandedIds.has(server.rowId)" class="border-t border-neutral-200/70 pt-3 dark:border-neutral-800">
             <McpServerForm :model-value="server" @remove="removeServer(server.rowId)" />
           </div>
         </TransitionVertical>

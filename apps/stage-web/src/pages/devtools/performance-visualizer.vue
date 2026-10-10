@@ -69,10 +69,6 @@ const magicKeys = useMagicKeys()
 whenever(magicKeys['ctrl+alt+l'], () => lagStore.toggleAll(true))
 whenever(magicKeys['ctrl+alt+k'], () => lagStore.toggleAll(false))
 
-function exportCsv() {
-  lagStore.exportCsv()
-}
-
 function metricDescription(metric: typeof metricControls.value[number]) {
   if (metric.supported || !metric.unsupportedKey)
     return t(metric.descriptionKey)
@@ -108,7 +104,7 @@ function metricDescription(metric: typeof metricControls.value[number]) {
         icon="i-solar:export-bold-duotone"
         :label="t('tamagotchi.settings.devtools.pages.performance-visualizer.controls.export-last-recording')"
         :disabled="!hasRecording"
-        @click="exportCsv"
+        @click="lagStore.exportCsv()"
       />
       <span :class="['text-xs text-neutral-500 dark:text-neutral-400']">
         {{ t('tamagotchi.settings.devtools.pages.performance-visualizer.recording.limit') }}

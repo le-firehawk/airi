@@ -59,13 +59,9 @@ export function useControlsIslandLayout(elements: LayoutElements, expanded: Ref<
   }
 
   // NOTICE:
-  // Defer scroll alignment to the next animation frame after an observer runs.
-  // scrollIntoView can change scrollbar geometry during ResizeObserver delivery.
-  // Chromium then logs "ResizeObserver loop completed with undelivered notifications"
-  // during rapid Controls Island layout changes.
-  // Source/context: https://github.com/moeru-ai/airi/pull/2474#discussion_r3954626137
-  // Removal condition: Remove this scheduling when Chromium no longer logs the
-  // warning and the Controls Island browser tests pass without deferred alignment.
+  // Defer alignment because scrollIntoView changes scrollbar geometry during ResizeObserver delivery and triggers Chromium loop warnings.
+  // Source: https://github.com/moeru-ai/airi/pull/2474#discussion_r3954626137
+  // Remove scheduling when Chromium and the browser tests permit synchronous alignment.
   const { pause, resume } = useRafFn(() => {
     pause()
     alignScrollPosition()

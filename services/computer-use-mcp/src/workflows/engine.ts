@@ -326,18 +326,9 @@ export async function executeWorkflow(params: {
       break
     }
 
-    // -----------------------------------------------------------------------
-    // Terminal Lane v2 — surface resolution + self-acquire PTY.
-    //
-    // For terminal steps (run_command / run_command_read_result), the engine
-    // resolves the target surface BEFORE evaluating strategy advisories.
-    // When the surface resolver says 'pty', the engine self-acquires the PTY
-    // through the unified approval path (acquirePty callback) and continues
-    // execution on the PTY — no outward reroute needed.
-    //
-    // The old v1 strategy-driven reroute is kept as a secondary fallback
-    // when no acquirePty callback is provided.
-    // -----------------------------------------------------------------------
+    // Resolve terminal surfaces before strategy advisories.
+    // When the surface is PTY, acquire it through the shared approval path and continue there.
+    // Without an acquirePty callback, retain strategy-driven rerouting.
     const isTerminalStep = (resolvedStep.kind === 'run_command' || resolvedStep.kind === 'run_command_read_result')
       && action?.kind === 'terminal_exec'
 

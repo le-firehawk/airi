@@ -111,14 +111,8 @@ async function expectImportedModelPhoto(component: Component, modelId: string) {
 describe('polaroid imported Live2D model', () => {
   it('loads and captures an imported model on the shared page', async () => {
     // ROOT CAUSE:
-    //
-    // Polaroid passed only the object URL to the Live2D loader. An imported
-    // model uses a blob URL without the .zip suffix, so the loader also needs
-    // the selected display model ID to resolve the archive from OPFS.
-    //
-    // The loader also kept its mutex locked when the first render had no model
-    // source. We fixed both paths by passing the selected ID and releasing the
-    // mutex across every early return.
+    // Imported blob URLs lack a .zip suffix, so the loader needs the selected model ID to find its OPFS archive.
+    // An empty initial source also left the mutex locked. Pass the ID and release the mutex on every early return.
     await expectImportedModelPhoto(PolaroidPage, 'display-model-polaroid')
   })
 })

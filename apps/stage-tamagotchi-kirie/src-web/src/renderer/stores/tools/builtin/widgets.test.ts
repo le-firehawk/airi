@@ -216,15 +216,8 @@ describe('widgets tool helpers', () => {
       const windowSizeProperties = windowSize?.properties ?? {}
 
       // ROOT CAUSE:
-      //
-      // OpenAI-compatible providers that enforce strict tool schemas require object
-      // schemas to list every property key in `required`, even when the caller thinks
-      // some nested fields are optional.
-      //
-      // The fixed provider-facing schema keeps the root `windowSize` field required and
-      // nullable, then requires every nested key while allowing optional constraints to
-      // be expressed as `number | null`. That preserves the runtime behavior while
-      // satisfying strict tool validators that compare `required` against `properties`.
+      // Strict provider validators require every property in required, including nested keys.
+      // Keep windowSize required and nullable. Represent optional nested constraints as number or null to preserve runtime behavior.
       expect(stageWidgetsTool).toSatisfyStrictToolSchema()
       expect(windowSize).toBeDefined()
       expect(windowSize?.additionalProperties).toBe(false)
@@ -272,13 +265,8 @@ describe('widgets tool helpers', () => {
 
       it('accepts the provider-facing schema after windowSize constraints are made provider-safe', async () => {
         // ROOT CAUSE:
-        //
-        // `stage_widgets.windowSize` is emitted as a strict object with optional nested keys.
-        // Some OpenAI-compatible validators reject that shape and require every nested property
-        // to appear in `required`, even though the schema is valid Draft-07 JSON Schema.
-        //
-        // This test proves whether AIHubMix currently rejects the tool with the same provider-
-        // side validation error reported in the bug report.
+        // AIHubMix can reject valid Draft-07 objects with optional nested keys.
+        // This request checks provider acceptance after every windowSize property becomes required and optional values become nullable.
         const response = await runCurlJson<AihubmixErrorResponse>({
           method: 'POST',
           url: new URL('chat/completions', aihubmixBaseUrl).toString(),

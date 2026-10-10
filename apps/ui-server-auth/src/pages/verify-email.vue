@@ -39,21 +39,8 @@ const continueURL = computed(() => {
   return typeof value === 'string' ? value : ''
 })
 
-// NOTICE:
-// Cross-tab signal between the verification-success tab (the one opened from
-// the email link) and the original "check your inbox" tab. Both tabs live on
-// the same origin (/ui/...), so BroadcastChannel works without setup.
-//
-// Why not poll /get-session every 2s? An abandoned pending tab would burn
-// 1800 requests/hour for no reason, and the request volume scales with time
-// the user takes to check their inbox. With BroadcastChannel the only work
-// happens when verification actually finishes.
-//
-// Why still call /get-session at all? The verifying tab cannot complete the
-// OIDC handoff itself — the original tab is the only one carrying the PKCE
-// flowState in sessionStorage. So we wait for the signal, then fetch the
-// session once to make sure the cookie is live before navigating into the
-// OIDC continuation URL.
+// BroadcastChannel signals verification between same-origin tabs without continuous polling.
+// Only the original tab holds PKCE flowState. After receiving the signal, fetch its session once to confirm the cookie before continuing OIDC.
 type VerifyEmailEvent = 'verified'
 const { post, data, isSupported } = useBroadcastChannel<VerifyEmailEvent, VerifyEmailEvent>({
   name: 'airi-auth-verify-email',

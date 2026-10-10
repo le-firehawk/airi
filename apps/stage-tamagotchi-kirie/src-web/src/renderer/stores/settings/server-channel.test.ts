@@ -109,13 +109,8 @@ describe('useServerChannelSettingsStore', async () => {
     await nextTick()
 
     // ROOT CAUSE:
-    //
-    // The QR card watched the optimistic hostname and requested its payload
-    // while the main process still restarted the server with the new config.
-    // The request read the old loopback config and failed. The accepted config
-    // did not change the hostname again, so the QR card never retried.
-    // We fixed this by publishing the accepted config after the IPC request
-    // completes. The QR card watches that accepted snapshot.
+    // The optimistic hostname triggered a QR request before the server restart completed. It read old configuration and never retried.
+    // Publish accepted configuration after IPC completes so the QR card watches the applied snapshot.
     expect(store.appliedConfig).toEqual({
       authToken: 'existing-token',
       hostname: '127.0.0.1',

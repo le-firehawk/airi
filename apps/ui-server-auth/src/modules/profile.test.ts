@@ -39,15 +39,8 @@ describe('ui-server-auth profile flow helpers', () => {
       },
     })
 
-    // NOTICE:
-    // We assert on the URL only, not on the fetch options shape. better-auth
-    // client builds the request via better-fetch, which decorates the
-    // options with framework metadata (plugins, jsonParser, signal, etc.).
-    // Pinning option fields ties the test to better-auth internals; the URL
-    // and the parsed result are the behavioural contract we actually care
-    // about.
-    // better-fetch passes a URL object, not a string, so coerce before
-    // matching. URL.toString() yields the canonical href.
+    // Assert the URL and parsed result, not better-fetch framework metadata.
+    // The request URL is a URL object, so convert it to its canonical string before comparison.
     expect(fetchImpl).toHaveBeenCalledTimes(1)
     expect(String(fetchImpl.mock.calls[0]?.[0])).toBe('https://api.airi.test/api/auth/get-session')
   })

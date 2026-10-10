@@ -1,6 +1,4 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
-
+import type { PendingActionRecord } from '../types'
 import type { ComputerUseServerRuntime } from './runtime'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -13,38 +11,17 @@ import {
   createTestConfig,
 } from '../test-fixtures'
 import { registerChromeSessionTools } from './register-chrome-session'
-
-type ToolHandler = (args: Record<string, unknown>) => Promise<CallToolResult>
-
-function createMockServer() {
-  const handlers = new Map<string, ToolHandler>()
-
-  return {
-    server: {
-      tool(name: string, _summaryOrSchema: unknown, schemaOrHandler: unknown, maybeHandler?: ToolHandler) {
-        const handler = (maybeHandler ?? schemaOrHandler) as ToolHandler
-        handlers.set(name, handler)
-      },
-    } as unknown as McpServer,
-    async invoke(name: string, args: Record<string, unknown> = {}) {
-      const handler = handlers.get(name)
-      if (!handler) {
-        throw new Error(`Missing registered tool: ${name}`)
-      }
-
-      return await handler(args)
-    },
-  }
-}
+import { createTestRuntime } from './test-fixtures'
+import { createTestServer } from './test-server'
 
 describe('registerChromeSessionTools', () => {
   let runtime: ComputerUseServerRuntime
-  let pendingActions: Array<Record<string, unknown>>
+  let pendingActions: PendingActionRecord[]
 
   beforeEach(() => {
     pendingActions = []
 
-    runtime = {
+    runtime = createTestRuntime({
       config: createTestConfig({
         executor: 'macos-local',
         approvalMode: 'never',
@@ -54,7 +31,7 @@ describe('registerChromeSessionTools', () => {
         getBudgetState: vi.fn(() => ({ operationsExecuted: 0, operationUnitsConsumed: 0 })),
         getLastScreenshot: vi.fn(() => undefined),
         listPendingActions: vi.fn(() => pendingActions),
-        createPendingAction: vi.fn((record: Record<string, unknown>) => {
+        createPendingAction: vi.fn((record: Omit<PendingActionRecord, 'id' | 'createdAt'>) => {
           const pending = {
             ...record,
             id: `pending-${pendingActions.length + 1}`,
@@ -91,6 +68,9 @@ describe('registerChromeSessionTools', () => {
         getStatus: vi.fn(() => ({
           enabled: false,
           connected: false,
+          host: '127.0.0.1',
+          port: 8765,
+          pendingRequests: 0,
         })),
       },
       cdpBridgeManager: {
@@ -108,10 +88,10 @@ describe('registerChromeSessionTools', () => {
       },
       desktopSessionController: {
         getSession: vi.fn(() => null),
-        begin: vi.fn(() => ({ id: 'desktop-session-1' })),
+        begin: vi.fn(() => ({ id: 'desktop-session-1', ownedWindows: [], createdAt: new Date().toISOString(), lastActiveAt: new Date().toISOString() })),
         addOwnedWindow: vi.fn(),
       },
-    } as unknown as ComputerUseServerRuntime
+    })
   })
 
   it('returns approval_required instead of launching Chrome when approvals are enabled', async () => {
@@ -120,7 +100,7 @@ describe('registerChromeSessionTools', () => {
       approvalMode: 'all',
     })
 
-    const { server, invoke } = createMockServer()
+    const { server, invoke } = createTestServer()
     registerChromeSessionTools({ server, runtime })
 
     const result = await invoke('desktop_ensure_chrome', {
@@ -161,7 +141,7 @@ describe('registerChromeSessionTools', () => {
       createdAt: new Date().toISOString(),
     })
 
-    const { server, invoke } = createMockServer()
+    const { server, invoke } = createTestServer()
     registerChromeSessionTools({ server, runtime })
 
     const result = await invoke('desktop_ensure_chrome', {
@@ -195,7 +175,7 @@ describe('registerChromeSessionTools', () => {
       createdAt: new Date().toISOString(),
     })
 
-    const { server, invoke } = createMockServer()
+    const { server, invoke } = createTestServer()
     registerChromeSessionTools({ server, runtime })
 
     const result = await invoke('desktop_ensure_chrome')

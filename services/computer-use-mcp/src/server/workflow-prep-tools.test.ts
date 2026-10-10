@@ -9,6 +9,7 @@ import {
   writeToPty,
 } from '../terminal/pty-runner'
 import { createTestConfig } from '../test-fixtures'
+import { createTestRuntime } from './test-fixtures'
 import { createWorkflowPrepToolExecutor } from './workflow-prep-tools'
 
 vi.mock('../terminal/pty-runner', () => ({
@@ -51,12 +52,12 @@ describe('createWorkflowPrepToolExecutor', () => {
       cwd: '/tmp',
     })
 
-    runtime = {
+    runtime = createTestRuntime({
       config: createTestConfig({ approvalMode: 'never' }),
       stateManager,
       browserDomBridge: { getStatus: vi.fn(), readAllFramesDom: vi.fn() },
       cdpBridgeManager: { ensureBridge: vi.fn() },
-    } as unknown as ComputerUseServerRuntime
+    })
   })
 
   it('writes audit entries for internal PTY send/read/destroy operations', async () => {

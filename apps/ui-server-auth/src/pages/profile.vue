@@ -51,11 +51,8 @@ const passwordLoading = shallowRef(false)
 const passwordError = shallowRef<string | null>(null)
 const passwordSuccess = shallowRef<string | null>(null)
 
-// "Set password" path for users without an existing credential account
-// (signed up via social provider). We send them through the standard
-// forgot-password email flow rather than exposing a direct setPassword
-// endpoint — re-using the link-based flow keeps server surface small and
-// gives us a fresh email-ownership proof at the moment of password set.
+// Social signups without credentials use the password-reset email flow to set a password.
+// This reuses the existing endpoint and proves current email ownership.
 const setPasswordLoading = shallowRef(false)
 const setPasswordError = shallowRef<string | null>(null)
 const setPasswordSuccess = shallowRef<string | null>(null)
@@ -63,11 +60,9 @@ const setPasswordSuccess = shallowRef<string | null>(null)
 const signOutLoading = shallowRef(false)
 const signOutError = shallowRef<string | null>(null)
 
-// Avatar comes pre-decorated by the server: `image` is either the manually
-// set / provider URL or a Gravatar fallback URL. We detect the fallback by
-// URL prefix so the server doesn't need to ship a redundant `imageSource`
-// flag — gravatar URLs are stable enough that prefix-matching is fine.
-// See server/apps/auth/src/routes.ts for the server-side build.
+// The server supplies either a user/provider avatar or a Gravatar fallback.
+// Detect the stable Gravatar URL prefix instead of duplicating image-source metadata.
+// Source: server/apps/auth/src/routes.ts.
 const GRAVATAR_AVATAR_PREFIX = 'https://www.gravatar.com/avatar/'
 const avatarUrl = computed(() => user.value?.image ?? null)
 const usingGravatarFallback = computed(
@@ -232,19 +227,9 @@ async function handleSendSetPasswordLink() {
   setPasswordSuccess.value = null
 
   try {
-    // NOTICE:
-    // `redirectTo` is built off `apiServerUrl` (the publicly reachable
-    // API origin) rather than `window.location.origin`. ui-server-auth
-    // happens to be served from the same origin in practice, but the
-    // sibling stage-pages settings page is shared with the Tamagotchi
-    // Electron renderer which loads from `file://` — keeping all
-    // password-reset flows pinned to the API origin avoids that footgun
-    // and makes it copy/paste-safe across surfaces.
-    // Source: PR #1753 review (chatgpt-codex-connector P1).
-    //
-    // /reset-password handles both initial-set and rotate cases because
-    // its handler creates a credential row when none exists, see
-    // node_modules/better-auth/dist/api/routes/password.mjs L152-158.
+    // Use the public API origin for password-reset redirects. Shared Electron pages load from file://, which cannot host the reset route.
+    // Source: PR #1753 review.
+    // The reset handler also creates missing credentials: better-auth/dist/api/routes/password.mjs L152-158.
     await requestPasswordReset({
       apiServerUrl,
       email: user.value.email,

@@ -1,3 +1,8 @@
+import type { PendingActionRecord } from '../types'
+import type { ComputerUseServerRuntime } from './runtime'
+
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
 /**
  * Terminal Lane v1 — PTY tool registration tests.
  *
@@ -7,13 +12,6 @@
  * - stepId binding: pty_create binds to stepId
  * - pty_send_input primary name + pty_write compat alias
  */
-
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-
-import type { ComputerUseServerRuntime } from './runtime'
-
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-
 import { RunStateManager } from '../state'
 import {
   createPtySession,
@@ -26,6 +24,8 @@ import {
 } from '../terminal/pty-runner'
 import { createTestConfig } from '../test-fixtures'
 import { createAcquirePtyCallback, executeApprovedPtyCreate, registerPtyTools } from './register-pty'
+import { createTestRuntime } from './test-fixtures'
+import { createTestServer } from './test-server'
 
 vi.mock('../terminal/pty-runner', () => ({
   createPtySession: vi.fn(),
@@ -39,42 +39,17 @@ vi.mock('../terminal/pty-runner', () => ({
   writeToPty: vi.fn(),
 }))
 
-type ToolHandler = (args: Record<string, unknown>) => Promise<any>
-
-function createMockServer() {
-  const handlers = new Map<string, ToolHandler>()
-
-  return {
-    server: {
-      tool(name: string, _schema: unknown, handler: ToolHandler) {
-        handlers.set(name, handler)
-      },
-    } as unknown as McpServer,
-    async invoke(name: string, args: Record<string, unknown> = {}) {
-      const handler = handlers.get(name)
-      if (!handler) {
-        throw new Error(`Missing registered tool: ${name}`)
-      }
-
-      return await handler(args)
-    },
-    hasHandler(name: string) {
-      return handlers.has(name)
-    },
-  }
-}
-
 describe('register-pty: terminal lane', () => {
   let runtime: ComputerUseServerRuntime
-  let pendingActions: Array<Record<string, unknown>>
+  let pendingActions: PendingActionRecord[]
 
   beforeEach(() => {
     pendingActions = []
-    runtime = {
+    runtime = createTestRuntime({
       config: createTestConfig({ approvalMode: 'never' }),
       stateManager: new RunStateManager(),
       session: {
-        createPendingAction: vi.fn((record: Record<string, unknown>) => {
+        createPendingAction: vi.fn((record: Omit<PendingActionRecord, 'id' | 'createdAt'>) => {
           const pending = { ...record, id: `pending_${pendingActions.length + 1}`, createdAt: new Date().toISOString() }
           pendingActions.push(pending)
           return pending
@@ -82,7 +57,7 @@ describe('register-pty: terminal lane', () => {
         listPendingActions: vi.fn(() => pendingActions),
         record: vi.fn().mockResolvedValue(undefined),
       },
-    } as unknown as ComputerUseServerRuntime
+    })
     vi.clearAllMocks()
   })
 
@@ -94,7 +69,7 @@ describe('register-pty: terminal lane', () => {
     it('pty_create returns approval_required when approvals are enabled', async () => {
       runtime.config = createTestConfig({ approvalMode: 'actions' })
       vi.mocked(isPtyAvailable).mockResolvedValue(true)
-      const { server, invoke } = createMockServer()
+      const { server, invoke } = createTestServer()
       registerPtyTools({ server, runtime })
 
       const result = await invoke('pty_create', {
@@ -175,7 +150,7 @@ describe('register-pty: terminal lane', () => {
         pid: 1000,
       })
       vi.mocked(destroyPtySession).mockReturnValue(true)
-      const { server, invoke } = createMockServer()
+      const { server, invoke } = createTestServer()
       registerPtyTools({ server, runtime })
 
       await executeApprovedPtyCreate(runtime, { rows: 24, cols: 80, approvalSessionId: 'approval_1' })
@@ -201,7 +176,7 @@ describe('register-pty: terminal lane', () => {
         screenContent: '',
         pid: 2000,
       })
-      const { server, invoke } = createMockServer()
+      const { server, invoke } = createTestServer()
       registerPtyTools({ server, runtime })
 
       await invoke('pty_create', { rows: 30, cols: 120, cwd: '/home/user' })
@@ -225,7 +200,7 @@ describe('register-pty: terminal lane', () => {
         screenContent: '',
         pid: 3000,
       })
-      const { server, invoke } = createMockServer()
+      const { server, invoke } = createTestServer()
       registerPtyTools({ server, runtime })
 
       await invoke('pty_create', { rows: 24, cols: 80 })
@@ -260,7 +235,7 @@ describe('register-pty: terminal lane', () => {
         screenContent: 'line1\nline2\nline3',
         pid: 3000,
       })
-      const { server, invoke } = createMockServer()
+      const { server, invoke } = createTestServer()
       registerPtyTools({ server, runtime })
 
       await invoke('pty_create', { rows: 24, cols: 80 })
@@ -283,7 +258,7 @@ describe('register-pty: terminal lane', () => {
         screenContent: '',
         pid: 3000,
       })
-      const { server, invoke } = createMockServer()
+      const { server, invoke } = createTestServer()
       registerPtyTools({ server, runtime })
 
       await invoke('pty_create', { rows: 24, cols: 80 })
@@ -307,7 +282,7 @@ describe('register-pty: terminal lane', () => {
         pid: 3000,
       })
       vi.mocked(destroyPtySession).mockReturnValue(true)
-      const { server, invoke } = createMockServer()
+      const { server, invoke } = createTestServer()
       registerPtyTools({ server, runtime })
 
       await invoke('pty_create', { rows: 24, cols: 80 })
@@ -336,7 +311,7 @@ describe('register-pty: terminal lane', () => {
         screenContent: '',
         pid: 4000,
       })
-      const { server, invoke } = createMockServer()
+      const { server, invoke } = createTestServer()
       registerPtyTools({ server, runtime })
 
       await invoke('pty_create', { stepId: 'step_abc', rows: 24, cols: 80 })
@@ -359,7 +334,7 @@ describe('register-pty: terminal lane', () => {
       })
       runtime.stateManager.bindPtySessionToStepId('pty_1', 'step_xyz')
 
-      const { server, invoke } = createMockServer()
+      const { server, invoke } = createTestServer()
       registerPtyTools({ server, runtime })
 
       const result = await invoke('pty_get_status')
@@ -374,7 +349,7 @@ describe('register-pty: terminal lane', () => {
 
   describe('pty_send_input / pty_write alias', () => {
     it('registers both pty_send_input and pty_write', () => {
-      const { server, hasHandler } = createMockServer()
+      const { server, hasHandler } = createTestServer()
       registerPtyTools({ server, runtime })
 
       expect(hasHandler('pty_send_input')).toBe(true)
@@ -391,7 +366,7 @@ describe('register-pty: terminal lane', () => {
         screenContent: '',
         pid: 6000,
       })
-      const { server, invoke } = createMockServer()
+      const { server, invoke } = createTestServer()
       registerPtyTools({ server, runtime })
 
       await invoke('pty_create', { rows: 24, cols: 80 })
@@ -403,7 +378,7 @@ describe('register-pty: terminal lane', () => {
 
     it('pty_write reports its own operation name in grant errors', async () => {
       runtime.config = createTestConfig({ approvalMode: 'actions' })
-      const { server, invoke } = createMockServer()
+      const { server, invoke } = createTestServer()
       registerPtyTools({ server, runtime })
 
       const result = await invoke('pty_write', {
@@ -442,7 +417,7 @@ describe('register-pty: terminal lane', () => {
         pid: 7000,
       })
       vi.mocked(destroyPtySession).mockReturnValue(true)
-      const { server, invoke } = createMockServer()
+      const { server, invoke } = createTestServer()
       registerPtyTools({ server, runtime })
 
       // Create
@@ -481,7 +456,7 @@ describe('register-pty: terminal lane', () => {
 
     it('rejects PTY operations without an active grant when approvals are enabled', async () => {
       runtime.config = createTestConfig({ approvalMode: 'actions' })
-      const { server, invoke } = createMockServer()
+      const { server, invoke } = createTestServer()
       registerPtyTools({ server, runtime })
 
       const sendResult = await invoke('pty_send_input', {

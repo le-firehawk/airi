@@ -24,7 +24,7 @@ function makeSuccessResult(text = 'ok'): CallToolResult {
 function makeApprovalRequiredResult(): CallToolResult {
   return {
     content: [{ type: 'text', text: 'Approval required for this action.' }],
-    structuredContent: { status: 'approval_required' } as unknown as CallToolResult['structuredContent'],
+    structuredContent: { status: 'approval_required' },
   }
 }
 

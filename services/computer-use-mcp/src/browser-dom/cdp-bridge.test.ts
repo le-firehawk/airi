@@ -1,34 +1,53 @@
-import { EventEmitter } from 'node:events'
+import { once } from 'node:events'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { WebSocket } from 'ws'
+import { WebSocket, WebSocketServer } from 'ws'
 
 import { CdpBridge } from '../browser-dom/cdp-bridge'
 
-afterEach(() => {
+const connections = new Set<{ bridge: CdpBridge, server: WebSocketServer }>()
+
+afterEach(async () => {
   vi.useRealTimers()
+  vi.restoreAllMocks()
+  for (const { bridge, server } of connections) {
+    await bridge.close()
+    for (const socket of server.clients)
+      socket.terminate()
+    await new Promise<void>((resolve, reject) => {
+      server.close(error => error ? reject(error) : resolve())
+    })
+  }
+  connections.clear()
 })
 
-function attachHeartbeatSocket(bridge: CdpBridge, socket: EventEmitter & {
-  readyState: number
-  ping: () => void
-  terminate: () => void
-  close: () => void
-}) {
-  const internals = bridge as unknown as {
-    awaitingHeartbeatPong: boolean
-    consecutiveHeartbeatFailures: number
-    socket: typeof socket
-    status: { connected: boolean }
-    startHeartbeat: () => void
-  }
-  internals.socket = socket
-  internals.status.connected = true
-  socket.on('pong', () => {
-    internals.awaitingHeartbeatPong = false
-    internals.consecutiveHeartbeatFailures = 0
+async function connectHeartbeatBridge(bridge: CdpBridge) {
+  const server = new WebSocketServer({ port: 0, autoPong: false })
+  connections.add({ bridge, server })
+  server.on('connection', (socket) => {
+    socket.on('message', (data) => {
+      const request: unknown = JSON.parse(data.toString())
+      if (request && typeof request === 'object' && 'id' in request && typeof request.id === 'number')
+        socket.send(JSON.stringify({ id: request.id, result: {} }))
+    })
   })
-  internals.startHeartbeat()
+  await once(server, 'listening')
+  const address = server.address()
+  if (!address || typeof address === 'string')
+    throw new Error('Expected a local WebSocket port')
+
+  await bridge.connectToTarget({
+    id: 'heartbeat-test',
+    type: 'page',
+    title: 'Heartbeat test',
+    url: 'about:blank',
+    webSocketDebuggerUrl: `ws://127.0.0.1:${address.port}`,
+  })
+
+  return {
+    ping: vi.spyOn(WebSocket.prototype, 'ping'),
+    terminate: vi.spyOn(WebSocket.prototype, 'terminate'),
+  }
 }
 
 describe('cdpBridge', () => {
@@ -147,22 +166,18 @@ describe('cdpBridge', () => {
     expect(bridge.getStatus().connected).toBe(false)
   })
 
-  it('keeps the CDP bridge alive when heartbeat pongs arrive', () => {
-    vi.useFakeTimers()
+  it('keeps the CDP bridge alive when heartbeat pongs arrive', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
     const bridge = new CdpBridge({
       cdpUrl: 'http://localhost:9222',
       requestTimeoutMs: 10_000,
       heartbeatIntervalMs: 10,
       heartbeatFailureLimit: 3,
     })
-    const socket = Object.assign(new EventEmitter(), {
-      readyState: WebSocket.OPEN,
-      ping: vi.fn(() => socket.emit('pong')),
-      terminate: vi.fn(),
-      close: vi.fn(),
+    const socket = await connectHeartbeatBridge(bridge)
+    socket.ping.mockImplementation(function (this: WebSocket) {
+      this.emit('pong')
     })
-
-    attachHeartbeatSocket(bridge, socket)
 
     vi.advanceTimersByTime(40)
 
@@ -171,22 +186,15 @@ describe('cdpBridge', () => {
     expect(bridge.getStatus().connected).toBe(true)
   })
 
-  it('tears down the CDP bridge after consecutive missed heartbeat pongs', () => {
-    vi.useFakeTimers()
+  it('tears down the CDP bridge after consecutive missed heartbeat pongs', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
     const bridge = new CdpBridge({
       cdpUrl: 'http://localhost:9222',
       requestTimeoutMs: 10_000,
       heartbeatIntervalMs: 10,
       heartbeatFailureLimit: 3,
     })
-    const socket = Object.assign(new EventEmitter(), {
-      readyState: WebSocket.OPEN,
-      ping: vi.fn(),
-      terminate: vi.fn(),
-      close: vi.fn(),
-    })
-
-    attachHeartbeatSocket(bridge, socket)
+    const socket = await connectHeartbeatBridge(bridge)
 
     vi.advanceTimersByTime(30)
 
@@ -201,22 +209,15 @@ describe('cdpBridge', () => {
     expect(bridge.getStatus().lastError).toBe('CDP heartbeat failed after 3 consecutive missed pongs')
   })
 
-  it('does not tear down the CDP bridge before the first heartbeat ping can miss', () => {
-    vi.useFakeTimers()
+  it('does not tear down the CDP bridge before the first heartbeat ping can miss', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
     const bridge = new CdpBridge({
       cdpUrl: 'http://localhost:9222',
       requestTimeoutMs: 10_000,
       heartbeatIntervalMs: 10,
       heartbeatFailureLimit: 1,
     })
-    const socket = Object.assign(new EventEmitter(), {
-      readyState: WebSocket.OPEN,
-      ping: vi.fn(),
-      terminate: vi.fn(),
-      close: vi.fn(),
-    })
-
-    attachHeartbeatSocket(bridge, socket)
+    const socket = await connectHeartbeatBridge(bridge)
 
     vi.advanceTimersByTime(10)
 
@@ -231,24 +232,18 @@ describe('cdpBridge', () => {
     expect(bridge.getStatus().connected).toBe(false)
   })
 
-  it('preserves heartbeat ping errors in the bridge status', () => {
-    vi.useFakeTimers()
+  it('preserves heartbeat ping errors in the bridge status', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
     const bridge = new CdpBridge({
       cdpUrl: 'http://localhost:9222',
       requestTimeoutMs: 10_000,
       heartbeatIntervalMs: 10,
       heartbeatFailureLimit: 3,
     })
-    const socket = Object.assign(new EventEmitter(), {
-      readyState: WebSocket.OPEN,
-      ping: vi.fn(() => {
-        throw new Error('CDP ping write failed')
-      }),
-      terminate: vi.fn(),
-      close: vi.fn(),
+    const socket = await connectHeartbeatBridge(bridge)
+    socket.ping.mockImplementation(() => {
+      throw new Error('CDP ping write failed')
     })
-
-    attachHeartbeatSocket(bridge, socket)
 
     vi.advanceTimersByTime(10)
 

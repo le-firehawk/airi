@@ -1,14 +1,14 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 
 import type { ExecuteAction } from './server/action-executor'
-import type { ComputerUseServerRuntime } from './server/runtime'
 import type { ActiveTask } from './state'
 import type { WorkflowDefinition } from './workflows/types'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { executeApprovedPtyCreate, registerPtyTools } from './server/register-pty'
+import { createTestRuntime } from './server/test-fixtures'
+import { createTestServer } from './server/test-server'
 import { RunStateManager } from './state'
 import {
   createPtySession,
@@ -32,28 +32,6 @@ vi.mock('./terminal/pty-runner', () => ({
   writeToPty: vi.fn(),
 }))
 
-type ToolHandler = (args: Record<string, unknown>) => Promise<CallToolResult>
-
-function createMockServer() {
-  const handlers = new Map<string, ToolHandler>()
-
-  return {
-    server: {
-      tool(name: string, _schema: unknown, handler: ToolHandler) {
-        handlers.set(name, handler)
-      },
-    } as unknown as McpServer,
-    async invoke(name: string, args: Record<string, unknown> = {}) {
-      const handler = handlers.get(name)
-      if (!handler) {
-        throw new Error(`Missing registered tool: ${name}`)
-      }
-
-      return await handler(args)
-    },
-  }
-}
-
 function makeSuccessResult(text = 'ok', structuredContent?: Record<string, unknown>): CallToolResult {
   return {
     content: [{ type: 'text', text }],
@@ -62,7 +40,7 @@ function makeSuccessResult(text = 'ok', structuredContent?: Record<string, unkno
 }
 
 function createRuntime(stateManager: RunStateManager, approvalMode: 'never' | 'actions' = 'never') {
-  return {
+  return createTestRuntime({
     config: createTestConfig({ approvalMode }),
     stateManager,
     session: {
@@ -70,7 +48,7 @@ function createRuntime(stateManager: RunStateManager, approvalMode: 'never' | 'a
       listPendingActions: vi.fn(() => []),
       record: vi.fn().mockResolvedValue(undefined),
     },
-  } as unknown as ComputerUseServerRuntime
+  })
 }
 
 function makeSingleStepTask(params: {
@@ -242,7 +220,7 @@ describe('terminal release gates', () => {
         pid: 4321,
       })
 
-    const { server, invoke } = createMockServer()
+    const { server, invoke } = createTestServer()
     registerPtyTools({ server, runtime })
 
     const createResult = await executeApprovedPtyCreate(runtime, {
@@ -397,7 +375,7 @@ describe('terminal release gates', () => {
     })
     expect(stateManager.hasPtyApprovalGrant('approval_reroute_gate', 'pty_reroute_1')).toBe(true)
 
-    const { server, invoke } = createMockServer()
+    const { server, invoke } = createTestServer()
     registerPtyTools({ server, runtime })
 
     const screenBefore = await invoke('pty_read_screen', {

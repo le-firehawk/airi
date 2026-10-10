@@ -83,16 +83,8 @@ describe('createLocalShellRunner', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // `terminal_exec` ran commands under `shell -lc "..."` without `detached`, so
-  // the shell shared the runner's process group. On timeout the runner called
-  // `child.kill('SIGTERM')`, which signals only the shell PID. A command that
-  // had forked a background grandchild (`cmd &`, `nohup`, a server) left that
-  // grandchild reparented to init instead of being reaped.
-  //
-  // We fixed this by spawning the shell `detached` (making it a process-group
-  // leader) and signalling the whole group on timeout, so background
-  // grandchildren are reaped together with the shell.
+  // Killing only the shell PID left background grandchildren alive after timeout.
+  // Start a detached process group and signal the whole group so descendants terminate with the shell.
   it('reaps background grandchildren when a command times out', async () => {
     const runner = createLocalShellRunner(createTestConfig({ timeoutMs: 300 }))
 

@@ -123,15 +123,8 @@ describe('official streaming speech provider settings', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // The provider store stopped creating every provider configuration at startup.
-  // This page still read config.model before it initialized the streaming provider.
-  // A direct page load therefore failed after the model catalog request completed.
-  //
-  // Before: fetch the catalog, then write providerConfig.value.model.
-  //
-  // We fixed this by waiting for authentication and initializing the provider.
-  // The page now applies server availability before it loads model voices.
+  // Lazy provider configuration left config.model unavailable on direct page load.
+  // Wait for authentication and provider initialization, then apply server availability before loading voices.
   it('initializes provider configuration before it applies the server default model', async () => {
     const fetchMock = vi.fn<typeof fetch>(async input => responseFor(input))
     vi.stubGlobal('fetch', fetchMock)
@@ -150,16 +143,8 @@ describe('official streaming speech provider settings', () => {
 
   // https://github.com/moeru-ai/airi/pull/2440#discussion_r3912226728
   // ROOT CAUSE:
-  //
-  // The Electron settings renderer routes forceProviderConfigured to its
-  // leader. The page enabled its voice watcher without awaiting that action,
-  // so the public voice loader still saw an unconfigured provider and stopped.
-  // The later configuration snapshot did not change any watcher dependency.
-  //
-  // Before: start voice loading while forceProviderConfigured is pending.
-  //
-  // We fixed this by awaiting the configuration action before publishing the
-  // local availability state that enables model-specific voice loading.
+  // Electron routes forceProviderConfigured through its leader. Starting voice loading before that action completed left the provider unconfigured without another watcher trigger.
+  // Await configuration before publishing local availability.
   it('waits for provider configuration before it loads streaming voices', async () => {
     const fetchMock = vi.fn<typeof fetch>(async input => responseFor(input))
     vi.stubGlobal('fetch', fetchMock)
@@ -180,15 +165,8 @@ describe('official streaming speech provider settings', () => {
 
   // https://github.com/moeru-ai/airi/pull/2440#discussion_r3912777731
   // ROOT CAUSE:
-  //
-  // Model discovery returns no availability field when its request fails.
-  // The page treated that unknown state as an authoritative unavailable state,
-  // which hid the provider and marked its existing configuration as unconfigured.
-  //
-  // Before: catalog.available === true converted a discovery failure to false.
-  //
-  // We fixed this by changing provider state only when discovery returns an
-  // explicit availability value.
+  // Discovery failure omits availability. Treating that absence as false hid an already configured provider.
+  // Update provider state only when discovery returns explicit availability.
   it('preserves configured provider state when catalog discovery fails', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (input) => {
       if (responseUrl(input).includes('/api/v1/audio/models/streaming'))

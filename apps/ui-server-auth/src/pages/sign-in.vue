@@ -65,14 +65,8 @@ const verifySuccessURL = buildCurrentOriginAuthUiUrl('/verify-email?verified=tru
 const effectiveCallbackURL = computed(() =>
   signInContext.value.callbackURL === '/' ? uiHomeURL : signInContext.value.callbackURL,
 )
-// NOTICE:
-// We always send the verification email's callbackURL to the local
-// verify-email success page, never to the OIDC `/oauth2/authorize` URL.
-// Email links open in a new tab where sessionStorage (and therefore the PKCE
-// flowState saved by the OIDC client) is empty, so a direct OIDC handoff in
-// that tab would fail with "Missing OIDC flow state". Instead, the original
-// tab polls the session and resumes the OIDC flow itself once the cookie is
-// set by `autoSignInAfterVerification`.
+// Verification links open a new tab without the original PKCE sessionStorage state.
+// Send that tab to verify-email. The original tab resumes OIDC after autoSignInAfterVerification sets the session cookie.
 const signUpCallbackURL = verifySuccessURL
 // OIDC continuation URL surfaced to the verify-email page, so it can resume
 // the original flow once the session cookie appears. Empty string means there

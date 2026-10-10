@@ -1,36 +1,13 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-
-import type { ComputerUseServerRuntime } from './runtime'
-
 import { describe, expect, it, vi } from 'vitest'
 
 import { RunStateManager } from '../state'
 import { createTestConfig } from '../test-fixtures'
 import { registerComputerUseTools } from './register-tools'
-
-type SchemaShape = Record<string, { description?: string }>
-
-function createMockServer() {
-  const schemas = new Map<string, SchemaShape>()
-
-  return {
-    server: {
-      tool(name: string, schemaOrSummary: unknown, schemaOrHandler?: unknown) {
-        const schema = typeof schemaOrSummary === 'string'
-          ? schemaOrHandler
-          : schemaOrSummary
-
-        schemas.set(name, schema as SchemaShape)
-
-        return { disable: vi.fn() }
-      },
-    } as unknown as McpServer,
-    schemas,
-  }
-}
+import { createTestRuntime } from './test-fixtures'
+import { createTestServer } from './test-server'
 
 function createRegistrationRuntime() {
-  return {
+  return createTestRuntime({
     config: createTestConfig(),
     stateManager: new RunStateManager(),
     session: {},
@@ -41,12 +18,13 @@ function createRegistrationRuntime() {
     chromeSessionManager: {},
     desktopSessionController: {},
     taskMemory: {},
-  } as unknown as ComputerUseServerRuntime
+  })
 }
 
 describe('registerComputerUseTools coordinate contract', () => {
   it('documents mutating desktop target coordinates as global logical screen coordinates', () => {
-    const { server, schemas } = createMockServer()
+    const testServer = createTestServer()
+    const { server } = testServer
 
     registerComputerUseTools({
       server,
@@ -54,6 +32,8 @@ describe('registerComputerUseTools coordinate contract', () => {
       executeAction: vi.fn(),
       enableTestTools: false,
     })
+
+    const { schemas } = testServer
 
     expect(schemas.get('desktop_click')?.x.description).toBe('Global logical screen X coordinate, not Retina backing pixels')
     expect(schemas.get('desktop_click')?.y.description).toBe('Global logical screen Y coordinate, not Retina backing pixels')

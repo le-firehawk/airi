@@ -1,13 +1,10 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
-
-import type { ComputerUseServerRuntime } from './runtime'
-
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { RunStateManager } from '../state'
 import { createTestConfig } from '../test-fixtures'
 import { registerDesktopGroundingTools } from './register-desktop-grounding'
+import { createTestRuntime } from './test-fixtures'
+import { createTestServer } from './test-server'
 
 const { captureDesktopGroundingMock } = vi.hoisted(() => ({
   captureDesktopGroundingMock: vi.fn(),
@@ -21,39 +18,16 @@ vi.mock('../desktop-grounding', async () => {
   }
 })
 
-type ToolHandler = (args: Record<string, unknown>) => Promise<CallToolResult>
-
-function createMockServer() {
-  const handlers = new Map<string, ToolHandler>()
-
-  return {
-    server: {
-      tool(name: string, _summary: string, _schema: unknown, handler: ToolHandler) {
-        handlers.set(name, handler)
-        return { disable: vi.fn() }
-      },
-    } as unknown as McpServer,
-    async invoke(name: string, args: Record<string, unknown> = {}) {
-      const handler = handlers.get(name)
-      if (!handler) {
-        throw new Error(`Missing registered tool: ${name}`)
-      }
-
-      return await handler(args)
-    },
-  }
-}
-
 function createRuntime() {
-  const runtime = {
+  const runtime = createTestRuntime({
     config: createTestConfig(),
     stateManager: new RunStateManager(),
     cdpBridgeManager: {
-      getStatus: vi.fn().mockReturnValue({ connected: false }),
+      getStatus: vi.fn(() => ({ cdpUrl: 'http://localhost:9222', connected: false })),
       ensureBridge: vi.fn(),
     },
     chromeSessionManager: {
-      getSessionInfo: vi.fn().mockReturnValue(undefined),
+      getSessionInfo: vi.fn(() => null),
     },
     browserDomBridge: {},
     executor: {},
@@ -61,12 +35,11 @@ function createRuntime() {
       setLastScreenshot: vi.fn(),
     },
     desktopSessionController: {
-      getSession: vi.fn().mockReturnValue(undefined),
-      getSessionInfo: vi.fn().mockReturnValue(undefined),
+      getSession: vi.fn(() => null),
       touch: vi.fn(),
       ensureControlledAppInForeground: vi.fn(),
     },
-  } as unknown as ComputerUseServerRuntime
+  })
 
   const executeAction = vi.fn().mockResolvedValue({
     content: [{ type: 'text', text: 'executed' }],
@@ -83,7 +56,7 @@ describe('registerDesktopGroundingTools', () => {
   it('registers desktop_click_target through the action executor', async () => {
     const { runtime, executeAction } = createRuntime()
 
-    const { server, invoke } = createMockServer()
+    const { server, invoke } = createTestServer()
 
     registerDesktopGroundingTools({ server, runtime, executeAction })
 
@@ -108,7 +81,7 @@ describe('registerDesktopGroundingTools', () => {
     const { runtime, executeAction } = createRuntime()
     captureDesktopGroundingMock.mockRejectedValueOnce(new Error('observe boom'))
 
-    const { server, invoke } = createMockServer()
+    const { server, invoke } = createTestServer()
     registerDesktopGroundingTools({ server, runtime, executeAction })
 
     const result = await invoke('desktop_observe', {})
@@ -142,7 +115,7 @@ describe('registerDesktopGroundingTools', () => {
       staleFlags: { screenshot: false, ax: false, chromeSemantic: false },
     } as any)
 
-    const { server, invoke } = createMockServer()
+    const { server, invoke } = createTestServer()
     registerDesktopGroundingTools({ server, runtime, executeAction })
 
     const result = await invoke('desktop_observe', {})
@@ -168,7 +141,7 @@ describe('registerDesktopGroundingTools', () => {
 
   it('does not refocus before desktop_observe', async () => {
     const { runtime, executeAction } = createRuntime()
-    const { server, invoke } = createMockServer()
+    const { server, invoke } = createTestServer()
     registerDesktopGroundingTools({ server, runtime, executeAction })
 
     captureDesktopGroundingMock.mockResolvedValueOnce({

@@ -1,5 +1,4 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-
+import type { PendingActionRecord } from '../types'
 import type { ComputerUseServerRuntime } from './runtime'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -13,6 +12,8 @@ import {
 } from '../terminal/pty-runner'
 import { createTestConfig } from '../test-fixtures'
 import { registerPtyTools } from './register-pty'
+import { createTestRuntime } from './test-fixtures'
+import { createTestServer } from './test-server'
 
 vi.mock('../terminal/pty-runner', () => ({
   createPtySession: vi.fn(),
@@ -26,39 +27,17 @@ vi.mock('../terminal/pty-runner', () => ({
   writeToPty: vi.fn(),
 }))
 
-type ToolHandler = (args: Record<string, unknown>) => Promise<any>
-
-function createMockServer() {
-  const handlers = new Map<string, ToolHandler>()
-
-  return {
-    server: {
-      tool(name: string, _schema: unknown, handler: ToolHandler) {
-        handlers.set(name, handler)
-      },
-    } as unknown as McpServer,
-    async invoke(name: string, args: Record<string, unknown> = {}) {
-      const handler = handlers.get(name)
-      if (!handler) {
-        throw new Error(`Missing registered tool: ${name}`)
-      }
-
-      return await handler(args)
-    },
-  }
-}
-
 describe('registerPtyTools', () => {
   let runtime: ComputerUseServerRuntime
-  let pendingActions: Array<Record<string, unknown>>
+  let pendingActions: PendingActionRecord[]
 
   beforeEach(() => {
     pendingActions = []
-    runtime = {
+    runtime = createTestRuntime({
       config: createTestConfig({ approvalMode: 'never' }),
       stateManager: new RunStateManager(),
       session: {
-        createPendingAction: vi.fn((record: Record<string, unknown>) => {
+        createPendingAction: vi.fn((record: Omit<PendingActionRecord, 'id' | 'createdAt'>) => {
           const pending = { ...record, id: `pending_${pendingActions.length + 1}`, createdAt: new Date().toISOString() }
           pendingActions.push(pending)
           return pending
@@ -66,7 +45,7 @@ describe('registerPtyTools', () => {
         listPendingActions: vi.fn(() => pendingActions),
         record: vi.fn().mockResolvedValue(undefined),
       },
-    } as unknown as ComputerUseServerRuntime
+    })
     vi.clearAllMocks()
   })
 
@@ -80,7 +59,7 @@ describe('registerPtyTools', () => {
       screenContent: '',
       pid: 4242,
     })
-    const { server, invoke } = createMockServer()
+    const { server, invoke } = createTestServer()
 
     registerPtyTools({ server, runtime })
 
@@ -133,7 +112,7 @@ describe('registerPtyTools', () => {
     })
     runtime.stateManager.bindPtySessionToStep('pty_1', 'Inspect terminal')
     runtime.stateManager.touchPtySession('pty_1')
-    const { server, invoke } = createMockServer()
+    const { server, invoke } = createTestServer()
 
     registerPtyTools({ server, runtime })
 
@@ -171,7 +150,7 @@ describe('registerPtyTools', () => {
       screenContent: 'htop',
       pid: 9001,
     })
-    const { server, invoke } = createMockServer()
+    const { server, invoke } = createTestServer()
 
     registerPtyTools({ server, runtime })
 
@@ -208,7 +187,7 @@ describe('registerPtyTools', () => {
       screenContent: 'line 1\nline 2\n--More--\n',
       pid: 9001,
     })
-    const { server, invoke } = createMockServer()
+    const { server, invoke } = createTestServer()
 
     registerPtyTools({ server, runtime })
 
@@ -241,7 +220,7 @@ describe('registerPtyTools', () => {
       screenContent: 'cd /tmp/next\n\u001B[32malice@wonderland\u001B[0m:\u001B[34m/tmp/next\u001B[0m$ \n',
       pid: 9001,
     })
-    const { server, invoke } = createMockServer()
+    const { server, invoke } = createTestServer()
 
     registerPtyTools({ server, runtime })
 

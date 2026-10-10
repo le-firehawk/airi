@@ -20,13 +20,8 @@ describe('auth analytics', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // The auth SPA emitted `signup_completed` before it knew the Better Auth
-  // user id, while the server emitted the same canonical event with that id.
-  // The analytics provider therefore counted one email signup as two unrelated persons.
-  //
-  // The anonymous UI milestone must use its own name. The identified server
-  // event remains the only canonical `signup_completed` business fact.
+  // The anonymous UI and identified server both emitted signup_completed, counting one signup as two people.
+  // Give the UI milestone its own name. The server owns the canonical signup_completed event.
   it('keeps anonymous signup UI completion separate from the canonical server signup fact', async () => {
     await expect(loadAnalyticsAdapter(async () => adapterMocks)).resolves.toBe(true)
 

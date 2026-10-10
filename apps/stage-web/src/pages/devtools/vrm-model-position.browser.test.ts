@@ -28,19 +28,8 @@ describe('imported VRM view settings', () => {
   // https://github.com/moeru-ai/airi/issues/1806
   it('resets the legacy view once and preserves later reloads for Issue #1806', async () => {
     // ROOT CAUSE:
-    //
-    // An imported VRM receives a new Blob URL when AIRI reloads the selected model.
-    // The scene treats that URL change as a model switch and replaces the saved view settings.
-    //
-    // The selected display model ID is stable across reloads. The scene must use that ID
-    // for model identity and keep the Blob URL only for resource loading.
-    // A new model ID can arrive before its URL. The old load must not commit the new ID.
-    // Existing installations only have the old runtime URL identity key. AIRI cannot
-    // safely map that URL back to a persisted file after restart. The first new-version
-    // load must reset once and establish a stable model ID for later reloads.
-    // A reload also creates a new VRM group. The saved offset must be applied to that
-    // group even when the store value does not change and its watcher does not run.
-    // The old group must leave the scene before AIRI commits the replacement group.
+    // Blob URLs change on reload. Use stable model IDs for identity and reset unmappable old URL identities once.
+    // Do not commit a new ID with an old load. Apply saved offsets to replacement groups and remove old groups before committing replacements.
     const pinia = createPinia()
     const modelStore = useModelStore(pinia)
     modelStore.resetModelStore()

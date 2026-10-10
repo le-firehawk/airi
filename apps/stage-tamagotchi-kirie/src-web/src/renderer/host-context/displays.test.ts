@@ -30,13 +30,8 @@ describe('host displays', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // The Kirie renderer used the full display bounds as its work area and converted
-  // them with the WebView device-pixel ratio. This lost Godot's native menu-bar and
-  // dock exclusions and could use a scale from a different display.
-  //
-  // We fixed this by fetching bounds, usable work area, and scale as one native
-  // snapshot and converting both rectangles with that snapshot's scale.
+  // The renderer lost Godot work-area exclusions and used a WebView scale from another display.
+  // Fetch bounds, usable area, and scale together. Convert both rectangles with that native snapshot's scale.
   it('uses the native usable area and scale from the same Godot display snapshot', async () => {
     const displays = useHostDisplays()
 

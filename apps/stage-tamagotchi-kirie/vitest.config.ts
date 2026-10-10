@@ -21,7 +21,10 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'browser',
-          include: ['src-web/src/renderer/host-context/**/*.browser.test.ts'],
+          include: [
+            'src-web/src/renderer/host-context/**/*.browser.test.ts',
+            'src-web/src/renderer/widgets/extension-ui/shared/eventa-runtime.browser.test.ts',
+          ],
           browser: {
             enabled: true,
             headless: true,

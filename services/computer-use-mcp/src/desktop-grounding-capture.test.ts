@@ -1,9 +1,10 @@
 import type { AXSnapshot } from './accessibility/types'
-import type { DesktopExecutor, WindowObservation } from './types'
+import type { WindowObservation } from './types'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { captureDesktopGrounding } from './desktop-grounding'
+import { createTestRuntime } from './server/test-fixtures'
 
 const { captureAXTreeMock, captureChromeSemanticsMock } = vi.hoisted(() => ({
   captureAXTreeMock: vi.fn(),
@@ -86,7 +87,7 @@ describe('captureDesktopGrounding', () => {
       .mockResolvedValueOnce(genericObservation)
       .mockResolvedValueOnce(chromeObservation)
 
-    const executor = {
+    const { config, executor } = createTestRuntime({ executor: {
       takeScreenshot: vi.fn().mockResolvedValue({
         dataBase64: '',
         mimeType: 'image/png',
@@ -94,10 +95,10 @@ describe('captureDesktopGrounding', () => {
         capturedAt: new Date().toISOString(),
       }),
       observeWindows,
-    } as unknown as DesktopExecutor
+    } })
 
     const snapshot = await captureDesktopGrounding({
-      config: {} as never,
+      config,
       executor,
       input: { includeChrome: true },
     })

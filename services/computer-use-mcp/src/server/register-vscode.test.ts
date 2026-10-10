@@ -1,4 +1,3 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 
 import type { ComputerUseServerRuntime } from './runtime'
@@ -8,28 +7,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { RunStateManager } from '../state'
 import { createTestConfig } from '../test-fixtures'
 import { registerVscodeTools } from './register-vscode'
-
-type ToolHandler = (args: Record<string, unknown>) => Promise<CallToolResult>
-
-function createMockServer() {
-  const handlers = new Map<string, ToolHandler>()
-
-  return {
-    server: {
-      tool(name: string, _schema: unknown, handler: ToolHandler) {
-        handlers.set(name, handler)
-      },
-    } as unknown as McpServer,
-    async invoke(name: string, args: Record<string, unknown> = {}) {
-      const handler = handlers.get(name)
-      if (!handler) {
-        throw new Error(`Missing registered tool: ${name}`)
-      }
-
-      return await handler(args)
-    },
-  }
-}
+import { createTestRuntime } from './test-fixtures'
+import { createTestServer } from './test-server'
 
 function createExecutedTerminalResult(overrides: {
   command: string
@@ -61,10 +40,10 @@ describe('registerVscodeTools', () => {
   let runtime: ComputerUseServerRuntime
 
   beforeEach(() => {
-    runtime = {
+    runtime = createTestRuntime({
       config: createTestConfig(),
       stateManager: new RunStateManager(),
-    } as unknown as ComputerUseServerRuntime
+    })
   })
 
   it('opens workspaces through the standard terminal_exec chain and updates run-state', async () => {
@@ -77,7 +56,7 @@ describe('registerVscodeTools', () => {
         command: 'code --reuse-window "/tmp/project"',
         effectiveCwd: '/tmp/project',
       }))
-    const { server, invoke } = createMockServer()
+    const { server, invoke } = createTestServer()
 
     registerVscodeTools({ server, runtime, executeTerminalCommand })
 
@@ -113,7 +92,7 @@ describe('registerVscodeTools', () => {
       },
     }
     const executeTerminalCommand = vi.fn().mockResolvedValue(approvalRequired)
-    const { server, invoke } = createMockServer()
+    const { server, invoke } = createTestServer()
 
     registerVscodeTools({ server, runtime, executeTerminalCommand })
 
@@ -127,7 +106,7 @@ describe('registerVscodeTools', () => {
       cwd: '/tmp/project',
       timeoutMs: 60_000,
     }, 'vscode_run_task')
-    expect(result).toBe(approvalRequired)
+    expect(result).toStrictEqual(approvalRequired)
     expect(runtime.stateManager.getState().vscode).toBeUndefined()
   })
 
@@ -141,7 +120,7 @@ describe('registerVscodeTools', () => {
         'src/App.vue:12:3 - warning TS6133: "unused" is declared but its value is never read.',
       ].join('\n'),
     }))
-    const { server, invoke } = createMockServer()
+    const { server, invoke } = createTestServer()
 
     registerVscodeTools({ server, runtime, executeTerminalCommand })
 

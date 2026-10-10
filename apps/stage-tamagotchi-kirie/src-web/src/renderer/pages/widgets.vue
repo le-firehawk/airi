@@ -197,9 +197,7 @@ function resolveWidgetComponent(name: string) {
   return GenericWidget
 }
 
-function handleClose() {
-  window.close()
-}
+const browserWindow = window
 
 async function toggleAlwaysOnTop() {
   if (!widget.value || pinUpdating.value)
@@ -265,7 +263,7 @@ function handleIframeRequestResult(result: WidgetsIframeRequestResultPayload) {
         ]"
         :title="t('tamagotchi.stage.widgets.close')"
         :aria-label="t('tamagotchi.stage.widgets.close')"
-        @click="handleClose"
+        @click="browserWindow.close()"
       >
         <span class="size-6">×</span>
       </button>

@@ -273,6 +273,7 @@ catalog:
   '@types/audioworklet': ^0.0.100
   '@types/culori': ^4.0.1
   '@types/d3': ^7.4.3
+  '@types/fluent-ffmpeg': 2.1.28
   '@types/hast': ^3.0.5
   '@types/ioredis-mock': ^8.2.8
   '@types/markdown-it': ^14.2.0
@@ -334,6 +335,7 @@ catalog:
   '@xsai/stream-transcription': 0.5.1
   '@xsai/tool': 0.5.1
   '@xsai/utils-chat': 0.5.1
+  abort-controller: 3.0.0
   alien-signals: ^3.2.1
   animejs: ^4.5.0
   async-mutex: 0.5.0
@@ -501,7 +503,7 @@ catalog:
   uuid: ^14.0.2
   valibot: ^1.4.2
   vaul-vue: ^0.4.1
-  vec3: ^0.2.0
+  vec3: ^0.1.10
   vieval: ^0.0.12
   virtua: ^0.50.4
   vite: ^8.2.2

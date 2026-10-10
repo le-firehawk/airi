@@ -462,6 +462,9 @@ catalogs:
     '@types/d3':
       specifier: ^7.4.3
       version: 7.4.3
+    '@types/fluent-ffmpeg':
+      specifier: 2.1.28
+      version: 2.1.28
     '@types/ioredis-mock':
       specifier: ^8.2.8
       version: 8.2.8
@@ -642,6 +645,9 @@ catalogs:
     '@xsai/utils-chat':
       specifier: 0.5.1
       version: 0.5.1
+    abort-controller:
+      specifier: 3.0.0
+      version: 3.0.0
     alien-signals:
       specifier: ^3.2.1
       version: 3.2.1
@@ -1138,8 +1144,8 @@ catalogs:
       specifier: ^0.4.1
       version: 0.4.1
     vec3:
-      specifier: ^0.2.0
-      version: 0.2.0
+      specifier: ^0.1.10
+      version: 0.1.10
     vieval:
       specifier: ^0.0.12
       version: 0.0.12
@@ -3763,7 +3769,7 @@ importers:
         version: 2.0.1(mineflayer@4.37.1(supports-color@10.2.2))
       mineflayer-auto-eat:
         specifier: 'catalog:'
-        version: 5.0.3(supports-color@10.2.2)(vec3@0.2.0)
+        version: 5.0.3(supports-color@10.2.2)(vec3@0.1.10)
       mineflayer-collectblock:
         specifier: 'catalog:'
         version: 1.6.0(supports-color@10.2.2)
@@ -3802,7 +3808,7 @@ importers:
         version: 1.4.2(typescript@6.0.3)
       vec3:
         specifier: 'catalog:'
-        version: 0.2.0
+        version: 0.1.10
       ws:
         specifier: 'catalog:'
         version: 8.21.3(bufferutil@4.1.0)(utf-8-validate@5.0.10)
@@ -3937,6 +3943,9 @@ importers:
       '@xsai/utils-chat':
         specifier: 'catalog:'
         version: 0.5.1
+      abort-controller:
+        specifier: 'catalog:'
+        version: 3.0.0
       best-effort-json-parser:
         specifier: 'catalog:'
         version: 1.5.1
@@ -3971,6 +3980,9 @@ importers:
         specifier: 'catalog:'
         version: 1.4.2(typescript@6.0.3)
     devDependencies:
+      '@types/fluent-ffmpeg':
+        specifier: 'catalog:'
+        version: 2.1.28
       '@types/pg':
         specifier: 'catalog:'
         version: 8.23.1
@@ -12316,6 +12328,9 @@ packages:
 
   '@types/filewriter@0.0.33':
     resolution: {integrity: sha512-xFU8ZXTw4gd358lb2jw25nxY9QAgqn2+bKKjKOYfNCzN4DKCFetK7sPtrlpg66Ywe3vWY9FNxprZawAh9wfJ3g==}
+
+  '@types/fluent-ffmpeg@2.1.28':
+    resolution: {integrity: sha512-5ovxsDwBcPfJ+eYs1I/ZpcYCnkce7pvH9AHSvrZllAp1ZPpTRDZAFjF3TRFbukxSgIYTTNYePbS0rKUmaxVbXw==}
 
   '@types/fs-extra@11.0.4':
     resolution: {integrity: sha512-yTbItCNreRooED33qjunPthRcSjERP1r4MqCZc7wv0u2sUkzTFp45tgUfS5+r7FrZPdmCCNflLhVSP/o+SemsQ==}
@@ -24361,9 +24376,9 @@ snapshots:
       - magicast
     optional: true
 
-  '@nxg-org/mineflayer-util-plugin@1.9.4(vec3@0.2.0)':
+  '@nxg-org/mineflayer-util-plugin@1.9.4(vec3@0.1.10)':
     dependencies:
-      node-aabb: 0.1.0(vec3@0.2.0)
+      node-aabb: 0.1.0(vec3@0.1.10)
     transitivePeerDependencies:
       - vec3
 
@@ -26781,6 +26796,10 @@ snapshots:
       '@types/filewriter': 0.0.33
 
   '@types/filewriter@0.0.33': {}
+
+  '@types/fluent-ffmpeg@2.1.28':
+    dependencies:
+      '@types/node': 26.2.0
 
   '@types/fs-extra@11.0.4':
     dependencies:
@@ -32827,9 +32846,9 @@ snapshots:
       minecraft-data: 3.113.2
       mineflayer: 4.37.1(supports-color@10.2.2)
 
-  mineflayer-auto-eat@5.0.3(supports-color@10.2.2)(vec3@0.2.0):
+  mineflayer-auto-eat@5.0.3(supports-color@10.2.2)(vec3@0.1.10):
     dependencies:
-      '@nxg-org/mineflayer-util-plugin': 1.9.4(vec3@0.2.0)
+      '@nxg-org/mineflayer-util-plugin': 1.9.4(vec3@0.1.10)
       mineflayer: 4.37.1(supports-color@10.2.2)
     transitivePeerDependencies:
       - encoding
@@ -33098,9 +33117,9 @@ snapshots:
 
   next-tick@1.1.0: {}
 
-  node-aabb@0.1.0(vec3@0.2.0):
+  node-aabb@0.1.0(vec3@0.1.10):
     dependencies:
-      vec3: 0.2.0
+      vec3: 0.1.10
 
   node-abi@3.94.0:
     dependencies:

@@ -131,19 +131,28 @@ jobs:
           pnpm -F @proj-airi/auth-server exec vitest run --configLoader runner --maxWorkers=1
           src/tests/auth.test.ts src/tests/ban-guard.test.ts
           src/tests/rate-limit.test.ts src/tests/social-authorization.test.ts
+          src/tests/routes-discovery.test.ts
       - name: Install browser test runtime
+        id: browser-runtime
         run: pnpm exec playwright install --with-deps chromium
+      # Collect independent browser failures in one run. Packaging still requires every test to pass.
       - name: Test presence-bubble browser canvas
+        if: ${{ !cancelled() && steps.browser-runtime.outcome == 'success' }}
         run: pnpm exec vitest run --configLoader runner --config packages/stage-shared/vitest.config.ts --project stage-shared:browser
       - name: Test Live2D browser file storage
+        if: ${{ !cancelled() && steps.browser-runtime.outcome == 'success' }}
         run: pnpm run test-stage-ui-live2d:run --configLoader runner
       - name: Test Spine browser runtimes
+        if: ${{ !cancelled() && steps.browser-runtime.outcome == 'success' }}
         run: pnpm exec vitest run --configLoader runner --config packages/stage-ui-spine/vitest.config.ts --project stage-ui-spine:browser
       - name: Test motion library and games in the browser
+        if: ${{ !cancelled() && steps.browser-runtime.outcome == 'success' }}
         run: pnpm -F @proj-airi/stage-ui exec vitest run --configLoader runner --project browser src/features/motions/vrm src/features/companion-games src/components/scenarios/companion-games src/components/layouts/ripple-grid/index.browser.test.ts src/composables/canvas-alpha.browser.test.ts src/composables/canvas-alpha-use-pixel.browser.test.ts src/libs/audio/vad.browser.test.ts src/stores/settings/general.browser.test.ts
       - name: Test Kirie browser events
+        if: ${{ !cancelled() && steps.browser-runtime.outcome == 'success' }}
         run: pnpm exec vitest run --configLoader runner --config apps/stage-tamagotchi-kirie/vitest.config.ts --project browser src-web/src/renderer/widgets/extension-ui/shared/eventa-runtime.browser.test.ts
       - name: Test desktop browser behavior
+        if: ${{ !cancelled() && steps.browser-runtime.outcome == 'success' }}
         run: pnpm -F @proj-airi/stage-tamagotchi exec vitest run --configLoader runner --project browser
       - name: Export Linux stage sidecar
         id: godot-export

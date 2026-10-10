@@ -272,15 +272,10 @@ describe('card inheritance with real module stores', () => {
 
   // https://github.com/moeru-ai/airi/pull/2490#discussion_r3959813216
   // ROOT CAUSE:
-  //
-  // The speech store observed authentication directly. This leaked official
-  // provider policy into a generic module and ran in every renderer.
-  //
-  // Before: an auth snapshot started voice loading before the leader-owned
-  // card setup completed.
-  //
-  // We fixed this by loading auth-owned voices after card setup applies the
-  // effective provider, model, and voice in the synchronization leader.
+  // Direct authentication observation loaded official voices in every renderer before card setup
+  // completed.
+  // Auth-owned voices now load after leader-owned card setup applies the effective provider, model,
+  // and voice.
   it('loads official voices through authenticated card setup', async () => {
     const speechStore = useSpeechStore()
     speechStore.activeSpeechProvider = OFFICIAL_SPEECH_PROVIDER_ID

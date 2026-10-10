@@ -8,10 +8,6 @@ import { useDiscordStore } from '../../stores/modules/discord'
 const { t } = useI18n()
 const discordStore = useDiscordStore()
 const { enabled, token, configured } = storeToRefs(discordStore)
-
-function saveSettings() {
-  discordStore.saveSettings()
-}
 </script>
 
 <template>
@@ -34,7 +30,7 @@ function saveSettings() {
       <Button
         :label="t('settings.common.save')"
 
-        @click="saveSettings"
+        @click="discordStore.saveSettings()"
       />
     </div>
 

@@ -72,12 +72,9 @@ describe('markdown renderer initial content', () => {
 
   it('renders basic Markdown before mounted layout code reads the element', async () => {
     // ROOT CAUSE:
-    //
-    // MarkdownRenderer started with empty HTML and filled it after an awaited promise.
-    // TransitionVertical measured that empty element and kept the stale height for 250 ms.
-    // The content jumped to its real height when the animation released its fixed height.
-    //
-    // We fixed this by rendering basic Markdown synchronously before optional rich processing.
+    // MarkdownRenderer initially returned empty HTML. TransitionVertical measured it and retained
+    // that height for 250 ms, causing a jump after release.
+    // Basic Markdown now renders synchronously before optional rich processing.
     const markdown = `### Roof Leak in Server Room
 
 *Anime style virtual AI girl waking up in a server room and noticing water from the ceiling.*

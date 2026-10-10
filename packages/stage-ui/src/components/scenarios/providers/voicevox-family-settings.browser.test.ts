@@ -97,17 +97,10 @@ describe('voicevox family settings', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // The page left the provider at status `unconfigured`. The voice list stayed
-  // empty, and the speech module offered no engine to select.
-  //
-  // No code validated these providers. `SpeechProviderSettings` loads the
-  // catalogue only for a `configured` provider. The store reaches its
-  // listed-provider sweep only through `resetProviderSettings`. An engine takes
-  // no API key, so its configuration always equalled the schema defaults, and
-  // `shouldListProvider` kept it out of that sweep.
-  //
-  // We fixed this by calling `useProviderValidation` from the settings page.
+  // Keyless engines matched schema defaults, so shouldListProvider skipped validation. Their
+  // unconfigured status blocked voice discovery.
+  // The settings page now calls useProviderValidation, making the voice catalog and speech engine
+  // available.
   it('loads the voice catalogue for a reachable engine', async () => {
     stubReachableEngine()
     const pinia = createPinia()
@@ -151,20 +144,10 @@ describe('voicevox family settings', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // A follower renderer reported "Failed to execute 'postMessage' on
-  // 'BroadcastChannel': #<Object> could not be cloned."
-  //
-  // `validateProviderConfig` is a synchronized action. A follower posts its
-  // arguments to the leader. The caller built them with `{ ...credentials.value }`,
-  // which leaves every nested value a Vue reactive proxy. `structuredClone`
-  // rejects a proxy. A flat credential pair survived that check, so only the
-  // VOICEVOX family failed, through `voiceSettings`.
-  //
-  // We fixed this by taking a deep plain copy before the call.
-  //
-  // This case asserts the clone contract directly. A plain Pinia installs no
-  // synchronization wrapper to post through.
+  // A shallow credential copy retained nested voiceSettings proxies. Synchronized validation posted
+  // them to the leader, where structuredClone rejected them.
+  // Validation now receives a deep plain copy. This test checks cloneability directly because plain
+  // Pinia has no synchronization wrapper.
   it('passes a structured-cloneable configuration to the synchronized validation action', async () => {
     stubReachableEngine()
     const pinia = createPinia()

@@ -51,7 +51,7 @@ export function useOptimisticMutation<T, R = T, E = unknown>(options: UseOptimis
 
   return useAsyncState(async () => {
     if (skipActionIf && await skipActionIf()) {
-      return undefined as R
+      return undefined
     }
 
     const rollback = await apply()
@@ -61,7 +61,7 @@ export function useOptimisticMutation<T, R = T, E = unknown>(options: UseOptimis
       if (onSuccess) {
         return await onSuccess(result)
       }
-      return result as unknown as R
+      return result
     }
     catch (err) {
       const allowRollback = shouldRollback ? await shouldRollback(err as E) : true

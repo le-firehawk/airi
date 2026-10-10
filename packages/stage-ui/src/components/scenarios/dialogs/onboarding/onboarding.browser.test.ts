@@ -110,14 +110,10 @@ it('publishes the onboarding login click on the leader', async () => {
 })
 
 // ROOT CAUSE:
-//
-// saveProviderConfiguration wrote credentials through the `configs` computed
-// projection, so the save never reached the owning synchronized state and was
-// discarded on recompute — fetchModelsForProvider then returned an empty
-// catalog ("no models available") despite validation succeeding.
-//
-// The desktop onboarding window is a sync follower; this test drives the real
-// dialog there and asserts the save reaches the leader and localStorage.
+// Saving credentials through computed configs discarded them on recompute, leaving model discovery
+// empty despite successful validation.
+// The desktop dialog runs as a synchronization follower. This test verifies that saved credentials
+// reach the leader and localStorage.
 it('persists configured credentials through the leader and loads the model list', async () => {
   const namespace = `onboarding-dialog:${crypto.randomUUID()}`
   const leader = createSyncedContext(namespace, 'leader-only')

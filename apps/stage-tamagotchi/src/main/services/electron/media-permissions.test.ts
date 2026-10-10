@@ -231,19 +231,10 @@ describe('media permissions', () => {
   // https://github.com/moeru-ai/airi/issues/2177
   it('grants screen capture requests reported as media from local app pages (Issue #2177)', () => {
     // ROOT CAUSE:
-    //
-    // `navigator.mediaDevices.getDisplayMedia()` reaches `setPermissionRequestHandler` as the `media`
-    // permission, and Electron only appends `audio` or `video` to `mediaTypes` for device capture, so a
-    // desktop capture request arrives with an empty `mediaTypes` list.
-    //
-    // `shouldGrantElectronPermission` returned early for every `media` operation and demanded audio-only
-    // details, so screen capture was denied before the allowlisted `display-capture` entry was reached:
-    //
-    // if (permission === 'media')
-    //   return shouldGrantAudioCapturePermission(webContents, permission, requestingOrigin, details)
-    //
-    // We fixed this by resolving a `media` operation without device media types to `display-capture`, so
-    // the existing allowlist and local-frame checks decide the outcome.
+    // Electron reports desktop capture as media with empty mediaTypes. The audio-only permission
+    // branch denied it before the display-capture allowlist ran.
+    // Empty device media types now select display-capture, preserving the allowlist and local-frame
+    // checks.
     expect(shouldGrantElectronPermission(
       localWebContents,
       'media',
@@ -270,16 +261,10 @@ describe('media permissions', () => {
   // https://github.com/moeru-ai/airi/pull/2178#discussion_r3681573150
   it('rejects desktop capture that no renderer asked for', () => {
     // ROOT CAUSE:
-    //
-    // Electron reports the legacy `chromeMediaSource: 'desktop'` constraint with the same empty
-    // `mediaTypes` list as `getDisplayMedia()`, but serves it from `HandleUserMediaRequest` instead of
-    // `setDisplayMediaRequestHandler`. Granting on empty `mediaTypes` alone therefore also handed a local
-    // page the full desktop through `getUserMedia()`, skipping AIRI's own source selection:
-    //
-    // const allowlistPermission = isDisplayCaptureMediaPermission(permission, details) ? 'display-capture' : permission
-    //
-    // We fixed this by additionally requiring an authorized capture source, which only AIRI's selected
-    // source flow installs.
+    // Legacy chromeMediaSource desktop capture also has empty mediaTypes, but bypasses
+    // setDisplayMediaRequestHandler.
+    // Granting solely on empty mediaTypes bypassed AIRI's source selection. Authorization now also
+    // requires the source installed by AIRI's selected-source flow.
     expect(shouldGrantElectronPermission(
       localWebContents,
       'media',

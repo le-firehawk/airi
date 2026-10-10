@@ -175,14 +175,9 @@ describe('chat history', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // ChatHistoryMessageFrame always applied opacity-0, then added opacity-100
-  // when IntersectionObserver reported visibility. UnoCSS kept both utilities
-  // on the same node. In Kirie CEF software OSR the opacity transition never
-  // flushed, so computed opacity stayed 0 and the conversation looked empty
-  // after a successful send.
-  //
-  // Visible messages now start opaque and never keep both opacity utilities.
+  // Message frames kept both opacity utilities. In Kirie CEF software OSR, the transition never
+  // flushed and messages stayed invisible.
+  // Visible messages now start opaque without conflicting opacity utilities.
   it('paints on-screen desktop messages without an opacity-0 class', async () => {
     const screen = await render(ChatHistory, {
       props: {
@@ -285,13 +280,9 @@ describe('chat history', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // Virtua keeps its internal content root at least as tall as the viewport, but
-  // absolutely positioned messages still start at the top. A short mobile history
-  // therefore leaves most of the chat area empty below a newly sent message.
-  //
-  // We fixed this by bottom-aligning short virtualized content while preserving
-  // the existing overflow direction for longer history.
+  // Virtua's root fills the viewport, but absolutely positioned messages started at the top and
+  // left empty space below short histories.
+  // Short content now aligns to the bottom while longer histories retain their overflow direction.
   it('bottom-aligns a newly sent mobile message and its streaming placeholder', async () => {
     const screen = await render(ChatHistory, {
       props: {
@@ -776,13 +767,9 @@ describe('chat history', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // The first diagonal wheel event could have a slightly larger horizontal
-  // delta. The gesture claimed that event as a reply swipe and prevented every
-  // later event, even when the complete gesture was clearly vertical scrolling.
-  //
-  // The recognizer must wait for clear horizontal intent. It must lock a clear
-  // vertical gesture out of reply handling for the rest of that wheel stream.
+  // A slightly horizontal first wheel event claimed an otherwise vertical stream as a reply swipe.
+  // The recognizer now waits for clear horizontal intent. Clear vertical intent excludes reply
+  // handling for the rest of that stream.
   it('keeps a diagonal vertical wheel stream available to chat scrolling', async () => {
     const message: ChatHistoryItem = {
       id: 'desktop-vertical-scroll-target',
@@ -872,13 +859,9 @@ describe('chat history', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // Waiting for the inertial wheel tail to become idle makes the message look
-  // stuck after the fingers leave the trackpad. Those events no longer describe
-  // a position that the user directly controls.
-  //
-  // Momentum detection ends direct manipulation immediately. The reply uses the
-  // last direct position, while the same return animation consumes the tail.
+  // Waiting for inertial wheel events to stop left the message stuck after finger release.
+  // Momentum detection now ends direct manipulation immediately. Reply selection uses the last
+  // direct position, and the return animation consumes the inertial tail.
   it('returns a desktop message as soon as the wheel stream becomes momentum', async () => {
     const message: ChatHistoryItem = {
       id: 'desktop-momentum-release-target',
@@ -1012,13 +995,10 @@ describe('chat history', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // The recognizer tried to infer trackpad release from decreasing wheel
-  // deltas. A user can also slow a direct pan before lifting their fingers, so
-  // this inference started the return while the gesture was still active.
-  //
-  // Every direct event in a wheel stream must update the message position. The
-  // adaptive ending signal releases the gesture and starts the return.
+  // Decreasing wheel deltas also occur when users slow an active pan, so they cannot prove finger
+  // release.
+  // Every direct event now updates position. The adaptive ending signal releases the gesture and
+  // starts its return.
   it('follows every partial desktop pan delta until the wheel stream becomes idle', async () => {
     const message: ChatHistoryItem = {
       id: 'desktop-partial-pan-target',
@@ -1080,13 +1060,10 @@ describe('chat history', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // A separate visual-return timer could start while the two-finger pan was
-  // still active. The message then moved against the direct input before the
-  // release timer completed.
-  //
-  // The message must stay at its input position until the adaptive ending
-  // signal. One return animation starts after release and never crosses the origin.
+  // A separate visual timer returned the message during an active two-finger pan, opposing direct
+  // input.
+  // The message now stays at its input position until the adaptive ending signal. One return
+  // animation follows release without crossing the origin.
   it('keeps a desktop message at its direct position until the pan becomes idle', async () => {
     const message: ChatHistoryItem = {
       id: 'desktop-return-target',
@@ -1152,13 +1129,10 @@ describe('chat history', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // A fixed deadline after threshold entry commits while the user can still be
-  // moving two fingers on the trackpad. The commit also suppresses the remaining
-  // direct movement, so the message stops following the gesture before release.
-  //
-  // Every horizontal wheel event updates the adaptive release estimate. The
-  // gesture can commit only after the resulting ending signal.
+  // A fixed threshold deadline committed replies during active movement and stopped the message
+  // from following input.
+  // Every horizontal wheel event now updates the adaptive release estimate. Commitment waits for
+  // its ending signal.
   it('keeps a desktop reply gesture active while meaningful pan input continues', async () => {
     const message: ChatHistoryItem = {
       id: 'desktop-continuous-pan-target',
@@ -1204,13 +1178,9 @@ describe('chat history', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // The swipe primitive reduced all travel after the reply threshold to 25%.
-  // A 20-pixel trackpad movement moved the message by only 5 pixels, which made
-  // the message look stuck even though the wheel events continued to arrive.
-  //
-  // Every raw delta updates the nonlinear mapping. The message continues to
-  // move after the reply threshold instead of freezing at that point.
+  // Reducing travel past the reply threshold to 25% made the message appear stuck.
+  // Every raw delta now updates a nonlinear mapping, so the message continues moving beyond the
+  // threshold.
   it('keeps the desktop message moving with trackpad travel after the reply threshold', async () => {
     const message: ChatHistoryItem = {
       id: 'desktop-follow-target',
@@ -1303,13 +1273,10 @@ describe('chat history', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // Trackpads can send wheel events faster than the display can paint them.
-  // Rendering the complete message slot after every event adds work for states
-  // that the user cannot see and makes horizontal movement uneven.
-  //
-  // The primitive must keep every input delta, but it must publish only the
-  // latest visible offset for each animation frame.
+  // Trackpads can deliver wheel events faster than display frames. Rendering each intermediate
+  // state wasted work and caused uneven motion.
+  // The primitive retains every input delta but publishes only the latest visible offset per
+  // animation frame.
   it('coalesces trackpad offset updates into the next display frame', async () => {
     const message: ChatHistoryItem = {
       id: 'desktop-frame-target',
@@ -1399,14 +1366,10 @@ describe('chat history', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // The touch recognizer discarded movement below its intent threshold. It also
-  // compared horizontal and vertical travel again on every move. A message first
-  // jumped to the threshold, then snapped to rest when a confirmed swipe returned
-  // through the small vertical drift accumulated earlier in the gesture.
-  //
-  // The message now follows directed touch travel before intent is confirmed. Once
-  // horizontal intent is confirmed, that decision lasts until the touch ends.
+  // Discarding early movement caused a jump at the intent threshold. Rechecking direction then
+  // canceled confirmed swipes on small vertical drift.
+  // Messages now follow directed travel before confirmation. Confirmed horizontal intent lasts
+  // until the touch ends.
   it('keeps a mobile message attached to the finger before and after the intent threshold', async () => {
     const screen = await render(ChatHistory, {
       props: {
@@ -1541,13 +1504,10 @@ describe('chat history', () => {
 
   // https://github.com/moeru-ai/airi/pull/2489
   // ROOT CAUSE:
-  //
-  // Mobile Safari can dispatch lostpointercapture after a swipe surface captures
-  // the active touch pointer. The pointer handler treated this event as a hard
-  // cancellation and ignored all later movement from the same physical touch.
-  //
-  // The mobile gesture now follows the Touch Events stream. Pointer capture loss
-  // does not terminate that stream, and touchcancel remains the cancellation signal.
+  // Mobile Safari can lose pointer capture during an active touch. Treating this as cancellation
+  // discarded subsequent motion.
+  // Mobile gestures now follow Touch Events. Capture loss does not terminate them, while
+  // touchcancel still cancels.
   it('continues a mobile swipe after pointer capture is lost as reported in PR #2489', async () => {
     const message: ChatHistoryItem = {
       id: 'lost-pointer-capture-target',

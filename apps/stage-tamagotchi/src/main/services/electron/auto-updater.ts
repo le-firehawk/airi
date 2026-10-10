@@ -243,7 +243,7 @@ export function fromImported(): AppUpdaterLike {
     return new MockAutoUpdater()
 
   const { autoUpdater } = electronUpdater
-  return autoUpdater as unknown as AppUpdaterLike
+  return autoUpdater
 }
 
 type MainContext = ReturnType<typeof createContext>['context']

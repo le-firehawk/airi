@@ -20,13 +20,9 @@ describe('profile switcher', () => {
   // https://github.com/moeru-ai/airi/issues/1860
   it('keeps profile creation active after Save as New Profile for Issue #1860', async () => {
     // ROOT CAUSE:
-    //
-    // Closing the Reka Select after choosing the create action changed `open`
-    // to false. The `open` watcher then called `cancelCreate()` and removed
-    // the form before the user could enter a name.
-    //
-    // The form now owns outside-click dismissal, while Select owns its own
-    // portal lifecycle. Closing the Select therefore does not cancel creation.
+    // Closing Reka Select after the create action triggered cancelCreate and removed the form.
+    // The form now owns outside-click dismissal. Select only owns its portal lifecycle, so closing
+    // it preserves creation.
     const screen = await renderProfileSwitcher()
 
     await selectCreateAction(screen)

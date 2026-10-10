@@ -342,12 +342,8 @@ describe('controls Island overflow', () => {
   })
 
   // ROOT CAUSE:
-  // A bottom-docked Island must use the lower scroll edge when its content is
-  // taller than the window, or the main controls can remain below the viewport.
-  //
-  // Before the patch, the bottom dock could open with its main controls clipped.
-  //
-  // We fixed this by aligning the outer viewport to the dock edge after layout changes.
+  // A bottom-docked Island with oversized content opened with its main controls below the viewport.
+  // After layout changes, the outer viewport now aligns to the dock edge.
   it('issue #2400 aligns bottom docks to the visible vertical scroll end', async () => {
     await page.viewport(450, 200)
     const { i18n, screen } = mountControlsIsland('bottom-right')
@@ -366,13 +362,9 @@ describe('controls Island overflow', () => {
   })
 
   // ROOT CAUSE:
-  // A scrollbar drag can move the pointer outside the Island while the user is
-  // still interacting with it.
-  //
-  // Before the patch, the outside timer collapsed the menu during a scrollbar drag.
-  //
-  // We fixed this by treating pressed scrollbar interaction as a blocked state.
-  // The interaction path is independent from the size and dock matrix.
+  // Scrollbar drags can move the pointer outside the Island. The outside timer then collapsed the
+  // menu during interaction.
+  // Pressed scrollbar interaction now blocks collapse independently of the size and dock matrix.
   it('issue #2400 keeps the expanded menu open during a scrollbar drag', async () => {
     await page.viewport(450, 300)
     const { i18n, screen } = mountControlsIsland('bottom-right')
@@ -402,19 +394,10 @@ describe('controls Island overflow', () => {
 // https://github.com/moeru-ai/airi/issues/2521
 it('keeps the menu open while genuinely hovered even if the Electron cursor signal reports outside', async () => {
   // ROOT CAUSE:
-  //
-  // The auto-collapse watchers trusted only the Electron-tracked cursor
-  // signal (mocked here via `isOutside`). On a native Wayland session,
-  // Electron's screen.getCursorScreenPoint() can come back stuck away
-  // from the real pointer position, reporting the island as permanently
-  // "outside" and collapsing the menu regardless of where the cursor
-  // actually is.
-  //
-  // We fixed this by ORing that signal with useMouseInElement's plain
-  // DOM-based isOutside, which tracks real pointer position and needs no
-  // OS-level cursor query. The menu now stays open whenever either signal
-  // agrees the pointer is inside, and only collapses once both agree it
-  // left.
+  // On Wayland, Electron can report a stale cursor position and collapse the Island despite an
+  // inside pointer.
+  // DOM pointer tracking now complements Electron's signal. The menu remains open if either reports
+  // inside, and collapses only when both report outside.
   await page.viewport(450, 300)
   const { i18n, screen } = mountControlsIsland('bottom-right')
   const label = (key: string) => i18n.global.t(`tamagotchi.stage.controls-island.${key}`)
@@ -508,12 +491,10 @@ it('keeps the profile creation form open for pointer interaction (PR #2474)', as
   isOutside.value = false
 
   // ROOT CAUSE:
-  // Reopening the selector while creation was active changed the selected
-  // card but left the old form state alive. A later save could clone the new
-  // card with the name entered for the previous card.
-  //
-  // We fixed this by canceling creation when a non-create option is selected.
-  // The close-to-create transition remains allowed.
+  // Reopening the selector during creation changed the selected card but retained the previous
+  // form. Saving then cloned the wrong card.
+  // Selecting a non-create option now cancels creation. Closing the selector to enter creation
+  // remains supported.
   await screen.getByRole('combobox').click()
   await page.getByRole('option', { name: i18n.global.t('stage.profile-switcher.save-as-new') }).click()
   await page.getByPlaceholder(i18n.global.t('stage.profile-switcher.new-profile-name')).fill('Stale profile name')

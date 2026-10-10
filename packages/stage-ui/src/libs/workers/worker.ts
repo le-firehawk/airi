@@ -91,12 +91,12 @@ async function detectWebGPUInWorker(): Promise<boolean> {
 let resolvedDevice: 'webgpu' | 'wasm' | 'cpu' = 'webgpu'
 
 class AutomaticSpeechRecognitionPipeline {
-  static model_id: string | null = null
-  static tokenizer: Promise<PreTrainedTokenizer>
-  static processor: Promise<Processor>
-  static model: Promise<PreTrainedModel>
+  model_id: string = MODEL_ID
+  tokenizer?: Promise<PreTrainedTokenizer>
+  processor?: Promise<Processor>
+  model?: Promise<PreTrainedModel>
 
-  static async getInstance(progress_callback?: ProgressCallback, device: 'webgpu' | 'wasm' | 'cpu' = 'webgpu') {
+  async getInstance(progress_callback?: ProgressCallback, device: 'webgpu' | 'wasm' | 'cpu' = 'webgpu') {
     this.model_id = MODEL_ID
 
     // Auto-detect: if WebGPU was requested but unavailable, fall back to WASM
@@ -152,6 +152,8 @@ class AutomaticSpeechRecognitionPipeline {
   }
 }
 
+const speechRecognitionPipeline = new AutomaticSpeechRecognitionPipeline()
+
 /**
  * Convert base64-encoded WAV audio to Float32Array features.
  * @deprecated Prefer sending Float32Array directly via transferable for zero-copy.
@@ -198,14 +200,6 @@ function markCancelled(targetRequestId: string): void {
   globalThis.postMessage(msg)
 }
 
-function isCancelled(requestId: string): boolean {
-  return cancelledRequestIds.has(requestId)
-}
-
-function clearCancelled(requestId: string): void {
-  cancelledRequestIds.delete(requestId)
-}
-
 function sendProgress(requestId: string, phase: 'download' | 'compile' | 'warmup' | 'inference', percent: number, message?: string, extra?: Record<string, unknown>): void {
   const msg: ProgressResponse = {
     type: 'progress',
@@ -249,7 +243,7 @@ async function loadModel(request: LoadModelRequest): Promise<void> {
   try {
     sendProgress(requestId, 'download', -1, 'Loading model...')
 
-    const [_tokenizer, _processor, model] = await AutomaticSpeechRecognitionPipeline.getInstance((x: any) => {
+    const [_tokenizer, _processor, model] = await speechRecognitionPipeline.getInstance((x: any) => {
       // Forward transformers.js progress events
       if (currentLoadRequestId) {
         if (x.status === 'progress') {
@@ -275,9 +269,9 @@ async function loadModel(request: LoadModelRequest): Promise<void> {
       max_new_tokens: 1,
     } as Record<string, unknown>)
 
-    if (isCancelled(requestId)) {
+    if (cancelledRequestIds.has(requestId)) {
       // Adapter already received a CANCELLED error; drop the stale result.
-      clearCancelled(requestId)
+      cancelledRequestIds.delete(requestId)
     }
     else {
       const ready: ModelReadyResponse = {
@@ -290,8 +284,8 @@ async function loadModel(request: LoadModelRequest): Promise<void> {
     }
   }
   catch (error) {
-    if (isCancelled(requestId))
-      clearCancelled(requestId)
+    if (cancelledRequestIds.has(requestId))
+      cancelledRequestIds.delete(requestId)
     else
       sendError(requestId, error, 'load')
   }
@@ -319,7 +313,7 @@ async function runInference(request: RunInferenceRequest<WhisperInput>): Promise
     sendProgress(requestId, 'inference', 0, 'Starting transcription...')
 
     const audioData = input.audioFloat32 ?? await base64ToFeatures(input.audio!)
-    const [tokenizer, processor, model] = await AutomaticSpeechRecognitionPipeline.getInstance()
+    const [tokenizer, processor, model] = await speechRecognitionPipeline.getInstance()
 
     let startTime: number | undefined
     let numTokens = 0
@@ -352,8 +346,8 @@ async function runInference(request: RunInferenceRequest<WhisperInput>): Promise
 
     const outputText = tokenizer.batch_decode(outputs as Tensor, { skip_special_tokens: true })
 
-    if (isCancelled(requestId)) {
-      clearCancelled(requestId)
+    if (cancelledRequestIds.has(requestId)) {
+      cancelledRequestIds.delete(requestId)
     }
     else {
       const result: InferenceResultResponse<WhisperOutput> = {
@@ -365,8 +359,8 @@ async function runInference(request: RunInferenceRequest<WhisperInput>): Promise
     }
   }
   catch (error) {
-    if (isCancelled(requestId))
-      clearCancelled(requestId)
+    if (cancelledRequestIds.has(requestId))
+      cancelledRequestIds.delete(requestId)
     else
       sendError(requestId, error, 'inference')
   }

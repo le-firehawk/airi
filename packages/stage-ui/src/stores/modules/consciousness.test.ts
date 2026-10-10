@@ -105,15 +105,9 @@ describe('consciousness store provider selection', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // supportsModelListing called a throwing metadata lookup for unknown ids.
-  // With no provider selected yet (fresh install or reset state persists ''),
-  // evaluating the computed surfaced a raw "Provider metadata for  not found"
-  // error to the user.
-  //
-  // We fixed this by checking the ProviderDefinition registry through the
-  // runtime store without building executable ProviderMetadata objects.
-  //
+  // Model-listing checks used a throwing metadata lookup for an empty or unknown provider ID,
+  // exposing an error on fresh installs.
+  // They now inspect the definition registry without constructing executable metadata.
   // https://github.com/moeru-ai/airi/issues/1761
   it('reports no model listing support instead of throwing when no provider is selected (Issue #1761)', () => {
     const store = useConsciousnessStore()
@@ -196,16 +190,9 @@ describe('consciousness store provider selection', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // The model selection was only cleared on provider switches by a watcher in
-  // the consciousness settings page. Provider changes made anywhere else
-  // (onboarding, character cards, provider deletion) kept the previous
-  // provider's model id, and the next chat request failed upstream with
-  // 404 model_not_found (e.g. "Model gpt-oss-120b does not exist").
-  //
-  // We fixed this by moving the reset into the store itself, next to the
-  // state it protects.
-  //
+  // Only the settings page reset models on provider changes. Onboarding, cards, and deletion
+  // retained stale model IDs and caused model_not_found errors.
+  // The store now owns that reset.
   // https://github.com/moeru-ai/airi/issues/1761
   it('clears the model selection when the provider changes (Issue #1761)', () => {
     const store = useConsciousnessStore()
@@ -246,14 +233,10 @@ describe('consciousness store provider selection', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // The store used Pinia synchronization and storage event synchronization
-  // for the same state. An incoming Pinia snapshot changed the provider and
-  // reset the model. A stale storage event then restored the previous model.
-  // Both windows published each reflected change and created an endless loop.
-  //
-  // We fixed this by keeping localStorage as one-way persistence. Pinia is the
-  // only channel that can update live state across windows.
+  // Pinia snapshots and storage events both updated live state. Stale storage events restored reset
+  // models, causing endless reflected broadcasts.
+  // localStorage is now one-way persistence. Only Pinia synchronization updates live state across
+  // windows.
   it('does not apply storage events as a second cross-window state channel', async () => {
     const store = useConsciousnessStore()
 

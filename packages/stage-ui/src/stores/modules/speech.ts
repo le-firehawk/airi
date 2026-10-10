@@ -332,14 +332,10 @@ export const useSpeechStore = defineStore('speech', () => {
     }
   }, { immediate: true })
 
-  // Streaming TTS voices are model-scoped: the server only returns recommended
-  // voices for an explicit `?model=`. Ensure the active model is a valid
-  // streaming model id so voice loading gets the right recommendations (parity
-  // with the HTTP provider's auto-pick). Reseeds the server-curated default
-  // both when no model is selected AND when `activeSpeechModel` still holds a
-  // stale id from a previously-active provider (the global model ref is shared
-  // across providers, and the per-surface reset may not have run yet). No-op
-  // for non-streaming providers.
+  // Streaming voice recommendations require a valid model ID.
+  // Select the server default when the model is empty or belongs to a previous provider. This gives
+  // voice loading the correct model-specific recommendations.
+  // Other providers remain unchanged.
   function ensureStreamingDefaultModel() {
     if (activeSpeechProvider.value !== OFFICIAL_SPEECH_STREAMING_PROVIDER_ID)
       return
@@ -360,13 +356,10 @@ export const useSpeechStore = defineStore('speech', () => {
     clearVoiceSelection()
   }
 
-  // A provider that publishes one model publishes no choice. An empty selection
-  // keeps `configured` false until the user opens the dropdown and picks that
-  // one entry, and the provider looks broken until then. This applies to every
-  // single-model speech provider, not only to the VOICEVOX family.
-  //
-  // The voice selection stays as it is. Voices belong to the provider, not to
-  // this model, and a provider switch clears both before this runs.
+  // A single-model provider offers no choice, but an empty selection leaves it unconfigured until
+  // the user selects that sole entry.
+  // Select the model automatically while preserving the voice. Provider switches clear both
+  // selections before this runs.
   function ensureSingleOptionSpeechModel() {
     // An explicit model can be a valid custom endpoint name absent from discovery.
     if (activeSpeechModel.value)

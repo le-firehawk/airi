@@ -83,14 +83,10 @@ describe('provider store synchronization boundary', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // Provider actions, serializable runtime data, and computedAsync output
-  // shared one synced store. Applying the derived ref in every Electron
-  // renderer restarted its local async computation, which proposed another
-  // snapshot and starved the main window's event loop.
-  //
-  // We fixed this by keeping executable actions in the provider store and
-  // placing the replicated data in an internal state-only store.
+  // Derived asynchronous refs shared a synchronized store with actions and data. Applying snapshots
+  // restarted computations in every renderer, causing repeated broadcasts and event-loop
+  // starvation.
+  // Executable actions now stay in the provider store. Replicated data lives in a state-only store.
   it('keeps replicated runtime data out of the executable provider store state', () => {
     const store = useProviderStore()
     const runtimeState = {
@@ -154,13 +150,10 @@ describe('provider store synchronization boundary', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // Speech settings pages wrote defaults into the computed `configs` map before
-  // provider initialization. The derived entry made `initializeProvider` skip
-  // the source provider record, so later input was not persisted.
-  //
-  // The provider record is now the only existence check. A derived entry cannot
-  // prevent initialization of the persisted source state.
+  // Defaults written to computed configs made initialization skip the underlying provider record,
+  // so later input was not persisted.
+  // Only the source record now determines provider existence. Derived entries cannot prevent
+  // persistence initialization.
   // https://github.com/moeru-ai/airi/issues/2449
   it('creates the provider when only a derived configuration entry exists (Issue #2449)', async () => {
     const store = useProviderStore()
@@ -417,13 +410,9 @@ describe('provider store synchronization boundary', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // Speech startup previously had both an immediate watcher and a mounted
-  // refresh. Multiple renderers could also request the same catalog through
-  // the synchronized provider action. Each caller created its own request.
-  //
-  // We keep one leader-owned request per provider, model, and configuration
-  // until it settles, so concurrent callers share the same result.
+  // Immediate watchers, mounted refreshes, and multiple renderers each requested the same catalog.
+  // Concurrent callers now share one leader-owned request per provider, model, and configuration
+  // until it settles.
   it('shares concurrent voice catalog requests', async () => {
     const store = useProviderStore()
     useAuthStore().$patch(createAuthenticatedState())
@@ -453,16 +442,9 @@ describe('provider store synchronization boundary', () => {
 
   // https://github.com/moeru-ai/airi/pull/2490#discussion_r3959813216
   // ROOT CAUSE:
-  //
-  // The speech settings page can request an official voice catalog before the
-  // authenticated session is ready. A tokenless task then occupies the shared
-  // in-flight slot and can absorb the first authenticated retry.
-  //
-  // Before: the provider starts the official request without an authenticated
-  // access token.
-  //
-  // We fixed this at the provider boundary. Authentication-owned providers do
-  // not create an in-flight task until the session and token are both ready.
+  // A tokenless official voice request occupied the shared in-flight slot and absorbed the first
+  // authenticated retry.
+  // Authentication-owned providers now create requests only when both session and token are ready.
   it('does not start auth-owned voice requests before the session has a token', async () => {
     const store = useProviderStore()
     const authStore = useAuthStore()

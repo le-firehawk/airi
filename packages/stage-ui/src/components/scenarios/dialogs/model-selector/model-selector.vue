@@ -77,11 +77,10 @@ async function confirmImport() {
     return
 
   // NOTICE:
-  // Keep this await. Model picking can happen immediately after import from this dialog.
-  // If addDisplayModel is fire-and-forget, updateStageModel may read the new display-model id
-  // before IndexedDB or the in-memory displayModels list is ready and fall back to the default model.
-  // Source/context: model selector import flow -> settings model pick -> settings-stage-model.getDisplayModel().
-  // Removal condition: addDisplayModel becomes a synchronous transaction or pick is blocked by explicit import state.
+  // Await import persistence before model selection. Otherwise settings-stage-model.getDisplayModel
+  // can read a missing ID and select the default model.
+  // Remove this ordering requirement when import and selection share a transaction or explicit
+  // pending-import state.
   const displayModel = await displayModelStore.addDisplayModel(DisplayModelFormat.Live2dZip, pendingFile.value)
   highlightDisplayModelCard.value = displayModel.id
   pendingFile.value = null
@@ -135,10 +134,10 @@ async function handleAddVRMModel(file: FileList | null) {
     return
 
   // NOTICE:
-  // Keep this await for the same import-then-pick race as Live2D imports above.
-  // The returned model id is only safe to highlight after addDisplayModel has updated the store.
-  // Source/context: model selector import flow -> settings model pick -> settings-stage-model.getDisplayModel().
-  // Removal condition: addDisplayModel becomes a synchronous transaction or pick is blocked by explicit import state.
+  // Await the store update before highlighting the imported model ID. Immediate selection otherwise
+  // races settings-stage-model.getDisplayModel.
+  // Remove this requirement when import and selection share a transaction or explicit pending-
+  // import state.
   const displayModel = await displayModelStore.addDisplayModel(DisplayModelFormat.VRM, file[0])
   highlightDisplayModelCard.value = displayModel.id
 }
@@ -150,10 +149,10 @@ async function handleAddSpineModel(file: FileList | null) {
     return
 
   // NOTICE:
-  // Keep this await for the same import-then-pick race as Live2D/VRM imports above.
-  // The returned model id is only safe to highlight after addDisplayModel has updated the store.
-  // Source/context: model selector import flow -> settings model pick -> settings-stage-model.getDisplayModel().
-  // Removal condition: addDisplayModel becomes a synchronous transaction or pick is blocked by explicit import state.
+  // Await the store update before highlighting the imported model ID. Immediate selection otherwise
+  // races settings-stage-model.getDisplayModel.
+  // Remove this requirement when import and selection share a transaction or explicit pending-
+  // import state.
   const displayModel = await displayModelStore.addDisplayModel(DisplayModelFormat.SpineZip, file[0])
   highlightDisplayModelCard.value = displayModel.id
 }

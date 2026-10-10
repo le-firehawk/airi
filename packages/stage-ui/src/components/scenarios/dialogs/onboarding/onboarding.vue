@@ -75,9 +75,7 @@ function selectProvider(provider: ProviderMetadata) {
   selectedProviderId.value = provider.id
 }
 
-const requestPreviousStep: OnboardingStepPrevHandler = () => {
-  return navigatePrevious()
-}
+const requestPreviousStep: OnboardingStepPrevHandler = navigatePrevious
 
 const requestNextStep: OnboardingStepNextHandler = async (configData?: ProviderConfigData) => {
   pendingProviderConfig.value = configData ?? null

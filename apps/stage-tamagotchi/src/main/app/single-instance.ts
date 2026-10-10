@@ -3,7 +3,7 @@ import type { App, BrowserWindow } from 'electron'
 import { toggleWindowShow } from '../windows/shared/window'
 
 interface SingleInstanceGuardOptions {
-  app: App
+  app: Pick<App, 'on' | 'quit' | 'requestSingleInstanceLock'>
   getWindow: () => BrowserWindow | undefined
 }
 

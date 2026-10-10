@@ -128,14 +128,9 @@ describe('official provider module defaults', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // The default command returned when any module had a provider. A previous
-  // run could leave one official module configured while all other modules
-  // and provider records stayed empty. Later authentication hooks then kept
-  // the partial state forever.
-  //
-  // We fixed this by repairing official modules and configuring each empty
-  // module independently.
+  // Default setup returned when any module had a provider, leaving other official modules and
+  // records empty indefinitely.
+  // It now repairs official records and configures each empty module independently.
   it('repairs a partial official configuration after authentication', async () => {
     const consciousnessStore = useConsciousnessStore()
     const hearingStore = useHearingStore()
@@ -260,13 +255,9 @@ describe('official provider module defaults', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // Authenticated setup only created an official provider record when its
-  // module was empty or already used that provider. A custom module selection
-  // therefore hid the official choice even while the user was signed in.
-  //
-  // We fixed this by configuring every standard official provider after login
-  // while applying official module selections only to empty modules.
+  // Custom module selections prevented official provider records from appearing after login.
+  // Authenticated setup now configures every standard official record, while official module
+  // selections apply only to empty modules.
   it('configures official choices without replacing custom module selections', async () => {
     const consciousnessStore = useConsciousnessStore()
     const hearingStore = useHearingStore()
@@ -300,13 +291,10 @@ describe('official provider module defaults', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // Official provider records and module selections survived logout. Module
-  // pages therefore still treated official services as configured even though
-  // the authenticated session that grants access no longer existed.
-  //
-  // We fixed this by unconfiguring official records on logout and clearing only
-  // module selections that belong to those records. Custom selections remain.
+  // Official records and selections survived logout, appearing configured without the session
+  // needed for access.
+  // Logout now unconfigures official records and clears only their module selections. Custom
+  // selections remain.
   it('removes authenticated official configuration on logout', async () => {
     const consciousnessStore = useConsciousnessStore()
     const hearingStore = useHearingStore()

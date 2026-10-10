@@ -22,7 +22,7 @@ export type EventaContext = ReturnType<typeof createContext>['context']
 
 export interface RegisterWindowParams {
   context: EventaContext
-  window: BrowserWindow
+  window: Pick<BrowserWindow, 'on'>
 }
 
 export interface RegisterMainShortcutParams {

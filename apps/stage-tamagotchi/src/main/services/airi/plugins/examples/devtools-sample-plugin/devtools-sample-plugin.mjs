@@ -1,9 +1,5 @@
 import { defineExtension } from '@proj-airi/plugin-sdk'
 
-function nowIso() {
-  return new Date().toISOString()
-}
-
 /**
  * Example plugin for verifying plugin-host lifecycle in devtools.
  *
@@ -13,6 +9,6 @@ function nowIso() {
 export default defineExtension({
   id: 'devtools-sample-plugin',
   setup() {
-    console.info('[devtools-sample-plugin] setup', { at: nowIso() })
+    console.info('[devtools-sample-plugin] setup', { at: new Date().toISOString() })
   },
 })

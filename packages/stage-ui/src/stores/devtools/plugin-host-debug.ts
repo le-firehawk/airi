@@ -25,14 +25,9 @@ interface PluginHostDebugBridge {
 }
 
 export const usePluginHostInspectorStore = defineStore('devtools:plugin-host-debug', () => {
-  // Runtime bridge injected by the renderer host (Electron).
-  //
-  // Why this exists:
-  // - `stage-pages` is shared by web + desktop.
-  // - Plugin-host IPC only exists in desktop (stage-tamagotchi main process).
-  // - This store keeps UI code shared, and receives runtime-specific operations via `setBridge(...)`.
-  //
-  // In web/non-electron runtimes, bridge stays undefined and debug actions fail with a clear message.
+  // stage-pages shares UI across web and desktop, but plugin-host IPC exists only in Electron.
+  // The renderer supplies runtime operations through setBridge. Without that bridge, debug actions
+  // report that the runtime is unsupported.
   const bridge = ref<PluginHostDebugBridge>()
   const registry = ref<PluginRegistrySnapshot>()
   const sessions = ref<PluginHostSessionSummary[]>([])
@@ -70,17 +65,9 @@ export const usePluginHostInspectorStore = defineStore('devtools:plugin-host-deb
   }
 
   async function withBridge<T>(run: (activeBridge: PluginHostDebugBridge) => Promise<T>) {
-    // Single guard/flow wrapper for every debug action.
-    //
-    // What it does:
-    // 1) Runtime gate: blocks actions until bridge is registered.
-    // 2) Loading lifecycle: toggles `loading` in a centralized place.
-    // 3) Error normalization: stores user-facing error text for the debug page.
-    //
-    // Why debug store needs this:
-    // - Debug actions are async IPC calls and may fail for runtime/setup reasons.
-    // - A shared wrapper avoids duplicated try/catch/loading logic across each action.
-    // - It gives deterministic UI behavior (same errors/spinner semantics for all commands).
+    // All debug IPC actions share runtime gating, loading state, and error normalization.
+    // This wrapper rejects missing bridges and keeps spinner and error behavior consistent across
+    // commands.
     if (!bridge.value) {
       const message = 'Plugin host debug bridge is not available in this runtime.'
       error.value = message

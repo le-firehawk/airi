@@ -96,10 +96,8 @@ export async function* chunkTTSInput(
             if (!next.done && next.value && /\d/.test(next.value)) {
               // This dot could be a decimal point, so we skip it (don't fully skip! keep in tts input!)
 
-              // REVIEW: @Lilia-Chen I think we need to remove the below line
-              // 1. Not sensible to let the previousValue to be the value of the next value
-              // 2. after the continue (jump to the bottom of the while loop), the previousValue will be reset to value, so this value assignment doesn't work at all
-              // previousValue = next.value
+              // REVIEW(@Lilia-Chen): Assigning next.value here serves no purpose. After continue,
+              // the loop replaces previousValue with value anyway.
 
               // If we don't append value ("." or ","), we will lose the decimal point, and 2.5 will become 25, which hugely impacted the tts...
               buffer += value
@@ -188,13 +186,9 @@ export async function* chunkTTSInput(
       if (next !== undefined) {
         // If afterNext had also been read
         if (afterNext !== undefined) {
-          // The only case that the program will come to this place is:
-          // "x..y" and y is not a "." so "..." is not recognised
-          // ".." is not a legal punctuation so ignored.
-          // The first "." had been consumed during hard flush
-          // next.value = second '.'
-          // afterNext.value = 'y', so we just need to care about 'y'
-          // In case 'y' is not just a useless blank. It's OK if 'y' is blank since we have `text = chunk.trim()`
+          // This branch handles x..y where y is not a period. Hard flush consumed the first period,
+          // and the second is not valid punctuation.
+          // Only y remains relevant. Later trimming removes it if it is whitespace.
           current = afterNext
           next = undefined
           afterNext = undefined

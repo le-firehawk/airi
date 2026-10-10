@@ -31,10 +31,6 @@ const { enabled, serverAddress, serverPort, username, configured } = storeToRefs
 
 // Create computed property to handle number to string conversion for the input field
 const serverPortString = useNumberString(serverPort)
-
-function saveSettings() {
-  props.store.saveSettings()
-}
 </script>
 
 <template>
@@ -73,7 +69,7 @@ function saveSettings() {
       <Button
         :label="t('settings.common.save')"
 
-        @click="saveSettings"
+        @click="props.store.saveSettings()"
       />
     </div>
 

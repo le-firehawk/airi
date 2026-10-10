@@ -90,11 +90,10 @@ export const useDisplayModelsStore = defineStore('display-models', () => {
   async function getDisplayModel(id: string) {
     await until(displayModelsFromIndexedDBLoading).toBe(false)
     // NOTICE:
-    // Newly imported file models are inserted into displayModels before callers pick them.
-    // Reading memory first keeps updateStageModel from racing an IndexedDB write and treating
-    // a just-imported display-model id as missing, which used to fall back to the default model.
-    // Source/context: model-selector confirmImport/handleAddVRMModel -> model-settings handleModelPick.
-    // Removal condition: custom model imports and selection are handled by a single transactional API.
+    // Read newly imported models from memory first so selection cannot race IndexedDB and fall back
+    // to the default model.
+    // Context: model-selector import followed by model-settings selection.
+    // Remove this ordering requirement when import and selection use one transaction.
     const modelFromMemory = displayModels.value.find(model => model.id === id)
     if (modelFromMemory)
       return modelFromMemory
@@ -154,12 +153,11 @@ export const useDisplayModelsStore = defineStore('display-models', () => {
     displayModels.value.unshift(newDisplayModel)
 
     // NOTICE:
-    // Keep this awaited. The settings model pick flow can call getDisplayModel immediately
-    // after import; fire-and-forget persistence creates a race where the selected custom model
-    // exists in the UI but is not yet readable from IndexedDB in a later route/render pass.
-    // Source/context: model-selector import flow -> settings-stage-model.updateStageModel().
-    // Removal condition: imported display models are persisted through a transactional queue
-    // that blocks pick/navigation until the write is durably complete.
+    // Await persistence because settings-stage-model.updateStageModel can immediately read the
+    // imported ID after navigation.
+    // An unawaited write leaves the displayed model temporarily unavailable in IndexedDB.
+    // Remove this requirement when a transaction queue blocks selection and navigation until
+    // persistence completes.
     await localforage.setItem<DisplayModelFile>(newDisplayModel.id, newDisplayModel)
       .catch(err => console.error(err))
 
@@ -220,11 +218,10 @@ export const useDisplayModelsStore = defineStore('display-models', () => {
     generateTachiePreview = loadTachieModelPreview
 
     // NOTICE:
-    // Isolate the MMD preview import. It pulls in three-stdlib's MMD modules,
-    // and a module-evaluation failure here must not prevent the Live2D/VRM/
-    // Spine preview functions (assigned above) from being wired up. A thrown
-    // import previously aborted initialize() and silently broke all previews.
-    // Removal condition: the MMD preview module is guaranteed to import.
+    // Isolate the MMD preview import because three-stdlib module evaluation can fail and previously
+    // prevented every preview from initializing.
+    // Live2D, VRM, and Spine remain available if MMD fails.
+    // Remove the isolation when the MMD module reliably imports.
     try {
       const { loadMMDModelPreview } = await import('@proj-airi/stage-ui-mmd/utils/mmd-preview')
       generateMMDPreview = loadMMDModelPreview

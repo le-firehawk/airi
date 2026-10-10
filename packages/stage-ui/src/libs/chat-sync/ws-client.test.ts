@@ -124,17 +124,11 @@ describe('mapStatus', () => {
 
 describe('ws_CLOSE_UNAUTHORIZED', () => {
   // ROOT CAUSE:
-  //
-  // Browsers do not expose the HTTP 401 status to the WebSocket `close`
-  // event when an upgrade is rejected — the only signal a client gets is
-  // `code=1006` (abnormal closure), indistinguishable from a transient
-  // network drop. VueUse's `useWebSocket.autoReconnect` then hammers the
-  // same stale token forever.
-  //
-  // The server accepts the upgrade and closes with this custom code so
-  // the client can distinguish "auth failed, stop reconnecting" from
-  // "network blip, keep retrying". The matching server-side constant must
-  // stay aligned or the close-code contract breaks silently.
+  // Browsers report rejected WebSocket upgrades as 1006, hiding HTTP 401 and causing endless stale-
+  // token retries.
+  // The server instead upgrades and closes with an authentication-specific code. Keep client and
+  // server constants aligned so authentication failures stop reconnecting while network failures
+  // retry.
   it('matches the server-side close code contract (4001, IANA private range)', () => {
     expect(WS_CLOSE_UNAUTHORIZED).toBe(4001)
   })
@@ -185,17 +179,11 @@ describe('createChatWsUrlRef', () => {
 
 describe('wS_CLOSE_UNAUTHORIZED', () => {
   // ROOT CAUSE:
-  //
-  // Browsers do not expose the HTTP 401 status to the WebSocket `close`
-  // event when an upgrade is rejected — the only signal a client gets is
-  // `code=1006` (abnormal closure), indistinguishable from a transient
-  // network drop. VueUse's `useWebSocket.autoReconnect` then hammers the
-  // same stale token forever.
-  //
-  // The server accepts the upgrade and closes with this custom code so
-  // the client can distinguish "auth failed, stop reconnecting" from
-  // "network blip, keep retrying". The matching server-side constant must
-  // stay aligned or the close-code contract breaks silently.
+  // Browsers report rejected WebSocket upgrades as 1006, hiding HTTP 401 and causing endless stale-
+  // token retries.
+  // The server instead upgrades and closes with an authentication-specific code. Keep client and
+  // server constants aligned so authentication failures stop reconnecting while network failures
+  // retry.
   it('matches the server-side close code contract (4001, IANA private range)', () => {
     expect(WS_CLOSE_UNAUTHORIZED).toBe(4001)
   })

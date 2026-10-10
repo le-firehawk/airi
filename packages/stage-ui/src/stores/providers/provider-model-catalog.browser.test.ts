@@ -146,16 +146,10 @@ describe('provider model catalog synchronization', () => {
 
   // https://github.com/moeru-ai/airi/pull/2440#discussion_r3912226716
   // ROOT CAUSE:
-  //
-  // The streaming provider stored server availability and its default model
-  // in module-local variables. A follower-only settings window routed model
-  // discovery to the leader, then read its own unchanged local variables.
-  //
-  // Before: the leader returned only the models and kept the other catalog
-  // fields in its renderer.
-  //
-  // We fixed this by returning one serializable model catalog from the action.
-  // The follower receives the models, availability, and default model together.
+  // Leader model discovery retained availability and defaults in local variables, leaving follower
+  // settings stale.
+  // The action now returns one serializable catalog containing models, availability, and the
+  // default model.
   it('returns streaming catalog metadata to a follower-only renderer', async () => {
     const fetchMock = vi.fn<typeof fetch>(async () => Response.json({
       available: true,
@@ -207,14 +201,9 @@ describe('provider model catalog synchronization', () => {
 
   // https://github.com/moeru-ai/airi/pull/2440#discussion_r3912911639
   // ROOT CAUSE:
-  //
-  // The settings renderer wrote the discovered default into its follower
-  // snapshot. The resulting full-state proposal could overwrite newer leader
-  // state, and the write was skipped when that snapshot arrived late.
-  //
-  // Before: mutate providerConfig.model in the follower page.
-  //
-  // We fixed this by routing model updates to awaited leader-owned actions.
+  // Follower writes to discovered defaults proposed full snapshots that overwrote newer leader
+  // state. Late snapshots also skipped the write.
+  // Model updates now use awaited, leader-owned actions.
   it('applies defaults through the leader without replacing a user selection', async () => {
     const namespace = `provider-model-default:${crypto.randomUUID()}`
     const leaderContext = createSyncedContext(namespace, 'leader-only')

@@ -92,18 +92,10 @@ export const useConsciousnessStore = defineStore('consciousness', () => {
     modelSearchQuery.reset()
   }
 
-  // A model id belongs to the catalog of the provider it was picked from, so
-  // clear the selection whenever the provider changes. This used to live only
-  // in the consciousness settings page, so provider changes made elsewhere
-  // (onboarding, character cards, provider deletion) kept the previous
-  // provider's model and chat requests failed upstream with model_not_found.
-  //
-  // The watcher is synchronous on purpose: call sites assign the provider
-  // first and a new model right after, so a
-  // deferred reset would wipe the model they just chose. Synchronous flush
-  // makes "set provider, then set model" a safe, ordered operation.
-  //
-  // Issue #1761: https://github.com/moeru-ai/airi/issues/1761
+  // Provider changes clear the model because its ID belongs to the previous provider's catalog.
+  // Flush synchronously so callers can safely assign provider, then model. A deferred reset erases
+  // the new selection.
+  // https://github.com/moeru-ai/airi/issues/1761
   watch(activeProvider, (provider, oldProvider) => {
     if (provider === oldProvider)
       return

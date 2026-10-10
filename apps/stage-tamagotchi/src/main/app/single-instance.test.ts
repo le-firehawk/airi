@@ -1,4 +1,4 @@
-import type { App, BrowserWindow } from 'electron'
+import type { BrowserWindow } from 'electron'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -10,12 +10,12 @@ vi.mock('../windows/shared/window', () => ({
   toggleWindowShow: windowMock.toggleWindowShow,
 }))
 
-function createMockApp(hasSingleInstanceLock: boolean): MockApp {
+function createMockApp(hasSingleInstanceLock: boolean) {
   return {
     on: vi.fn(),
     quit: vi.fn(),
     requestSingleInstanceLock: vi.fn(() => hasSingleInstanceLock),
-  } as unknown as MockApp
+  }
 }
 
 function createMockWindow() {
@@ -71,8 +71,3 @@ describe('installSingleInstanceGuard', async () => {
     expect(windowMock.toggleWindowShow).toHaveBeenCalledWith(window)
   })
 })
-type MockApp = App & {
-  on: ReturnType<typeof vi.fn>
-  quit: ReturnType<typeof vi.fn>
-  requestSingleInstanceLock: ReturnType<typeof vi.fn>
-}

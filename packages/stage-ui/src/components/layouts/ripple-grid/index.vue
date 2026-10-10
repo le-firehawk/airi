@@ -4,11 +4,6 @@ import { computed, toRef } from 'vue'
 
 import { useGridRipple } from './use-grid-ripple'
 
-interface VirtualSection {
-  _isVirtual: true
-  items: TItem[]
-}
-
 const props = withDefaults(defineProps<{
   items?: TItem[]
   sections?: TSection[]
@@ -45,9 +40,9 @@ const isFlat = computed(() => !!props.items && !props.sections)
 
 const normalizedSections = computed(() => {
   if (isFlat.value && props.items) {
-    return [{ _isVirtual: true, items: props.items }] as unknown as TSection[]
+    return [{ section: undefined, items: props.items }]
   }
-  return props.sections || []
+  return props.sections?.map(section => ({ section, items: props.getItems(section) })) ?? []
 })
 const currentCols = computed(() => {
   if (typeof props.columns === 'number')
@@ -64,7 +59,7 @@ const currentCols = computed(() => {
 const sectionMeta = computed(() => {
   let globalCounter = 0
   return normalizedSections.value.map((section) => {
-    const items = isFlat.value ? (section as unknown as VirtualSection).items : props.getItems(section)
+    const { items } = section
     const startIndex = globalCounter
     globalCounter += items.length
     return { items, startIndex, count: items.length }
@@ -89,7 +84,7 @@ function handleItemClick(item: TItem, globalIndex: number) {
   <div class="flex flex-col gap-5">
     <template v-for="(section, sIndex) in normalizedSections" :key="sIndex">
       <div v-if="$slots.header && !isFlat" :class="{ 'my-5': sIndex > 0 }">
-        <slot name="header" :section="section" :index="sIndex" />
+        <slot name="header" :section="section.section" :index="sIndex" />
       </div>
 
       <div

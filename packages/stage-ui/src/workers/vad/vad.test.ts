@@ -1,5 +1,3 @@
-import type { PreTrainedModel } from '@huggingface/transformers'
-
 import { AutoModel } from '@huggingface/transformers'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -22,7 +20,7 @@ function createProbabilityModel(probabilities: number[]) {
     output: {
       data: new Float32Array([probabilities.shift() ?? 0]),
     },
-  })) as unknown as PreTrainedModel
+  }))
 }
 
 describe('vad speech duration', () => {
@@ -39,7 +37,7 @@ describe('vad speech duration', () => {
     //
     // We count detected speech samples separately from post-speech silence.
     const probabilities = [0.9, ...Array.from<number>({ length: 80 }).fill(0)]
-    vi.mocked(AutoModel.from_pretrained).mockResolvedValue(createProbabilityModel(probabilities))
+    vi.mocked(AutoModel.from_pretrained, { partial: true }).mockResolvedValue(createProbabilityModel(probabilities))
     const vad = new VAD({
       sampleRate: 16000,
       newBufferSize: 160,
@@ -64,7 +62,7 @@ describe('vad speech duration', () => {
       ...Array.from<number>({ length: 30 }).fill(0.9),
       ...Array.from<number>({ length: 80 }).fill(0),
     ]
-    vi.mocked(AutoModel.from_pretrained).mockResolvedValue(createProbabilityModel(probabilities))
+    vi.mocked(AutoModel.from_pretrained, { partial: true }).mockResolvedValue(createProbabilityModel(probabilities))
     const vad = new VAD({
       sampleRate: 16000,
       newBufferSize: 160,
@@ -83,20 +81,16 @@ describe('vad speech duration', () => {
 
   it('serializes overlapping worklet callbacks across consecutive speech segments', async () => {
     // ROOT CAUSE:
-    //
-    // AudioWorklet message handlers do not wait for an async callback to finish.
-    // Concurrent processAudio calls therefore captured the same stale recording
-    // state even though model inference itself was queued. The first segment
-    // could complete while the second segment never reached a valid transition.
-    //
-    // We serialize the complete detection and state transition for every chunk.
+    // AudioWorklet callbacks do not await processing. Concurrent chunks captured stale recording
+    // state even though inference was queued, losing segment transitions.
+    // The complete detection and state transition now runs serially for each chunk.
     const probabilities = [
       ...Array.from<number>({ length: 30 }).fill(0.9),
       ...Array.from<number>({ length: 80 }).fill(0),
       ...Array.from<number>({ length: 30 }).fill(0.9),
       ...Array.from<number>({ length: 80 }).fill(0),
     ]
-    vi.mocked(AutoModel.from_pretrained).mockResolvedValue(createProbabilityModel(probabilities))
+    vi.mocked(AutoModel.from_pretrained, { partial: true }).mockResolvedValue(createProbabilityModel(probabilities))
     const vad = new VAD({
       sampleRate: 16000,
       newBufferSize: 160,

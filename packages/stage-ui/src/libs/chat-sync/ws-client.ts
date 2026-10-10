@@ -337,18 +337,9 @@ export function createChatWsClient(options: CreateChatWsClientOptions): ChatWsCl
       authenticated.value = false
       if (!wasAuthenticated && enabled.value && ev.code !== WS_CLOSE_UNAUTHORIZED)
         authenticationFailures += 1
-      // ROOT CAUSE:
-      //
-      // useWebSocket's autoReconnect treats every onclose as worth
-      // retrying. When the server rejects auth, the only structured
-      // signal we get is the close `code` (the close `reason` body is
-      // also delivered but not used for routing here). 4001 is our
-      // protocol signal for "this token will never succeed without
-      // rotation"; calling `ws.close()` here sets
-      // useWebSocket's internal `explicitlyClosed` flag so the next
-      // onclose path skips the reconnect schedule. A token change below
-      // closes the old context and starts a new connection that authenticates
-      // with the new token after opening.
+      // Close code 4001 means authentication cannot succeed until token rotation.
+      // Explicitly closing sets VueUse's explicitlyClosed flag and stops automatic retries. A later
+      // token change disposes this context and opens a new authenticated connection.
       if (restartForNewToken && enabled.value && tokenRef.value) {
         ws.open()
       }
@@ -362,15 +353,9 @@ export function createChatWsClient(options: CreateChatWsClientOptions): ChatWsCl
     },
   })
 
-  // Translate VueUse's 3-state status into our 4-state machine and fan it
-  // out to the orchestrator. The chat store creates this inside a Pinia
-  // setup, which gives us a parent effect scope for `watch` to attach to.
-  // NOTICE:
-  // We intentionally do NOT stop this watcher in `disconnect()`; previous
-  // behavior killed it permanently and any caller that did `disconnect()`
-  // followed by `connect()` silently stopped receiving status events. The
-  // watcher is idle while the socket is closed, so leaving it attached
-  // costs nothing. Use `destroy()` for terminal cleanup.
+  // This watcher translates socket status for the orchestrator within Pinia's effect scope.
+  // Keep it across disconnect and reconnect, or subsequent status events disappear. It remains idle
+  // while closed. Only destroy performs terminal cleanup.
   const stopStatusWatch = watch(
     [ws.status, enabled, authenticated],
     ([rawStatus, isEnabled, isAuthenticated]) => notifyStatus(mapStatus(rawStatus, isEnabled, isAuthenticated)),
@@ -407,11 +392,9 @@ export function createChatWsClient(options: CreateChatWsClientOptions): ChatWsCl
     return context.value
   }
 
-  // We pass a function so each invoke resolves the *current* context. After
-  // a reconnect, `context` is rebuilt; a captured reference would point at a
-  // disposed context. eventa's native ws adapter installs wsDisconnectedEvent
-  // and wsErrorEvent as abortOnEvents, so any invoke whose socket dies before
-  // a response arrives rejects with a real Error instead of hanging.
+  // Resolve the current context on every invoke because reconnect disposes and replaces it.
+  // Eventa's WebSocket adapter aborts pending invokes on disconnect or error, rejecting with an
+  // Error instead of leaving them unresolved.
   const invokeSendMessages = defineInvoke(getContext, sendMessages)
   const invokePullMessages = defineInvoke(getContext, pullMessages)
 

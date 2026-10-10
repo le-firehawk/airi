@@ -67,7 +67,7 @@ export interface StreamingTtsPipelineOptions extends StreamingTtsPipelineEvents 
    * AudioContext is required so playback nodes that connect to its
    * destination see compatible sample rates.
    */
-  audioContext: BaseAudioContext
+  audioContext: Pick<BaseAudioContext, 'decodeAudioData'>
   /**
    * When `true`, accumulate every binary chunk until `session.finished` and
    * emit ONE `onSentence`. Use for models where per-sentence audio boundaries

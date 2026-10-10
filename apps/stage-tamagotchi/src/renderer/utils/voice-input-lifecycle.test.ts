@@ -9,12 +9,9 @@ import { createVoiceInputInteractionLifecycle } from './voice-input-lifecycle'
 describe('createVoiceInputInteractionLifecycle', () => {
   // https://github.com/moeru-ai/airi/pull/2004#discussion_r3480058474
   // ROOT CAUSE:
-  //
-  // If a start begins while an earlier stop is flushing buffered text, the older stop can
-  // tear down the newly-started microphone consumers after the toggle is already enabled.
-  //
-  // Before: start and stop operations ran concurrently.
-  // After: a start waits for the active stop operation before binding microphone consumers.
+  // Concurrent start and stop operations let an older stop tear down newly bound microphone
+  // consumers while flushing text.
+  // A start now waits for the active stop before binding consumers.
   /**
    * @example
    * A start requested during stop waits until stop releases its pending work.

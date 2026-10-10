@@ -13,6 +13,8 @@ const emit = defineEmits<{
   (e: 'finished'): void
   (e: 'skipModel'): void
 }>()
+const window = globalThis.window
+
 const { t } = useI18n()
 const startup = useStartupResourcesStore()
 const { progress, failed, ready } = storeToRefs(startup)
@@ -22,10 +24,6 @@ const errorTitle = computed(() => failed.value
 const phase = ref<'splash' | 'loading' | 'done'>('splash')
 const opened = ref(false)
 let opening: Promise<void>
-
-function retry() {
-  window.location.reload()
-}
 
 onMounted(() => {
   opening = new Promise(resolve => setTimeout(resolve, 500))
@@ -60,7 +58,7 @@ watch([ready, opened], async ([isReady, isOpen]) => {
     :error-details-close-label="t('stage.startup.close-details')"
     :retry-label="t('stage.startup.retry')"
     :alternative-label="failed?.id === 'model' ? t('stage.startup.continue-without-model') : undefined"
-    @retry="retry"
+    @retry="window.location.reload()"
     @alternative="emit('skipModel')"
   />
 </template>

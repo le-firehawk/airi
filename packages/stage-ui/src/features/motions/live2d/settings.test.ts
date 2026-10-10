@@ -55,13 +55,9 @@ describe('live2d MAGIC settings', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // The settings store trusted the TypeScript type of a value loaded from localStorage.
-  // The old `idle-excited` value remained after the profile was renamed, so Stage indexed the
-  // profile registry with an unknown key and read `dataset` from `undefined`.
-  //
-  // Before the fix, the store returned `idle-excited` unchanged.
-  // We fixed this by resetting unknown persisted profile IDs at the storage boundary.
+  // The store trusted a persisted profile ID after its rename. Stage then read dataset from an
+  // undefined registry entry.
+  // Unknown persisted IDs now reset at the storage boundary.
   it('resets a persisted profile ID that is not in the profile registry', async () => {
     persistedValues.set('settings/live2d/magic/profile', 'idle-excited')
     const { live2dMotionMagicProfiles, useLive2DMotionMagicSettings } = await import('./index')

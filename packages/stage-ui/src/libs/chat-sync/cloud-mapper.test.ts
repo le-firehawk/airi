@@ -161,7 +161,7 @@ describe('createCloudChatMapper.listChats', () => {
     const fetchMock = vi.fn(async () => jsonResponse({
       chats: [{ id: 'a', type: 'bot', title: null, createdAt: '2026-01-01', updatedAt: '2026-01-01' }],
     }))
-    const mapper = createCloudChatMapper({ serverUrl: 'https://api.example.com', fetch: fetchMock as unknown as typeof fetch })
+    const mapper = createCloudChatMapper({ serverUrl: 'https://api.example.com', fetch: fetchMock })
     const chats = await mapper.listChats()
     expect(chats.map(c => c.id)).toEqual(['a'])
     expect(fetchMock).toHaveBeenCalledWith(
@@ -177,7 +177,7 @@ describe('createCloudChatMapper.listChats', () => {
    */
   it('rejects malformed responses on 2xx via schema validation', async () => {
     const fetchMock = vi.fn(async () => jsonResponse({ chats: null }))
-    const mapper = createCloudChatMapper({ serverUrl: 'https://api.example.com', fetch: fetchMock as unknown as typeof fetch })
+    const mapper = createCloudChatMapper({ serverUrl: 'https://api.example.com', fetch: fetchMock })
     await expect(mapper.listChats()).rejects.toThrow()
   })
 
@@ -187,7 +187,7 @@ describe('createCloudChatMapper.listChats', () => {
    */
   it('throws with body-derived detail on non-2xx JSON errors', async () => {
     const fetchMock = vi.fn(async () => jsonResponse({ message: 'token expired' }, { status: 401, statusText: 'Unauthorized' }))
-    const mapper = createCloudChatMapper({ serverUrl: 'https://api.example.com', fetch: fetchMock as unknown as typeof fetch })
+    const mapper = createCloudChatMapper({ serverUrl: 'https://api.example.com', fetch: fetchMock })
     await expect(mapper.listChats()).rejects.toThrow(/HTTP 401: token expired/)
   })
 
@@ -203,7 +203,7 @@ describe('createCloudChatMapper.listChats', () => {
       statusText: 'Bad Gateway',
       headers: { 'Content-Type': 'text/html' },
     }))
-    const mapper = createCloudChatMapper({ serverUrl: 'https://api.example.com', fetch: fetchMock as unknown as typeof fetch })
+    const mapper = createCloudChatMapper({ serverUrl: 'https://api.example.com', fetch: fetchMock })
     await expect(mapper.listChats()).rejects.toThrow(/HTTP 502: Bad Gateway/)
   })
 })
@@ -221,7 +221,7 @@ describe('createCloudChatMapper.createChat', () => {
       createdAt: '2026-01-01',
       updatedAt: '2026-01-01',
     }, { status: 201, statusText: 'Created' }))
-    const mapper = createCloudChatMapper({ serverUrl: 'https://api.example.com', fetch: fetchMock as unknown as typeof fetch })
+    const mapper = createCloudChatMapper({ serverUrl: 'https://api.example.com', fetch: fetchMock })
     const chat = await mapper.createChat({ id: 'minted', type: 'bot' })
     expect(chat.id).toBe('minted')
   })
@@ -239,7 +239,7 @@ describe('createCloudChatMapper.createChat', () => {
       .mockResolvedValueOnce(jsonResponse({
         chats: [{ id: 'minted', type: 'bot', title: null, createdAt: '2026-01-01', updatedAt: '2026-01-01' }],
       }))
-    const mapper = createCloudChatMapper({ serverUrl: 'https://api.example.com', fetch: fetchMock as unknown as typeof fetch })
+    const mapper = createCloudChatMapper({ serverUrl: 'https://api.example.com', fetch: fetchMock })
     const chat = await mapper.createChat({ id: 'minted', type: 'bot' })
     expect(chat.id).toBe('minted')
     expect(fetchMock).toHaveBeenCalledTimes(2)
@@ -253,7 +253,7 @@ describe('createCloudChatMapper.createChat', () => {
    */
   it('does not attempt 409 idempotency without a client-supplied id', async () => {
     const fetchMock = vi.fn(async () => jsonResponse({ message: 'conflict' }, { status: 409, statusText: 'Conflict' }))
-    const mapper = createCloudChatMapper({ serverUrl: 'https://api.example.com', fetch: fetchMock as unknown as typeof fetch })
+    const mapper = createCloudChatMapper({ serverUrl: 'https://api.example.com', fetch: fetchMock })
     await expect(mapper.createChat({ type: 'bot' })).rejects.toThrow(/HTTP 409/)
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
@@ -266,7 +266,7 @@ describe('createCloudChatMapper.deleteChat', () => {
    */
   it('resolves on 2xx', async () => {
     const fetchMock = vi.fn(async () => emptyResponse())
-    const mapper = createCloudChatMapper({ serverUrl: 'https://api.example.com', fetch: fetchMock as unknown as typeof fetch })
+    const mapper = createCloudChatMapper({ serverUrl: 'https://api.example.com', fetch: fetchMock })
     await expect(mapper.deleteChat('abc')).resolves.toBeUndefined()
     expect(fetchMock).toHaveBeenCalledWith(
       'https://api.example.com/api/v1/chats/abc',
@@ -281,7 +281,7 @@ describe('createCloudChatMapper.deleteChat', () => {
    */
   it('encodes chat ids in the path', async () => {
     const fetchMock = vi.fn(async () => emptyResponse())
-    const mapper = createCloudChatMapper({ serverUrl: 'https://api.example.com', fetch: fetchMock as unknown as typeof fetch })
+    const mapper = createCloudChatMapper({ serverUrl: 'https://api.example.com', fetch: fetchMock })
     await mapper.deleteChat('a/b c')
     expect(fetchMock).toHaveBeenCalledWith(
       'https://api.example.com/api/v1/chats/a%2Fb%20c',
@@ -296,7 +296,7 @@ describe('createCloudChatMapper.deleteChat', () => {
    */
   it('throws on non-2xx with structured detail', async () => {
     const fetchMock = vi.fn(async () => jsonResponse({ error: 'kaboom' }, { status: 500, statusText: 'Internal' }))
-    const mapper = createCloudChatMapper({ serverUrl: 'https://api.example.com', fetch: fetchMock as unknown as typeof fetch })
+    const mapper = createCloudChatMapper({ serverUrl: 'https://api.example.com', fetch: fetchMock })
     await expect(mapper.deleteChat('abc')).rejects.toThrow(/HTTP 500: kaboom/)
   })
 })
@@ -355,10 +355,10 @@ describe('applyCreateActions', () => {
    * Empty actions list → empty results, no createChat calls.
    */
   it('returns an empty array on empty input', async () => {
-    const createChat = vi.fn()
+    const createChat = vi.fn<CloudChatMapper['createChat']>()
     const mapper: CloudChatMapper = {
       listChats: async () => [],
-      createChat: createChat as unknown as CloudChatMapper['createChat'],
+      createChat,
       deleteChat: async () => {},
     }
     expect(await applyCreateActions(mapper, [])).toEqual([])

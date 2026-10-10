@@ -307,16 +307,9 @@ describe('speech synchronization', () => {
 
   // https://github.com/moeru-ai/airi/pull/2490#discussion_r3959813206
   // ROOT CAUSE:
-  //
-  // Each renderer ran the speech watcher and changed a state-synchronized
-  // store after its local voice request completed. A follower then proposed
-  // its full snapshot and could overwrite newer leader state.
-  //
-  // Before: a follower executed loadVoicesForProvider locally and published a
-  // replaceState proposal.
-  //
-  // We fixed this by routing the action to the synchronization leader. The
-  // leader publishes the result, and the follower only applies that snapshot.
+  // Follower voice requests mutated synchronized state and proposed full snapshots that overwrote
+  // newer leader state.
+  // Voice loading now runs through the leader. Followers only apply its published result.
   it('routes voice catalog loading through the leader', async () => {
     const { leader: leaderContext, follower: followerContext } = await createSyncedPair()
     await new Promise(resolve => setTimeout(resolve, 50))

@@ -48,6 +48,8 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<Emits>()
 
+const window = globalThis.window
+
 const { isDark, toggleDark } = useTheme()
 const { t } = useI18n()
 const placement = useControlsIslandPlacement()
@@ -106,18 +108,12 @@ function setOverlay(key: string, active: boolean) {
   blockingOverlays.delete(key)
 }
 
-// NOTICE: On native Wayland, `isOutsideByCursor` can get permanently stuck
-// because it is driven by Electron's screen.getCursorScreenPoint(), which
-// Chromium's Ozone/Wayland backend cannot query reliably the way X11 does.
-// Source: https://github.com/moeru-ai/airi/issues/2521 (CachyOS + KDE
-// Plasma, Flatpak). OR it with the DOM-based `isOutsideByDom`
-// (useMouseInElement), which self-corrects on every pointermove and needs
-// no OS-level cursor query, so a broken cursor signal cannot force a false
-// collapse. The stage reads this paired result for click-through hit
-// testing, where DOM events may not reach the renderer at all.
-// Removal condition: once Ozone/Wayland reports the absolute
-// cursor position reliably upstream, or the click-through hit-testing no
-// longer depends on this composable.
+// NOTICE:
+// Wayland can return stale Electron cursor positions. DOM tracking prevents false collapse. Click-
+// through testing still needs both signals when DOM events cannot arrive.
+// Source: https://github.com/moeru-ai/airi/issues/2521.
+// Remove the workaround when Wayland cursor reporting is reliable or click-through testing no
+// longer needs it.
 const { isOutside: isOutsideByCursor } = useElectronMouseInElement(islandElement)
 const { isOutside: isOutsideByDom } = useMouseInElement(islandElement)
 const isOutside = computed(() => isOutsideByCursor.value && isOutsideByDom.value)
@@ -247,10 +243,6 @@ const panelPositionClasses = computed(() => {
  */
 const startDraggingWindow = !isLinux() ? defineInvoke(context.value, electronStartDraggingWindow) : undefined
 
-function refreshWindow() {
-  window.location.reload()
-}
-
 /**
  * Requests the main process to move the AIRI desktop window back to screen center.
  */
@@ -359,7 +351,7 @@ function resetMainWindowPosition() {
                       v-track-button="{ name: 'controls_island_action', action: 'refresh_window' }"
                       :button-style="adjustStyleClasses.button"
                       :aria-label="t('tamagotchi.stage.controls-island.refresh')"
-                      @click="refreshWindow"
+                      @click="window.location.reload()"
                     >
                       <div i-solar:refresh-linear :class="adjustStyleClasses.icon" text="neutral-800 dark:neutral-300" />
                     </ControlButton>

@@ -75,24 +75,27 @@ async function startMockServer(handler: (ws: import('ws').WebSocket) => void): P
 // jsdom-friendly stub AudioContext for `decodeAudioData`. The pipeline does
 // not introspect the AudioBuffer beyond passing it to consumers, so any
 // shape with the expected fields is fine.
-function makeStubAudioContext(): BaseAudioContext {
+function makeStubAudioContext(): Pick<BaseAudioContext, 'decodeAudioData'> {
   let counter = 0
   const ctx = {
-    sampleRate: 24000,
     decodeAudioData: vi.fn(async (buf: ArrayBuffer) => {
       // Return a fake AudioBuffer-like object identifiable by index/byteLength.
       counter += 1
+      const data = new Float32Array(buf.byteLength)
       return {
         duration: buf.byteLength / 24000,
         length: buf.byteLength,
         numberOfChannels: 1,
         sampleRate: 24000,
+        copyFromChannel: vi.fn(),
+        copyToChannel: vi.fn(),
+        getChannelData: () => data,
         __index: counter,
         __byteLength: buf.byteLength,
-      } as unknown as AudioBuffer
+      } satisfies AudioBuffer & { __index: number, __byteLength: number }
     }),
   }
-  return ctx as unknown as BaseAudioContext
+  return ctx
 }
 
 describe('createStreamingTtsPipeline', () => {
@@ -298,17 +301,10 @@ describe('createStreamingTtsPipeline', () => {
     handle.cancel()
 
     // ROOT CAUSE:
-    //
-    // This test was flaky on CI: asserting `cancelObserved` right after `onDone`
-    // resolved raced the mock server's `message` event.
-    // `cancel()` queues the cancel frame in the ws write buffer, then `terminate()`
-    // defers `ws.close()` + `onDone()` by one macrotask (streaming-pipeline.ts) —
-    // but the frame still has to cross a real loopback socket and be dispatched to
-    // the server's `message` listener, which on a loaded runner can happen AFTER
-    // the client-side `onDone` fired.
-    //
-    // We fixed this by polling for both observations instead of asserting
-    // immediately after `onDone`.
+    // Client onDone can precede the mock server's cancel-frame event, even though terminate defers
+    // closure by one macrotask.
+    // The frame still crosses a real loopback socket. Poll both observations instead of asserting
+    // immediately after onDone.
     await vi.waitFor(() => {
       expect(cancelObserved).toBe(true)
       expect(onDone).toHaveBeenCalledTimes(1)

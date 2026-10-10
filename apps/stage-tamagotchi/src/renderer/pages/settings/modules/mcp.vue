@@ -83,16 +83,6 @@ function applyLoadedConfig(config: ElectronMcpConfigFile) {
 const savedServers = computed(() => servers.value.filter(s => savedIds.value.has(s.rowId)))
 const pendingServers = computed(() => servers.value.filter(s => !savedIds.value.has(s.rowId)))
 
-function isExpanded(id: string) {
-  return expandedIds.value.has(id)
-}
-function toggleExpanded(id: string) {
-  if (expandedIds.value.has(id))
-    expandedIds.value.delete(id)
-  else
-    expandedIds.value.add(id)
-}
-
 const isDirty = computed(() => {
   try {
     return JSON.stringify(buildConfig()) !== savedSig.value
@@ -125,10 +115,6 @@ const RUNTIME_BADGE: Record<'running' | 'stopped' | 'error', string> = {
 
 function badgeClass(state: 'running' | 'stopped' | 'error' | undefined) {
   return RUNTIME_BADGE[state ?? 'stopped']
-}
-
-function targetPreview(s: ServerForm) {
-  return previewServerTarget(s)
 }
 
 const CARD_PRIMARY = 'flex flex-col gap-3 rounded-xl border-2 border-solid border-primary-100 bg-primary-50/50 p-3 transition-all duration-200 ease-in-out hover:border-primary-500/30 md:p-4 dark:border-primary-900/60 dark:bg-primary-900/10 dark:hover:border-primary-400/30'
@@ -405,10 +391,10 @@ onMounted(async () => {
           <button
             type="button"
             class="flex items-center justify-center rounded-md p-1 text-neutral-500 transition-colors hover:bg-neutral-200/60 hover:text-neutral-800 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
-            :aria-label="isExpanded(server.rowId) ? tn('actions.collapse') : tn('actions.expand')"
+            :aria-label="expandedIds.has(server.rowId) ? tn('actions.collapse') : tn('actions.expand')"
             @click="toggleExpanded(server.rowId)"
           >
-            <span :class="isExpanded(server.rowId) ? 'i-solar:alt-arrow-down-line-duotone' : 'i-solar:alt-arrow-right-line-duotone'" class="block size-4" />
+            <span :class="expandedIds.has(server.rowId) ? 'i-solar:alt-arrow-down-line-duotone' : 'i-solar:alt-arrow-right-line-duotone'" class="block size-4" />
           </button>
 
           <div class="min-w-0 flex flex-1 flex-col gap-0.5">
@@ -425,7 +411,7 @@ onMounted(async () => {
               </span>
             </div>
             <div class="truncate text-xs text-neutral-500 font-mono dark:text-neutral-400">
-              {{ targetPreview(server) || '-' }}
+              {{ previewServerTarget(server) || '-' }}
             </div>
           </div>
 
@@ -436,7 +422,7 @@ onMounted(async () => {
         </div>
 
         <TransitionVertical>
-          <div v-if="isExpanded(server.rowId)" class="border-t border-neutral-200/70 pt-3 dark:border-neutral-800">
+          <div v-if="expandedIds.has(server.rowId)" class="border-t border-neutral-200/70 pt-3 dark:border-neutral-800">
             <McpServerForm :model-value="server" @remove="removeServer(server.rowId)" />
           </div>
         </TransitionVertical>

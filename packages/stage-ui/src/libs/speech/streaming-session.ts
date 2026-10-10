@@ -155,13 +155,8 @@ export async function streamingSynthesize(options: StreamingTtsSessionOptions): 
       ws.send(JSON.stringify({ event: 'finish' }))
     })
 
-    // Becomes true only after the server emits `session.finished`. The close
-    // handler uses this to distinguish "completed gracefully, ws then closed"
-    // from "ws closed mid-stream with partial audio". Without this flag we
-    // would silently resolve with truncated audio whenever the close arrived
-    // before `session.finished` — exactly the failure mode codex flagged
-    // (HIGH #2): the user hears a cut-off sentence and the pipeline treats it
-    // as a successful segment.
+    // Only session.finished marks graceful completion. The close handler uses this flag to reject
+    // an interrupted stream instead of treating truncated audio as a successful segment.
     let sawSessionFinished = false
 
     ws.addEventListener('message', (e) => {

@@ -163,13 +163,9 @@ export async function executeToolCallRerun<TToolset extends string = string>(
 
   try {
     // NOTICE:
-    // Re-run tools receive AIRI's original chat history so runtime tools can
-    // inspect the same context the UI is updating. xsai types narrow
-    // `messages` to provider `Message[]`, while AIRI history can also contain
-    // local-only `error` entries. Keep the cast at this boundary instead of
-    // filtering messages and silently changing the tool's context.
-    // Removal condition: xsai exposes a tool execution context type that can
-    // accept runtime-owned message envelopes.
+    // Rerun tools need the original AIRI history, including local error entries. xsai narrows
+    // messages to provider Message[], so this boundary casts without filtering context.
+    // Remove the cast when xsai accepts runtime-owned message envelopes.
     const executeOptions: ToolExecuteOptions = {
       toolCallId: payload.toolCallId,
       messages,

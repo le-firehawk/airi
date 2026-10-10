@@ -46,7 +46,6 @@ export class NanoBananaProvider implements ArtistryProvider {
     const model = request.model || this.defaultModel
     const resolution = request.extra?.resolution || this.defaultResolution
 
-    // Robust image extraction & cleansing
     let base64Image = request.extra?.image || request.extra?.providerOptions?.image || ''
     if (base64Image.includes('base64,'))
       base64Image = base64Image.split('base64,')[1]

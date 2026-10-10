@@ -1,59 +1,43 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import { isCanvasRegionTransparent } from './canvas-alpha'
 
-interface GlMockOptions {
+interface GlOptions {
   hotPixel?: { x: number, y: number, alpha?: number }
   width?: number
   height?: number
 }
 
-/**
- * Minimal WebGL context mock that fills readPixels output with transparent pixels,
- * except for an optional single hot pixel where alpha is set. Coordinates are in
- * drawing buffer space, matching readPixels inputs.
- */
-function createGlMock(options: GlMockOptions = {}) {
-  const drawingBufferWidth = options.width ?? 100
-  const drawingBufferHeight = options.height ?? 100
-  const hotPixel = options.hotPixel
+const contexts: WebGLRenderingContext[] = []
 
-  const gl = {
-    drawingBufferWidth,
-    drawingBufferHeight,
-    readPixels: (
-      startX: number,
-      startY: number,
-      readWidth: number,
-      readHeight: number,
-      _format: number,
-      _type: number,
-      data: Uint8Array,
-    ) => {
-      data.fill(0)
+afterEach(() => {
+  for (const context of contexts.splice(0))
+    context.getExtension('WEBGL_lose_context')?.loseContext()
+})
 
-      if (!hotPixel)
-        return
-
-      const { x, y, alpha = 255 } = hotPixel
-      const withinX = x >= startX && x < startX + readWidth
-      const withinY = y >= startY && y < startY + readHeight
-      if (!withinX || !withinY)
-        return
-
-      const relX = x - startX
-      const relY = y - startY
-      const index = (relY * readWidth + relX) * 4 + 3
-      data[index] = alpha
-    },
+function createGl(options: GlOptions = {}) {
+  const canvas = document.createElement('canvas')
+  canvas.width = options.width ?? 100
+  canvas.height = options.height ?? 100
+  const gl = canvas.getContext('webgl', { preserveDrawingBuffer: true })
+  if (!gl)
+    throw new Error('WebGL is required for canvas transparency tests')
+  contexts.push(gl)
+  gl.clearColor(0, 0, 0, 0)
+  gl.clear(gl.COLOR_BUFFER_BIT)
+  if (options.hotPixel) {
+    gl.enable(gl.SCISSOR_TEST)
+    gl.scissor(options.hotPixel.x, options.hotPixel.y, 1, 1)
+    gl.clearColor(0, 0, 0, (options.hotPixel.alpha ?? 255) / 255)
+    gl.clear(gl.COLOR_BUFFER_BIT)
+    gl.disable(gl.SCISSOR_TEST)
   }
-
-  return gl as unknown as WebGLRenderingContext
+  return gl
 }
 
 describe('isCanvasRegionTransparent', () => {
   it('returns true when cursor is outside canvas bounds', () => {
-    const gl = createGlMock()
+    const gl = createGl()
 
     const result = isCanvasRegionTransparent({
       gl,
@@ -71,7 +55,7 @@ describe('isCanvasRegionTransparent', () => {
   })
 
   it('returns false when an opaque pixel is inside the circular region', () => {
-    const gl = createGlMock({ hotPixel: { x: 50, y: 49, alpha: 255 } })
+    const gl = createGl({ hotPixel: { x: 50, y: 49, alpha: 255 } })
 
     const result = isCanvasRegionTransparent({
       gl,
@@ -89,7 +73,7 @@ describe('isCanvasRegionTransparent', () => {
   })
 
   it('ignores opaque pixels outside the circular region but inside read bounds', () => {
-    const gl = createGlMock({ hotPixel: { x: 80, y: 80, alpha: 255 } })
+    const gl = createGl({ hotPixel: { x: 80, y: 80, alpha: 255 } })
 
     const result = isCanvasRegionTransparent({
       gl,
@@ -107,7 +91,7 @@ describe('isCanvasRegionTransparent', () => {
   })
 
   it('uses only the exact cursor pixel when the radius is zero', () => {
-    const gl = createGlMock({ hotPixel: { x: 50, y: 49, alpha: 255 } })
+    const gl = createGl({ hotPixel: { x: 50, y: 49, alpha: 255 } })
 
     const result = isCanvasRegionTransparent({
       gl,

@@ -229,10 +229,6 @@ function applyGodotStageStatus(next: ElectronGodotStageStatus) {
     beginGodotViewSession()
 }
 
-function handleGodotViewPatch(patch: StageViewPatch) {
-  godotViewPatchQueue.enqueue(patch)
-}
-
 async function handleGodotViewSnapshotRequest(epoch = godotSessionEpoch) {
   try {
     await requestGodotStageViewSnapshot()
@@ -386,7 +382,7 @@ onUnmounted(() => {
           'relative',
         ]"
         @live2d-expression-command="sendLive2DExpressionCommand"
-        @patch-godot-view-state="handleGodotViewPatch"
+        @patch-godot-view-state="godotViewPatchQueue.enqueue($event)"
       >
         <template #actions>
           <GhostButton

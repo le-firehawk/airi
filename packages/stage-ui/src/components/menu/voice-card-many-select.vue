@@ -133,12 +133,9 @@ function getAudioElement(voice: Voice): HTMLAudioElement | null {
   }
 
   const audio = new Audio(previewUrl)
-  // NOTICE: crossOrigin='anonymous' is only needed so Web Audio's
-  // createMediaElementSource can read samples for the visualizer. Setting it
-  // forces the browser to enforce CORS on the media fetch — if the preview
-  // host (e.g. Azure CDN) doesn't return Access-Control-Allow-Origin, the
-  // load is rejected with NotSupportedError. Skip it when the visualizer is
-  // off so plain playback works regardless of origin headers.
+  // Web Audio needs anonymous CORS to read visualizer samples, but hosts without Access-Control-
+  // Allow-Origin then reject playback.
+  // Set crossOrigin only for visualization so plain previews remain playable without CORS headers.
   if (props.showVisualizer)
     audio.crossOrigin = 'anonymous'
   audio.preload = 'auto' // Preload the audio

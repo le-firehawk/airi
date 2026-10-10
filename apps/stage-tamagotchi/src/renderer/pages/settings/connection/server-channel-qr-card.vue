@@ -44,15 +44,11 @@ const qrCodeSource = computed(() => {
   }
 
   // NOTICE:
-  // Always render the QR as dark foreground on a white background, regardless of
-  // theme. Some mobile barcode scanners (including the underlying reader used by
-  // `@capacitor/barcode-scanner` on Android) fail to detect color-inverted QRs,
-  // which is what the previous theme-aware palette produced in dark mode.
-  // See https://github.com/moeru-ai/airi/issues/1606 and
-  // https://github.com/ionic-team/capacitor-barcode-scanner/issues/60 for context.
-  // Removal condition: once the Android scanner reliably recognizes light-on-dark QRs
-  // (e.g. after migrating to ML Kit with `TryInverted` enabled), this can revert to
-  // a theme-aware palette.
+  // Android barcode scanners can reject light-on-dark QR codes, so all themes use dark foreground
+  // on white.
+  // Sources: https://github.com/moeru-ai/airi/issues/1606 and https://github.com/ionic-
+  // team/capacitor-barcode-scanner/issues/60.
+  // Restore theme-aware colors when the Android scanner reliably recognizes inverted codes.
   const svg = renderSVG(payloadText.value, {
     border: 2,
     ecc: 'M',

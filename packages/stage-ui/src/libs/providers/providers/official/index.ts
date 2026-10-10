@@ -273,16 +273,10 @@ export const providerOfficialSpeechStreaming = defineProvider({
     listModels: async () => (await listStreamingModelCatalog()).models,
     voiceCatalogConfig: () => ({}),
     listVoices: async (_config, _provider, model, signal): Promise<VoiceInfo[]> => {
-      // Streaming voices live behind a dedicated endpoint
-      // (`/audio/voices/streaming`) because they come from the
-      // `UNSPEECH_UPSTREAM.streaming` configKV subtree rather than the HTTP TTS
-      // `?model=...` lookup. The server proxies to unspeech's
-      // `/api/voices?provider=volcengine`, which ships an embed-time
-      // catalogue without requiring credentials.
-      //
-      // `model` here is the unspeech-routed id (e.g. `volcengine/seed-tts-2.0`).
-      // unspeech expects the bare `api_resource_id` for its filter, so we
-      // strip the backend prefix before forwarding.
+      // Streaming voices use /audio/voices/streaming and UNSPEECH_UPSTREAM.streaming, independently
+      // of HTTP TTS lookup.
+      // The server proxies unspeech's embedded Volcengine catalog without credentials. Strip the
+      // routed backend prefix because unspeech filters by bare api_resource_id.
       const apiResourceId = model?.includes('/') ? model.split('/', 2)[1] : model
       const voicesURL = new URL(`${SERVER_URL}/api/v1/audio/voices/streaming`)
       if (apiResourceId)
@@ -421,11 +415,9 @@ function findRecommendedVoice(voices: VoiceInfo[], recommendedMap: Record<string
 
 const AUTO_PICK_PROVIDER_IDS = new Set([OFFICIAL_SPEECH_PROVIDER_ID, OFFICIAL_SPEECH_STREAMING_PROVIDER_ID])
 
-// NOTICE: Only the official speech providers (HTTP + streaming) auto-configure
-// a default voice after login. Third-party providers leave voice selection to
-// the user. The target locale is derived from the UI locale on each run — we
-// don't persist it, since that was the root of the cross-provider filter
-// drift bug.
+// Only official HTTP and streaming speech providers choose a default voice after login. Third-party
+// voices remain user-selected.
+// Read the current UI locale each time. Persisting it caused filters to drift across providers.
 /** Selects from the catalog and recommendations loaded in this renderer; valid selections stay unchanged. */
 export function pickOfficialSpeechVoice(ctx: {
   activeSpeechProvider: string
@@ -450,16 +442,12 @@ export function pickOfficialSpeechVoice(ctx: {
 
   const targetLocale = pickLocaleForUi(ctx.uiLocale, localeCodes)
 
-  // Pick a default voice with a layered fallback so auto-pick never dumps
-  // the user into an unrelated voice (e.g. the alphabetically-first af-ZA
-  // voice when nothing matches):
-  //   1) server-recommended voice for the exact locale, then the same
-  //      language prefix
-  //   2) any other server-recommended voice for the same model
-  //   3) first voice speaking the exact target locale
-  //   4) any English voice (en-US, then en-*) — broadest comprehensible
-  //      fallback when the user's locale has no coverage at all
-  //   5) alphabetical first voice, as a last resort
+  // Default voice order:
+  // 1. Server recommendation matching the exact locale, then language.
+  // 2. Another recommendation for this model.
+  // 3. Any exact-locale match.
+  // 4. English, preferring en-US before other en-* voices.
+  // 5. Alphabetical first voice as the final fallback.
   const recommendedMap = Object.fromEntries(providerVoices.flatMap(voice =>
     voice.recommendedFor?.map(locale => [locale, voice.id]) ?? [],
   ))

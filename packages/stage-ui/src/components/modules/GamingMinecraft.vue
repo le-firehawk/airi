@@ -36,13 +36,11 @@ const lastRuntimeUpdate = computed(() => {
   return t('settings.pages.modules.gaming-minecraft.status.last-context-seconds', { seconds })
 })
 
-function formatTrafficTime(timestamp: number) {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  }).format(timestamp)
-}
+const trafficTimeFormat = new Intl.DateTimeFormat(undefined, {
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+})
 
 function formatTrafficPayload(payload: unknown) {
   return JSON.stringify(payload, null, 2)
@@ -115,7 +113,7 @@ onMounted(() => {
         >
           <div :class="['flex flex-wrap items-center justify-between gap-2 text-xs text-neutral-500 dark:text-neutral-400']">
             <span>{{ entry.type }}</span>
-            <span>{{ formatTrafficTime(entry.receivedAt) }}</span>
+            <span>{{ trafficTimeFormat.format(entry.receivedAt) }}</span>
           </div>
           <div :class="['mt-2 text-sm font-medium text-neutral-900 dark:text-neutral-100']">
             {{ entry.summary }}

@@ -572,13 +572,10 @@ describe('chat store contract', () => {
 
   it('routes cancellation from a follower window to the leader runtime', async () => {
     // ROOT CAUSE:
-    //
-    // The Electron chat window owns a follower-only Pinia runtime. Calling an
-    // unsynchronized cancellation action there only reached its idle local
-    // chat runtime, so the leader window kept generating the LLM response.
-    //
-    // Cancellation is now a synchronized action. The follower RPC reaches the
-    // leader-owned AbortController and waits for the active send to settle.
+    // The follower chat window canceled only its idle local runtime, leaving leader generation
+    // active.
+    // Cancellation now synchronizes with the leader-owned AbortController and waits for the active
+    // send to settle.
     const namespace = `chat-cancellation:${crypto.randomUUID()}`
     const leaderPinia = createPinia()
     const leaderRuntime = createSyncedPiniaPlugin({
@@ -974,14 +971,10 @@ describe('chat store contract', () => {
   // https://github.com/moeru-ai/airi/pull/2394#discussion_r3883162024
   it('restarts chat consumers when this renderer becomes the leader', async () => {
     // ROOT CAUSE:
-    //
-    // The application stopped observing chat leadership changes. If the Web
-    // leader closed, the promoted renderer kept the replicated session state
-    // but did not start a new cloud WebSocket.
-    //
-    // The chat store now owns the leadership subscription. It starts the
-    // session consumers after promotion and stops local consumers after
-    // demotion or disposal.
+    // Without leadership observation, a promoted renderer retained sessions but never opened its
+    // cloud WebSocket.
+    // The chat store now subscribes to leadership changes, starting consumers on promotion and
+    // stopping local consumers on demotion or disposal.
     let leadershipListener: ((isLeader: boolean) => void) | undefined
     const stopLeadershipListener = vi.fn()
     const syncedPinia: SyncedPiniaRuntime = {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ToolCallRerunRequest } from '../../../../stores/tool-call-rerun'
-import type { ChatAssistantMessage, ChatHistoryItem, ChatSlices, ChatSlicesText, ChatSlicesToolCallResult } from '../../../../types/chat'
+import type { ChatAssistantMessage, ChatHistoryItem, ChatSlices, ChatSlicesText } from '../../../../types/chat'
 import type { ChatHistoryReplyPayload } from '../reply'
 import type { ChatToolCallRendererRegistry } from './tool-call-renderer'
 
@@ -66,10 +66,6 @@ const resolvedSlices = computed<ChatSlices[]>(() => {
 const toolResultBySlice = computed(() => {
   return createToolCallResultLookup(resolvedSlices.value, props.message.tool_results)
 })
-
-function getToolCallResult(sliceIndex: number): ChatSlicesToolCallResult | undefined {
-  return toolResultBySlice.value.get(sliceIndex)
-}
 
 const invocationBySlice = computed(() => {
   const invocations = props.message.generationTranscript?.rounds.flatMap(round => round.toolInvocations)
@@ -162,8 +158,8 @@ const copyText = computed(() => getChatHistoryItemCopyText(props.message as Chat
                 :tool-call-id="slice.toolCall.toolCallId"
                 :tool-name="slice.toolCall.toolName"
                 :args="slice.toolCall.args"
-                :state="resolveToolCallBlockState(getToolCallResult(sliceIndex))"
-                :result="getToolCallResult(sliceIndex)?.result"
+                :state="resolveToolCallBlockState(toolResultBySlice.get(sliceIndex))"
+                :result="toolResultBySlice.get(sliceIndex)?.result"
                 @tool-call-rerun="emitToolCallRerun(sliceIndex, $event)"
               />
               <template v-else-if="slice.type === 'tool-call-result'" />

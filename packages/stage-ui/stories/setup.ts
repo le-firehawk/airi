@@ -1,5 +1,3 @@
-import type { Plugin } from 'vue'
-
 import { autoAnimatePlugin } from '@formkit/auto-animate/vue'
 import { defineSetupVue3 } from '@histoire/plugin-vue'
 import { MotionPlugin } from '@vueuse/motion'
@@ -30,8 +28,7 @@ import '@fontsource-variable/nunito/index.css'
 export const setupVue3 = defineSetupVue3(({ app }) => {
   app.use(MotionPlugin)
   app.use(i18n)
-  // TODO: Fix autoAnimatePlugin type error
-  app.use(autoAnimatePlugin as unknown as Plugin)
+  app.use(autoAnimatePlugin)
 
   app.component('ThemeColorsHueControl', ThemeColorsHueControl)
   app.component('CharacterCardColorControls', CharacterCardColorControls)

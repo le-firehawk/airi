@@ -274,14 +274,9 @@ describe('channel-server store reconnect', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // Auxiliary Electron renderers can register a listener before App.vue has
-  // loaded the server token. The first anonymous initialize call held the
-  // single-flight lock, so the later explicit-token call reused the anonymous
-  // promise and the server rejected every retry.
-  //
-  // We fixed this by replacing an in-flight client when the requested
-  // connection URL or token changes.
+  // An early anonymous initialization held the shared promise. Later token-bearing requests reused
+  // it, so retries remained unauthenticated.
+  // A changed connection URL or token now replaces the in-flight client.
   it('replaces an anonymous in-flight initialization when explicit credentials arrive', async () => {
     const store = useModsServerChannelStore()
 

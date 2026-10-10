@@ -1,8 +1,9 @@
+import type { ElectronMainContextExtensions, ElectronMainEmitOptions } from '@moeru/eventa/adapters/electron/main'
 import type { ShortcutBinding } from '@proj-airi/stage-shared/global-shortcut'
-import type { BrowserWindow } from 'electron'
 
-import type { EventaContext } from './global-shortcut'
+import type { GlobalShortcutService } from './global-shortcut'
 
+import { createContext } from '@moeru/eventa'
 import { ShortcutFailureReasons } from '@proj-airi/stage-shared/global-shortcut'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -14,10 +15,7 @@ function exampleBinding(id: string, key = 'KeyK'): ShortcutBinding {
   }
 }
 
-interface MockContext {
-  emit: ReturnType<typeof vi.fn>
-  invokeHandlers: Map<string, (payload: unknown) => unknown>
-}
+type MockContext = ReturnType<typeof createMockContext>
 
 interface MockWindow {
   on: ReturnType<typeof vi.fn>
@@ -25,11 +23,12 @@ interface MockWindow {
   close: () => void
 }
 
-function createMockContext(): MockContext {
-  return {
-    emit: vi.fn(),
-    invokeHandlers: new Map(),
-  }
+function createMockContext() {
+  const context = createContext<ElectronMainContextExtensions, ElectronMainEmitOptions>()
+  vi.spyOn(context, 'emit')
+  return Object.assign(context, {
+    invokeHandlers: new Map<string, (payload: unknown) => unknown>(),
+  })
 }
 
 // NOTICE:
@@ -38,7 +37,7 @@ function createMockContext(): MockContext {
 // assert the auto-cleanup path.
 function createMockWindow(): MockWindow {
   let closedHandler: (() => void) | undefined
-  return {
+  const window = {
     on: vi.fn((event: string, handler: () => void) => {
       if (event === 'closed')
         closedHandler = handler
@@ -47,27 +46,12 @@ function createMockWindow(): MockWindow {
       closedHandler?.()
     },
   }
+  return window
 }
 
-// NOTICE:
-// MockContext / MockWindow are intentionally minimal — only what the
-// driver touches. Casting through `unknown` lets us pass them to
-// `service.registerWindow` whose typed signature wants the full
-// `EventaContext` and `BrowserWindow` types.
-function asEventaContext(ctx: MockContext): EventaContext {
-  return ctx as unknown as EventaContext
-}
-
-function asBrowserWindow(window: MockWindow): BrowserWindow {
-  return window as unknown as BrowserWindow
-}
-
-function registerMockWindow(service: { registerWindow: (params: { context: EventaContext, window: BrowserWindow }) => void }, ctx: MockContext): MockWindow {
+function registerMockWindow(service: GlobalShortcutService, ctx: MockContext): MockWindow {
   const window = createMockWindow()
-  service.registerWindow({
-    context: asEventaContext(ctx),
-    window: asBrowserWindow(window),
-  })
+  service.registerWindow({ context: ctx, window })
   return window
 }
 

@@ -36,14 +36,10 @@ const BUILTIN_BACKGROUNDS = [
 ]
 
 // NOTICE:
-// id is `background-entries` (not `background`) to avoid colliding with
-// stage-layouts' `defineStore('background', ...)` — Pinia uses the string id
-// as a global singleton key, so two stores with the same id resolve to
-// whichever was registered first at runtime (TS cannot detect this since the
-// shape is inferred per-module).
-// Source: packages/stage-layouts/src/stores/background.ts.
-// Removal condition: when this store is merged with stage-layouts' store, or
-// the string id collision is enforced at the type level.
+// Pinia IDs are global singleton keys. background-entries avoids the background store in
+// packages/stage-layouts/src/stores/background.ts.
+// Duplicate IDs return whichever store registered first despite different TypeScript shapes.
+// Remove this distinction when the stores merge or types enforce unique IDs.
 export const useBackgroundStore = defineStore('background-entries', () => {
   const STORAGE_PREFIX = 'bg-'
 

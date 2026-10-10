@@ -58,25 +58,13 @@ export async function load(window: BrowserWindow, url: string | { url: string, o
       if (typeof url === 'object' && 'url' in url) {
         const parsedURL = new URL(url.url)
         if (parsedURL.hash) {
-          // When targeting /#/ hash route, Electron may throw
-          //
-          // ```
-          // Error: ERR_ABORTED (-3) loading 'http://localhost:5173/#/notice/fade-on-hover?id=fade-on-hover'
-          // ```
-          //
-          // and this will cause the `load(...)` promise to reject, while `#${hash content}` is in fact the correct URL expected by
-          // electron, but from `new URL(...)` standard API, the output URL with hash will include at least one `/` before `#${hash content}`,
-          // which causes the mismatch and thus the error.
-          //
-          // This is more likely a URL scheme standard mismatch between Electron and Node.js, and currently we can only catch and
-          // ignore this error, since the URL with hash is actually loaded correctly in Electron, and the error is just a false alarm.
-          //
-          // Navigation started: {url: 'http://localhost:5173/#/notice/fade-on-hover?id=fade-on-hover', isSameDocument: false, isMainFrame: true, isInPlace: false}
-          // Navigation started: {url: 'http://localhost:5173/#/notice/fade-on-hover?id=fade-on-hover', isSameDocument: false, isMainFrame: true, isInPlace: false}
-          // Navigation started: {url: 'http://localhost:5173/#/notice/fade-on-hover?id=fade-on-hover', isSameDocument: false, isMainFrame: true, isInPlace: false}
-          //
-          // https://github.com/electron/electron/issues/17526
-          // https://github.com/electron/electron/blob/8d05285a1f39c759985b17c89a449e4a6b3960df/lib/browser/api/web-contents.ts#L370-L387
+          // NOTICE:
+          // Electron can reject a hash-route load with ERR_ABORTED even when navigation succeeds.
+          // URL normalization inserts a slash before the hash.
+          // Sources: https://github.com/electron/electron/issues/17526 and https://github.com/elect
+          // ron/electron/blob/8d05285a1f39c759985b17c89a449e4a6b3960df/lib/browser/api/web-
+          // contents.ts#L370-L387.
+          // Remove this exception when Electron resolves successful hash-route loads.
           console.warn('Electron navigation error with hash route, ignoring:', error, 'url:', url.url)
 
           return

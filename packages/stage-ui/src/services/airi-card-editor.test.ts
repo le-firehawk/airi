@@ -122,14 +122,9 @@ describe('airi card editor validation', () => {
 
   it('preserves AIRI extension fields that are not editable in the form', () => {
     // ROOT CAUSE:
-    //
-    // Saving the editor rebuilt `extensions.airi.modules` from visible form
-    // controls and reset `agents` to an empty object. Hidden settings such as
-    // body models, backgrounds, advanced speech/artistry fields, and agent
-    // prompts were therefore lost after an otherwise unrelated edit.
-    //
-    // We fix this by applying the editor-owned fields as a structured patch
-    // over the existing extension.
+    // Saving rebuilt modules from visible controls and emptied agents, losing hidden models,
+    // backgrounds, advanced options, and prompts.
+    // The editor now applies its owned fields as a structured patch over the existing extension.
     const existing: AiriExtension = {
       modules: {
         consciousness: { provider: 'old-chat', model: 'old-chat-model' },

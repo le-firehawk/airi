@@ -135,11 +135,9 @@ async function startNewSession() {
   }
 }
 
-// Per-open generation counter. The batch loadSession loop checks this before
-// each batch so closing the drawer mid-load aborts cleanly instead of
-// continuing to hydrate sessions the user has navigated away from. Without
-// this, a session deleted from outside while the batch was running could be
-// re-added to `loadedSessions` as a phantom entry.
+// The batch loader checks this per-open generation before each batch.
+// Closing the drawer stops hydration. Otherwise, an externally deleted session can return as a
+// phantom loadedSessions entry.
 let openGeneration = 0
 
 watch(showDialog, async (open) => {

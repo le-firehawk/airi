@@ -35,10 +35,6 @@ async function handleLogin() {
   onboardingStore.showingSetup = false
   await authStore.requestLogin()
 }
-
-function handleLocalSetup() {
-  props.onNext()
-}
 </script>
 
 <template>
@@ -140,7 +136,7 @@ function handleLocalSetup() {
         :outline="false"
         :class="['bg-transparent! text-neutral-600 dark:bg-neutral-700/60! dark:text-neutral-200']"
         :label="t('settings.dialogs.onboarding.setupWithoutSigningIn')"
-        @click="handleLocalSetup"
+        @click="props.onNext()"
       />
     </div>
     <nav

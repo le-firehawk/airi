@@ -80,18 +80,14 @@ function getServerChannelPort() {
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1'])
 
-function isLoopbackHost(host: string) {
-  return LOOPBACK_HOSTS.has(host)
-}
-
 function getServerChannelQrHosts(config: ElectronServerChannelConfig, serverChannel: Server) {
   if (config.hostname === '0.0.0.0') {
     return Array.from(new Set(serverChannel.getConnectionHost()))
-      .filter(host => !isLoopbackHost(host))
+      .filter(host => !LOOPBACK_HOSTS.has(host))
       .sort()
   }
 
-  if (isLoopbackHost(config.hostname)) {
+  if (LOOPBACK_HOSTS.has(config.hostname)) {
     return []
   }
 

@@ -1,5 +1,6 @@
 import type { ShortcutBinding } from '@proj-airi/stage-shared/global-shortcut'
 
+import { useLogg } from '@guiiai/logg'
 import { ShortcutFailureReasons } from '@proj-airi/stage-shared/global-shortcut'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -108,13 +109,12 @@ async function setupMocks() {
 
   function createDriver(overrides: { platform?: NodeJS.Platform, sessionType?: string } = {}) {
     const broadcastTriggered = vi.fn<(id: string, phase: 'down' | 'up') => void>()
-    const logger = {
-      warn: vi.fn(),
-      withError: vi.fn(() => ({ warn: vi.fn() })),
-    }
+    const logger = useLogg('uiohook-test').useGlobalConfig()
+    vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    vi.spyOn(logger, 'withError').mockReturnValue(logger)
     const driver = createUiohookDriver({
       broadcastTriggered,
-      logger: logger as unknown as Parameters<typeof createUiohookDriver>[0]['logger'],
+      logger,
       platform: overrides.platform ?? 'darwin',
       sessionType: overrides.sessionType,
     })

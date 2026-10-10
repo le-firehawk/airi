@@ -115,15 +115,9 @@ describe('useTamagotchiPluginToolsStore', async () => {
     const llmToolsStore = useLlmToolsStore()
     const store = useTamagotchiPluginToolsStore()
     // ROOT CAUSE:
-    //
-    // If the renderer asks the main process for plugin xsai tools before the
-    // Eventa handler is ready, the invoke promise can remain pending forever.
-    // The tool refresh never completes, so the leader cannot finish startup.
-    //
-    // Before the fix, this wait never settled.
-    //
-    // We fixed this by letting optional plugin tool listing time out and
-    // complete registration with an empty tool list.
+    // Plugin tool requests sent before the Eventa handler was ready never settled, blocking leader
+    // startup.
+    // Optional tool listing now times out and completes registration with an empty tool list.
     const refresh = store.refresh()
 
     await Promise.resolve()

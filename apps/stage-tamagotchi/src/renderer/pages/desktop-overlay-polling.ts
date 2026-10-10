@@ -249,11 +249,12 @@ export function createOverlayPollController(config: OverlayPollConfig): OverlayP
     if ((now - lastHungRecoveryProbeAt) < HUNG_CALL_RECOVERY_INTERVAL_MS)
       return false
 
-    // NOTICE: Eventa does not expose abort semantics for callTool here. If all
-    // tracked calls are permanently hung, waiting for settlement also makes the
-    // overlay permanently stale. Drop one old tracking slot only after a long
-    // recovery interval so the overlay can probe again without returning to a
-    // per-poll unbounded RPC backlog.
+    // NOTICE:
+    // Eventa cannot abort callTool requests here. Permanently hung calls otherwise stop overlay
+    // recovery.
+    // After a long recovery interval, release one tracking slot for another probe while keeping the
+    // RPC backlog bounded.
+    // Remove this workaround when Eventa supports cancellation.
     backgroundHungCalls = backgroundHungCalls.slice(1)
     lastHungRecoveryProbeAt = now
     return true
@@ -293,13 +294,11 @@ export function createOverlayPollController(config: OverlayPollConfig): OverlayP
     let timeoutId: ReturnType<typeof setTimeout> | undefined
 
     try {
-      // NOTICE: Wrap callTool with a timeout to prevent the poll loop from
-      // hanging forever if the eventa invoke never resolves (e.g. during
-      // startup when the main-process RPC handlers may not be ready yet).
-      // NOTICE: Eventa does not expose abort semantics here, so a timed-out
-      // invoke can still be unresolved in the background. Track timed-out calls
-      // and allow only a low-frequency recovery probe when all tracked slots
-      // are hung, balancing bounded IPC pressure with eventual overlay recovery.
+      // NOTICE:
+      // A timeout prevents unresolved Eventa invokes from stopping the poll loop.
+      // Eventa cannot abort requests here, so timed-out calls remain tracked. Low-frequency
+      // recovery probes limit IPC pressure when every slot is hung.
+      // Remove this tracking when Eventa supports cancellation.
       let timedOut = false
       const currentCall = config.callTool(MCP_TOOL_NAME)
       inFlightCall = currentCall

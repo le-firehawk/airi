@@ -323,7 +323,7 @@ describe('isToolRelatedError', () => {
   it('prefers runtime-registered tools when duplicate tool names collide with builtin tools', async () => {
     const store = useLLM()
     const llmToolsStore = useLlmToolsStore()
-    const builtinTool = {
+    const builtinTool: Tool = {
       type: 'function',
       function: {
         name: 'duplicate_runtime_tool',
@@ -331,7 +331,7 @@ describe('isToolRelatedError', () => {
         parameters: { type: 'object', properties: {} },
       },
       execute: vi.fn(),
-    } as unknown as Tool
+    }
     const runtimeTool = {
       id: 'plugin:runtime:duplicate_runtime_tool',
       type: 'function' as const,

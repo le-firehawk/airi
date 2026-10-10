@@ -29,15 +29,9 @@ describe('artistry store', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // pinia-plugin-synced restores the whole store with structured clones. The
-  // global and active provider options then have equal values but different
-  // object identities. Watching the global object and assigning it to the
-  // active object creates a second mutation after the synchronized patch.
-  // That mutation broadcasts another full snapshot and repeats indefinitely.
-  //
-  // We fixed this by making global-to-active resolution an explicit store
-  // operation and by preventing persistence from reflecting its own write.
+  // Synchronized clones produced equal provider options with different identities. Reflecting
+  // global options into active state then broadcast another snapshot indefinitely.
+  // Global-to-active resolution is now explicit, and persistence cannot reflect its own write.
   it('does not mutate active options after applying an equal synchronized snapshot', async () => {
     const artistryStore = useArtistryStore()
     artistryStore.globalProviderOptions = { steps: 20 }

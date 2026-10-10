@@ -8,10 +8,6 @@ import { useTwitterStore } from '../../stores/modules/twitter'
 const { t } = useI18n()
 const twitterStore = useTwitterStore()
 const { enabled, apiKey, apiSecret, accessToken, accessTokenSecret, configured } = storeToRefs(twitterStore)
-
-function saveSettings() {
-  twitterStore.saveSettings()
-}
 </script>
 
 <template>
@@ -58,7 +54,7 @@ function saveSettings() {
       <Button
         :label="t('settings.common.save')"
 
-        @click="saveSettings"
+        @click="twitterStore.saveSettings()"
       />
     </div>
 

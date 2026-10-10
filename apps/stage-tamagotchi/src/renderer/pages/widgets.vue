@@ -9,6 +9,8 @@ import { useRoute } from 'vue-router'
 
 import { widgetsClearEvent, widgetsFetch, widgetsIframeRequestEvent, widgetsIframeRequestResultEvent, widgetsRemoveEvent, widgetsRenderEvent, widgetsUpdate, widgetsUpdateEvent } from '../../shared/eventa'
 
+const window = globalThis.window
+
 const { t } = useI18n()
 
 type SizePreset = 's' | 'm' | 'l' | { cols?: number, rows?: number }
@@ -197,10 +199,6 @@ function resolveWidgetComponent(name: string) {
   return GenericWidget
 }
 
-function handleClose() {
-  window.close()
-}
-
 async function toggleAlwaysOnTop() {
   if (!widget.value || pinUpdating.value)
     return
@@ -265,7 +263,7 @@ function handleIframeRequestResult(result: WidgetsIframeRequestResultPayload) {
         ]"
         :title="t('tamagotchi.stage.widgets.close')"
         :aria-label="t('tamagotchi.stage.widgets.close')"
-        @click="handleClose"
+        @click="window.close()"
       >
         <span aria-hidden="true" :class="['text-2xl leading-none']">×</span>
       </button>

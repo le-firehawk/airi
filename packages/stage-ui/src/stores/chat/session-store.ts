@@ -99,12 +99,9 @@ export const useChatSessionStore = defineStore('chat-session', () => {
   const cloudHydratedSessions = new Set<string>()
   const loadingSessions = new Map<string, Promise<boolean>>()
 
-  // Cloud sync state. The WS client is constructed lazily so anonymous
-  // (`userId === 'local'`) users never open a socket. `cloudSyncReady` is a
-  // UI-facing readiness flag (true after a successful reconcile); it does
-  // NOT gate `pushMessageToCloud`, which writes to the outbox and lets
-  // reconnect catch up — that way the very first message in a session does
-  // not get dropped while reconcile completes.
+  // Construct the cloud WebSocket lazily so local users never connect.
+  // cloudSyncReady becomes true after reconciliation but does not gate outbox writes. This
+  // preserves the first message while reconciliation or reconnect remains pending.
   const cloudSyncReady = ref(false)
   /**
    * Number of message sends + tombstone deletes waiting on cloud delivery.
@@ -610,18 +607,10 @@ export const useChatSessionStore = defineStore('chat-session', () => {
     const isCloudUser = currentUserId !== 'local'
 
     // ROOT CAUSE:
-    //
-    // If we awaited the cloud DELETE before mutating in-memory state, any
-    // other code path firing a `persistSession` during that await would
-    // snapshot the index *with the doomed entry still in it* and write that
-    // snapshot to IDB. The user then sees the row reappear after a reload.
-    //
-    // Old behavior: await mapper.deleteChat → mutate → persist; the
-    // overlapping persistSession races us and wins.
-    //
-    // We fixed this by performing every in-memory and IDB mutation
-    // synchronously up front, then firing the cloud DELETE as
-    // fire-and-forget. Persistence races now read the post-deletion state.
+    // Awaiting cloud deletion before local mutation let concurrent persistence save the doomed
+    // session and restore it after reload.
+    // Local memory and IndexedDB updates now precede the asynchronous cloud DELETE. Concurrent
+    // persistence therefore sees post-deletion state.
     delete sessionMetas.value[sessionId]
     delete sessionMessages.value[sessionId]
     loadedSessions.delete(sessionId)
@@ -649,11 +638,9 @@ export const useChatSessionStore = defineStore('chat-session', () => {
 
     if (isCloudUser) {
       const remoteChatId = cloudChatId ?? sessionId
-      // Tombstone first: even if the cloud DELETE never reaches the server
-      // (offline, transient 5xx), the next reconcile will see the remote id
-      // here and skip the adopt branch — preventing the ghost-session bug
-      // where the server still has the row and re-creates the local mapping.
-      // The reconcile-driven `drainTombstones` retries failed DELETEs.
+      // Record a tombstone before cloud deletion. If DELETE fails, reconciliation skips remote
+      // adoption and cannot recreate the local session.
+      // drainTombstones retries failed deletions during reconciliation.
       await enqueuePersist(() => chatSessionsRepo.addTombstone(currentUserId, remoteChatId))
       if (cloudChatId) {
         getCloudMapper().deleteChat(cloudChatId).then(

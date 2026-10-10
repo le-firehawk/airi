@@ -171,14 +171,12 @@ export function createRequestId(): string {
   return `req_${Date.now().toString(36)}_${(counter++).toString(36)}`
 }
 
-// NOTICE: Patterns observed in WebGPU device loss errors across Chromium,
-// Firefox, Safari, and ONNX Runtime Web / transformers.js. Because we do not
-// own the GPUDevice (it is created internally by transformers.js / ORT-web),
-// we cannot attach a `device.lost` promise handler directly — string matching
-// on thrown errors is the only available detection signal.
-// References:
-//   - https://gpuweb.github.io/gpuweb/#gpudevicelostinfo
-//   - https://github.com/huggingface/transformers.js/issues/715
+// NOTICE:
+// Transformers.js and ORT-web own GPUDevice, so this code cannot subscribe to device.lost. Thrown
+// error text supplies detection instead.
+// Sources: https://gpuweb.github.io/gpuweb/#gpudevicelostinfo and
+// https://github.com/huggingface/transformers.js/issues/715.
+// Replace matching when the inference runtime exposes device-loss events.
 const DEVICE_LOSS_PATTERNS = [
   'device was lost',
   'device lost',

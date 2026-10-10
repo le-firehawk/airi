@@ -1473,13 +1473,10 @@ describe('setupExtensionHost', () => {
     }))
 
     // ROOT CAUSE:
-    //
-    // The loaded projection used to be the only input to unload planning. A failed
-    // runtime stop hid the Extension from that projection, so a second unload made
-    // an empty plan and never retried the session that still belonged to the Host.
-    //
-    // We keep cleanup ownership separate from loaded state. A later unload can then
-    // retry the remaining runtime cleanup without advertising the Extension as loaded.
+    // A failed runtime stop removed the Extension from loaded state, so later unload plans skipped
+    // its surviving session.
+    // Cleanup ownership now remains separate from loaded state, allowing later unloads to retry
+    // cleanup.
     await invokeUnload({ extensionId: 'stop-failure-extension' })
 
     expect(stopSpy).toHaveBeenCalledTimes(2)

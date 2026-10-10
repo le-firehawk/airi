@@ -125,11 +125,10 @@ async function refetchSources() {
 
     sources.value = nextSources.map(source => ({
       ...source,
-      // NOTICE(@nekomeowww): In probability of 9/10, the window thumbnail is purely empty or black, sources printed and
-      // nothing is returned from the desktopCapturer API.
-      // NOTICE(@sumimakito): Not only thumbnail is empty, the appIcon could be empty as well with nothing returned.
-      // REVIEW(@sumimakito): This has nothing to do with our side, probably related to a Electron bug, you can
-      // read more here https://github.com/electron/electron/issues/44504
+      // NOTICE:
+      // Electron desktopCapturer can return empty thumbnails and app icons.
+      // Source: https://github.com/electron/electron/issues/44504.
+      // Remove these empty-image checks when Electron reliably returns capture images.
       appIconURL: source.appIcon && source.appIcon.length > 0 ? createObjectUrlFromBytes(source.appIcon, 'image/png') : undefined,
       thumbnailURL: source.thumbnail && source.thumbnail.length > 0 ? createObjectUrlFromBytes(source.thumbnail, 'image/jpeg') : undefined,
     }))

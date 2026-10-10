@@ -94,15 +94,9 @@ if (appUserDataPath) {
 // https://github.com/electron/electron/issues/41763#issuecomment-3143338995
 if (isLinux) {
   // NOTICE:
-  // All enabled features must be joined into a single comma-separated string
-  // instead of calling appendSwitch('enable-features', ...) once per feature.
-  // Root cause: Chromium's commandLine stores switches by key, so each
-  // appendSwitch('enable-features', ...) call overwrites the previous value and
-  // only the last feature survives.
-  // Source: Chromium base::CommandLine behavior; see
-  // https://github.com/electron/electron/issues/41763 for the WebGPU setup this supports.
-  // Removal condition: never for the join itself; this block can be deleted once
-  // WebGPU works on Linux Electron without manual feature switches.
+  // Join feature flags because Chromium replaces repeated enable-features switches.
+  // Source: https://github.com/electron/electron/issues/41763.
+  // Remove these Linux switches when Electron supports WebGPU without them.
   const enabledFeatures = [
     'SharedArrayBuffer',
   ]
@@ -127,15 +121,9 @@ if (isLinux) {
   }
   else {
     // NOTICE:
-    // Vulkan must only be enabled on non-Wayland sessions, otherwise GPU
-    // initialization fails or rendering glitches appear.
-    // Root cause: Vulkan is incompatible with '--ozone-platform=wayland' in
-    // Chromium's surface factory; the Wayland Ozone backend cannot present
-    // Vulkan surfaces.
-    // Source: Chromium Ozone/Wayland surface factory; workaround tracked via
-    // https://github.com/electron/electron/issues/41763 (WebGPU on Linux).
-    // Removal condition: when Chromium/Electron supports Vulkan with the Wayland
-    // Ozone backend, drop the isWayland guard and always push 'Vulkan'.
+    // Wayland cannot present Vulkan surfaces through Chromium's Ozone backend.
+    // Source: https://github.com/electron/electron/issues/41763.
+    // Remove the isWayland guard when Electron supports Vulkan on Wayland.
     enabledFeatures.push('Vulkan')
   }
 

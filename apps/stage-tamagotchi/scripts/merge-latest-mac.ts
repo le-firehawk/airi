@@ -51,10 +51,6 @@ export const regexpHasX64 = /(^|[-_/])x64([-.]|$)/i
 export const regexpIsMacZip = /-mac\.zip$/i
 export const regexpIsArm64MacZip = /-arm64-mac\.zip$/i
 
-function isArm64MacZip(url: string): boolean {
-  return regexpIsArm64MacZip.test(url)
-}
-
 function isX64MacZip(url: string): boolean {
   return regexpIsMacZip.test(url) && !regexpContainsArm64.test(url)
 }
@@ -66,7 +62,7 @@ function getMacZipUrls(updateInfo: UpdateInfo): string[] {
 function assertContainsMacZip(updateInfo: UpdateInfo, platform: Exclude<Platform, 'both' | 'none'>, filePath: string) {
   const zipUrls = getMacZipUrls(updateInfo)
 
-  if (platform === 'arm64' && !zipUrls.some(isArm64MacZip)) {
+  if (platform === 'arm64' && !zipUrls.some(url => regexpIsArm64MacZip.test(url))) {
     throw new Error(`arm64 update info is missing an arm64 mac zip entry: ${filePath}`)
   }
 
@@ -77,7 +73,7 @@ function assertContainsMacZip(updateInfo: UpdateInfo, platform: Exclude<Platform
 
 function assertMergedContainsBothMacZips(updateInfo: UpdateInfo) {
   const zipUrls = getMacZipUrls(updateInfo)
-  const hasArm64 = zipUrls.some(isArm64MacZip)
+  const hasArm64 = zipUrls.some(url => regexpIsArm64MacZip.test(url))
   const hasX64 = zipUrls.some(isX64MacZip)
 
   if (!hasArm64 || !hasX64) {

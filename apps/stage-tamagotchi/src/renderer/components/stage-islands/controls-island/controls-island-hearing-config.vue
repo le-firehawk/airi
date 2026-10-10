@@ -16,16 +16,10 @@ const { enabled, stream } = storeToRefs(settingsAudioDeviceStore)
 const { audioContext, initialize, dispose, pause } = useAudioContextFromStream(stream)
 const { volumeLevel, startAnalyzer, stopAnalyzer } = useAudioAnalyzer()
 
-// NOTICE: Do not call `startStream()` / `stopStream()` from this component.
-//
-// `useSettingsAudioDevice()` already owns the mic stream lifecycle via the persisted `enabled` state.
-// We previously toggled the stream here as well, which introduced a second lifecycle controller: the
-// dialog could recreate the MediaStream while the page-level transcription pipeline still believed
-// the old session was active.
-//
-// That produced the "VAD still works, but no transcript arrives" failure after retoggling the mic.
-//
-// This component should only react to the current stream to drive analyzer UI state.
+// useSettingsAudioDevice owns the microphone lifecycle through persisted enabled state.
+// Calling startStream or stopStream here recreated streams while transcription still used the old
+// session, leaving VAD active without transcripts.
+// This component only observes the current stream for analyzer display.
 watch([enabled, stream], ([isEnabled, currentStream]) => {
   if (isEnabled && currentStream) {
     initialize().then(() => {

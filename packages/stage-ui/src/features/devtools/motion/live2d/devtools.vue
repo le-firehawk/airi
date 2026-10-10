@@ -69,10 +69,6 @@ function publishComposedPose(nextPose: Live2DMotionControlPose, nextEyeView = ey
   motionControl.setPose(ownerId, pose.value, dynamics.value)
 }
 
-function publishPose(nextPose: Live2DMotionControlPose) {
-  publishComposedPose(nextPose)
-}
-
 function publishSystemAudioMouth(mouthOpen: number) {
   const nextPose = { ...sourcePose.value, mouthOpen }
   pose.value = applyLive2DMotionViewTarget(nextPose, eyeView.value)
@@ -190,7 +186,7 @@ function updateEyeView(nextView: typeof eyeView.value) {
 }
 
 const recordingController = useLive2DMotionRecording({
-  applyPose: publishPose,
+  applyPose: publishComposedPose,
   releasePose: publishRelease,
   initialRecording: defaultLive2DMotionRecording,
 })
@@ -216,7 +212,7 @@ function handlePageHide() {
 }
 
 function setPose(nextPose: Live2DMotionControlPose) {
-  publishPose(nextPose)
+  publishComposedPose(nextPose)
   recordingController.recordPose(nextPose)
 }
 
@@ -402,7 +398,7 @@ onUnmounted(() => {
           <ProceduralMotion
             :recording="recordingController.recording.value"
             :disabled="editorPlaying || recordingController.status.value.type === 'armed' || recordingController.status.value.type === 'recording'"
-            @pose="publishPose"
+            @pose="publishComposedPose"
             @release="publishRelease"
             @playback="updateProceduralMotionPlayback"
           />

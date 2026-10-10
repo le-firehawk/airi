@@ -66,13 +66,10 @@ describe('speech store helpers', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // The speech store watched its model-list projection even when no UI used
-  // that projection. Each synced provider snapshot invalidated the projection.
-  // The watcher then called getModelsForProvider twice when the cache was empty.
-  //
-  // We fixed this by keeping model selection behind explicit operations. A UI
-  // consumer can still read providerModels when it needs the cached catalog.
+  // A watcher observed an unused model projection. Provider snapshots invalidated it and duplicated
+  // catalog requests when uncached.
+  // Model selection now uses explicit operations. UI consumers can still read providerModels for
+  // the cached catalog.
   it('does not query the model cache when only provider state changes', async () => {
     const providersStore = useProviderStore()
     vi.spyOn(providersStore, 'listProviderVoices').mockResolvedValue([])
@@ -93,13 +90,10 @@ describe('speech store helpers', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // A synced snapshot replaced the empty voice catalog with another empty
-  // object. The voice watcher then assigned undefined to an undefined ref.
-  // refManualReset reported that no-op assignment as another Pinia mutation.
-  //
-  // Catalog refreshes now stay outside the speech settings snapshot. They
-  // must not publish settings when no selected voice needs an update.
+  // Cloning an empty voice catalog triggered a watcher that assigned undefined to an already
+  // undefined ref. refManualReset emitted another mutation.
+  // Catalog refreshes now remain outside settings snapshots and publish only necessary voice
+  // changes.
   it('does not publish a second mutation for an unresolved voice', async () => {
     const providersStore = useProviderStore()
     vi.spyOn(providersStore, 'listProviderVoices').mockResolvedValue([])
@@ -122,14 +116,9 @@ describe('speech store helpers', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // Synced stores arrive in separate snapshots. The speech store can receive
-  // its selected provider before the matching provider configuration snapshot.
-  // A metadata watcher treated this temporary state as provider deletion and
-  // replaced the synchronized selection with speech-noop.
-  //
-  // We fixed this by keeping provider selection command-driven. A provider
-  // configuration snapshot no longer edits the speech module selection.
+  // The selected provider could arrive before its configuration snapshot. A watcher misread this
+  // temporary gap as deletion and selected speech-noop.
+  // Provider selection is now command-driven. Configuration snapshots cannot edit it.
   it('keeps the selected provider while provider snapshots are incomplete', async () => {
     const providersStore = useProviderStore()
     const providerConfigStore = useProviderConfigStore()

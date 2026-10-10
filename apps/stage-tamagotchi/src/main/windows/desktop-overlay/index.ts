@@ -102,12 +102,9 @@ export async function setupDesktopOverlayWindow(params: {
     })
   }
 
-  // NOTICE: Wire eventa RPC BEFORE loading the renderer page.
-  // The overlay's onMounted fires during load() and immediately starts
-  // polling via callTool. If the handlers aren't registered yet, the
-  // first eventa invoke hangs forever (no response dispatched back to
-  // this window), and all subsequent poll cycles never fire because
-  // the poll loop awaits each call sequentially.
+  // Register Eventa handlers before loading the renderer. Its onMounted starts sequential callTool
+  // polling immediately.
+  // Without a handler, the first invoke never settles and blocks every later poll.
   await setupDesktopOverlayElectronInvokes({
     window: overlayWindow,
     mcpManager: params.mcpManager,

@@ -311,13 +311,10 @@ async function handleArtistryTrigger(params: {
   const mode = props.mode || (remixId ? 'remix' : 'generate')
   const triggerFingerprint = `${mode}:${remixId || ''}:${prompt || ''}`
 
-  // [BY DESIGN]: We only trigger a new generation if the fingerprint (mode + remixId + prompt)
-  // has actually changed for this specific widget instance. This denotes our stance on the matter:
-  // it serves as a critical safety guard against redundant, billable API calls triggered
-  // by reactive UI loops or state synchronization "storms". While this prevents retrying
-  // the exact same prompt on the same widget instance without a manual modification,
-  // it protects users from unexpected credit consumption in a high-frequency reactive
-  // bridge environment. (Refer to Catalog Issue #31).
+  // Only changed mode, remixId, or prompt values trigger generation for this widget.
+  // This prevents reactive loops from causing duplicate billable requests. Retrying identical input
+  // requires a manual change.
+  // See Catalog Issue #31.
   if (status === 'generating' && lastTriggerMap.get(params.id) !== triggerFingerprint && (prompt || remixId)) {
     log.log(`🎯 TRIGGER DETECTED [${params.id}]: ${triggerFingerprint} | Mode: ${mode} | Provider: ${providerId}`)
     lastTriggerMap.set(params.id, triggerFingerprint)

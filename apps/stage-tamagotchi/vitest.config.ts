@@ -3,6 +3,7 @@ import { cwd } from 'node:process'
 import vue from '@vitejs/plugin-vue'
 import UnoCss from 'unocss/vite'
 import Info from 'unplugin-info/vite'
+import VueRouter from 'vue-router/vite'
 
 import { DownloadLive2DSDK } from '@proj-airi/unplugin-live2d-sdk'
 import { playwright } from '@vitest/browser-playwright'
@@ -15,6 +16,8 @@ export default defineConfig({
   root: import.meta.dirname,
   plugins: [
     Info(),
+    // Use the app's route-block transform when browser tests mount settings pages.
+    VueRouter({ routesFolder: [], dts: false }),
     vue(),
     UnoCss({
       ...unoConfig,

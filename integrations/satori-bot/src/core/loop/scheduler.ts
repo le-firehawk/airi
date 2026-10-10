@@ -244,7 +244,8 @@ export async function onMessageArrival(
         selfId,
       )
 
-      if (currMsg.event.user && currMsg.event.message?.content) {
+      // Senderless events stay unread, but message history requires an actual user ID.
+      if (sourceUserId && currMsg.event.message?.content) {
         await recordMessage(
           channelId,
           sourceUserId,

@@ -40,9 +40,18 @@ export function setupMessageEventHandler(
       return
     }
 
-    logger.log(`Received message from ${event.user.id} in channel [${event.platform}] ${event.channel.id}: ${message.content}`)
+    const channel = event.channel
+    if (!channel) {
+      // Message events require a channel for routing and deduplication.
+      logger.withField('eventId', event.id).warn('Skipping message without a channel')
+      return
+    }
 
-    const messageId = `${event.channel.id}-${message.id}`
+    logger
+      .withField('userId', event.user?.id ?? event.member?.user?.id)
+      .log(`Received message in channel [${event.platform}] ${channel.id}: ${message.content}`)
+
+    const messageId = `${channel.id}-${message.id}`
     if (!botContext.processedIds.has(messageId)) {
       botContext.processedIds.add(messageId)
     }

@@ -27,6 +27,7 @@ export async function imagineAnAction(
   const logger = useLogg('imagineAnAction').useGlobalConfig()
 
   let responseText = ''
+  const incomingEvents = globalStates.incomingEvents
 
   const requestMessages = message.messages(
     message.system(
@@ -38,8 +39,8 @@ export async function imagineAnAction(
     ...messages,
     message.user(
       [
-        globalStates?.incomingEvents?.length > 0
-          ? `Incoming events:\n${globalStates.incomingEvents.filter(Boolean).map(event =>
+        incomingEvents?.length
+          ? `Incoming events:\n${incomingEvents.filter(Boolean).map(event =>
             `- [${event.channel?.name || event.channel?.id}] ${event.user?.name || event.user?.id}: ${event.message?.content || '[No content]'}`,
           ).join('\n')}`
           : '',
@@ -69,14 +70,14 @@ export async function imagineAnAction(
     }
 
     const res = await generateText(req)
-    res.text = res.text.replace(/<think>[\s\S]*?<\/think>/, '').trim()
+    const text = res.text?.replace(/<think>[\s\S]*?<\/think>/, '').trim()
 
-    if (!res.text) {
+    if (!text) {
       throw new Error('No response text')
     }
 
     logger.withFields({
-      response: res.text,
+      response: text,
       unreadEvents: Object.fromEntries(Object.entries(globalStates.unreadEvents).map(([key, value]) => [key, value.length])),
       now: new Date().toLocaleString(),
       totalTokens: res.usage.totalTokens,
@@ -84,7 +85,7 @@ export async function imagineAnAction(
       completion_tokens: res.usage.outputTokens,
     }).log('Generated action')
 
-    responseText = res.text
+    responseText = text
       .replace(/^```(?:json)?\s*/m, '')
       .replace(/\s*```\s*$/m, '')
       .trim()

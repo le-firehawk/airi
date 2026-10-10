@@ -54,14 +54,24 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build shared packages
         run: pnpm run build:packages
+      - name: Build hosted chat contracts
+        run: pnpm -F @proj-airi/server-sdk-shared run build
       - name: Check repository lint
         run: pnpm lint
       - name: Check repository types
-        run: pnpm run typecheck --concurrency=2 --filter='./integrations/**'
+        run: pnpm run typecheck --concurrency=2 --continue=always --filter='./integrations/**'
       # The module runner supports this monorepo's extensionless TypeScript imports.
       # Select it explicitly instead of relying on Vite's future native default.
       - name: Test CI diagnostic gates
         run: pnpm exec vitest run --configLoader runner --project github-scripts .github/scripts/run-godot-checked.test.ts
+      - name: Test Telegram integration regressions
+        run: pnpm -F @proj-airi/telegram-bot exec vitest run --configLoader runner --project node --maxWorkers=1
+      - name: Test Satori integration regressions
+        run: pnpm -F @proj-airi/satori-bot exec vitest run --configLoader runner --config vitest.config.ts --project satori-bot --maxWorkers=1
+      - name: Test Discord integration regressions
+        run: pnpm -F @proj-airi/discord-bot exec vitest run --configLoader runner --config vitest.config.ts --project discord-bot --maxWorkers=1
+      - name: Test Minecraft integration regressions
+        run: pnpm -F @proj-airi/minecraft-bot run test --run --configLoader runner --project minecraft-bot --maxWorkers=1
       - name: Test Three runtime and pivot
         run: pnpm -F @proj-airi/stage-ui-three exec vitest run --configLoader runner
       - name: Test desktop foundations and update routing
@@ -130,7 +140,7 @@ jobs:
       - name: Test Spine browser runtimes
         run: pnpm exec vitest run --configLoader runner --config packages/stage-ui-spine/vitest.config.ts --project stage-ui-spine:browser
       - name: Test motion library and games in the browser
-        run: pnpm -F @proj-airi/stage-ui exec vitest run --configLoader runner --project browser src/features/motions/vrm src/features/companion-games src/components/scenarios/companion-games src/composables/canvas-alpha.browser.test.ts src/composables/canvas-alpha-use-pixel.browser.test.ts src/libs/audio/vad.browser.test.ts src/stores/settings/general.browser.test.ts
+        run: pnpm -F @proj-airi/stage-ui exec vitest run --configLoader runner --project browser src/features/motions/vrm src/features/companion-games src/components/scenarios/companion-games src/components/layouts/ripple-grid/index.browser.test.ts src/composables/canvas-alpha.browser.test.ts src/composables/canvas-alpha-use-pixel.browser.test.ts src/libs/audio/vad.browser.test.ts src/stores/settings/general.browser.test.ts
       - name: Test Kirie browser events
         run: pnpm exec vitest run --configLoader runner --config apps/stage-tamagotchi-kirie/vitest.config.ts --project browser src-web/src/renderer/widgets/extension-ui/shared/eventa-runtime.browser.test.ts
       - name: Test desktop browser behavior

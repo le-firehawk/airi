@@ -7,7 +7,7 @@ import type { ProviderViews } from './views'
  *
  * The core provider contract remains runtime-neutral.
  */
-export interface ProviderDefinition<TConfig = Record<string, unknown>, TId extends string = string> extends CoreProviderDefinition<TConfig, TId> {
+export interface ProviderDefinition<TConfig extends Record<string, unknown> = Record<string, unknown>, TId extends string = string> extends CoreProviderDefinition<TConfig, TId> {
   /** Optional stage-ui views for this Provider. */
   views?: ProviderViews
 }

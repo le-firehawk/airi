@@ -7,7 +7,7 @@ const providerRegistry = createProviderRegistry(portableProviderDefinitions)
 export type PortableProviderId = typeof portableProviderDefinitions[number]['id']
 
 /** Returns the portable definition with this stable provider id. */
-export function getDefinedProvider(id: PortableProviderId) {
+export function getDefinedProvider<const TId extends PortableProviderId>(id: TId) {
   return providerRegistry.get(id)
 }
 

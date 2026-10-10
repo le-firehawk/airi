@@ -146,7 +146,7 @@ export const providerOpenRouterAudioSpeech = defineProvider<OpenRouterAudioConfi
       },
     }
   },
-  validationRequiredWhen: config => Boolean(config.apiKey?.trim()),
+  validationRequiredWhen: config => Boolean((typeof config.apiKey === 'string' && config.apiKey.trim())),
   validators: {
     validateConfig: [
       ({ t }) => ({

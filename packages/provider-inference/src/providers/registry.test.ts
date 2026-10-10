@@ -1,4 +1,5 @@
 import type { PortableProviderId } from '../index'
+import type { providerOpenAI } from './cloud/openai'
 
 import { describe, expect, expectTypeOf, it } from 'vitest'
 
@@ -9,7 +10,10 @@ describe('portable provider registry', () => {
     expectTypeOf<'openai'>().toExtend<PortableProviderId>()
     expectTypeOf<string>().not.toExtend<PortableProviderId>()
 
-    expect(getDefinedProvider('openai')).toBeDefined()
+    const openai = getDefinedProvider('openai')!
+    expectTypeOf(openai.createProvider).parameter(0).toEqualTypeOf<Parameters<typeof providerOpenAI.createProvider>[0]>()
+    expectTypeOf<Record<string, unknown>>().not.toExtend<Parameters<typeof openai.createProvider>[0]>()
+    expect(openai).toBeDefined()
   })
 
   it('registers each portable definition by id', () => {

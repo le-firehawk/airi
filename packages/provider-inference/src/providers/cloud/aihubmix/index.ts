@@ -63,7 +63,7 @@ export const providerAIHubMix = defineProvider<AIHubMixConfig, 'aihubmix'>({
   },
 
   validationRequiredWhen(config) {
-    return !!config.apiKey?.trim()
+    return !!(typeof config.apiKey === 'string' && config.apiKey.trim())
   },
   validators: {
     ...createOpenAICompatibleValidators({

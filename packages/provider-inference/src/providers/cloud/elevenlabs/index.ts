@@ -92,7 +92,7 @@ export const providerElevenLabs = defineProvider<ElevenLabsConfig, 'elevenlabs'>
     return createUnElevenLabs(config.apiKey.trim(), config.baseUrl?.trim() ?? 'https://unspeech.hyp3r.link/v1/') as SpeechProviderWithExtraOptions<string, UnElevenLabsOptions>
   },
 
-  validationRequiredWhen: config => Boolean(config.apiKey?.trim() && config.baseUrl?.trim()),
+  validationRequiredWhen: config => Boolean((typeof config.apiKey === 'string' && config.apiKey.trim()) && (typeof config.baseUrl === 'string' && config.baseUrl.trim())),
   validators: createElevenLabsValidators(),
   extraMethods: {
     listModels: async () => elevenLabsModels.map(model => ({

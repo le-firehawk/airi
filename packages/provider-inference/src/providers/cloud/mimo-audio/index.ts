@@ -219,7 +219,7 @@ export const providerMimoAudioSpeech = defineProvider<MimoSpeechConfig, 'mimo-au
   icon: 'i-simple-icons:xiaomi',
   createProviderConfig: () => mimoSpeechConfigSchema,
   createProvider: createMimoSpeechProvider,
-  validationRequiredWhen: config => Boolean(config.apiKey?.trim() && config.baseUrl?.trim()),
+  validationRequiredWhen: config => Boolean((typeof config.apiKey === 'string' && config.apiKey.trim()) && (typeof config.baseUrl === 'string' && config.baseUrl.trim())),
   validators: createMimoValidators<MimoSpeechConfig>('mimo-audio-speech'),
   extraMethods: {
     listModels: async () => [
@@ -255,7 +255,7 @@ export const providerMimoAudioTranscription = defineProvider<MimoTranscriptionCo
   },
   createProviderConfig: () => mimoTranscriptionConfigSchema,
   createProvider: createMimoTranscriptionProvider,
-  validationRequiredWhen: config => Boolean(config.apiKey?.trim() && config.baseUrl?.trim()),
+  validationRequiredWhen: config => Boolean((typeof config.apiKey === 'string' && config.apiKey.trim()) && (typeof config.baseUrl === 'string' && config.baseUrl.trim())),
   validators: createMimoValidators<MimoTranscriptionConfig>('mimo-audio-transcription'),
   extraMethods: {
     listModels: async () => [

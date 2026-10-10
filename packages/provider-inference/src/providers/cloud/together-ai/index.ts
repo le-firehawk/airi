@@ -57,7 +57,7 @@ export const providerTogetherAI = defineProvider<TogetherConfig, 'together-ai'>(
   },
 
   validationRequiredWhen(config) {
-    return !!config.apiKey?.trim()
+    return !!(typeof config.apiKey === 'string' && config.apiKey.trim())
   },
   validators: {
     ...createOpenAICompatibleValidators({

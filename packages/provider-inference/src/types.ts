@@ -14,7 +14,7 @@ import type { ResponsesOptions } from '@xsai-ext/responses'
 import type { ProgressInfo } from '@xsai-transformers/shared/types'
 import type { MaybePromise } from 'clustr'
 import type { AIChatModelCard } from 'model-bank/types'
-import type { $ZodType } from 'zod/v4/core'
+import type { $ZodObjectDef, $ZodType } from 'zod/v4/core'
 
 /** Request configuration for the Responses protocol. The caller owns input and tools. */
 export type ResponsesConfig = Pick<ResponsesOptions, 'apiKey' | 'baseURL' | 'fetch' | 'headers' | 'model' | 'reasoning'>
@@ -129,12 +129,15 @@ export interface ProviderOnboardingField {
   defaultValue?: string
 }
 
+/** Unvalidated editor values. Each provider must narrow fields before using their values. */
+export type ProviderConfigDraft<TConfig> = { [K in keyof TConfig]?: unknown }
+
 /** Inputs available while a Provider builds its configuration schema. */
 export interface ProviderConfigContext<TConfig> extends ProviderContext {
   /** Cancels runtime discovery that contributes schema metadata. */
   abortSignal?: AbortSignal
   /** Current draft values. Providers can use them to resolve dependent fields. */
-  config?: Partial<TConfig>
+  config?: ProviderConfigDraft<TConfig>
 }
 
 /** Serializable model discovery result returned across renderer boundaries. */
@@ -157,7 +160,7 @@ export interface ProviderExtraMethods<TConfig> {
    * fingerprints these fields separately from model and authentication ownership.
    * Omit synthesis-only controls. Without a selector, all config fields invalidate the cache.
    */
-  voiceCatalogConfig?: (config: TConfig) => Record<string, unknown>
+  voiceCatalogConfig?: (config: ProviderConfigDraft<TConfig>) => Record<string, unknown>
   /**
    * Returns the voice catalogue. `model` lets providers whose voices vary by
    * model variant (Volcengine streaming TTS 1.0 vs 2.0 differ in catalogue)
@@ -257,8 +260,11 @@ export interface VoiceInfo {
   }[]
 }
 
+/** Object schema whose declared fields own runtime configuration defaults and transformations. */
+export type ProviderConfigSchema<TConfig> = $ZodType<TConfig> & { _zod: { def: $ZodObjectDef } }
+
 /** A provider definition and its configuration contract. */
-export interface ProviderDefinition<TConfig = Record<string, unknown>, TId extends string = string> {
+export interface ProviderDefinition<TConfig extends Record<string, unknown> = Record<string, unknown>, TId extends string = string> {
   /** Stable provider definition id. */
   id: TId
   order?: number
@@ -315,7 +321,7 @@ export interface ProviderDefinition<TConfig = Record<string, unknown>, TId exten
   configuredBy?: ProviderConfiguredBy
 
   /** Builds the validation schema and its UI metadata for the current draft. */
-  createProviderConfig: (contextOptions: ProviderConfigContext<TConfig>) => MaybePromise<$ZodType<TConfig>>
+  createProviderConfig: (contextOptions: ProviderConfigContext<TConfig>) => MaybePromise<ProviderConfigSchema<TConfig>>
   onboardingFields?: (ctx: ProviderContext) => MaybePromise<ProviderOnboardingField[]>
   createProvider: (config: TConfig) => MaybePromise<ProviderInstance>
   extraMethods?: ProviderExtraMethods<TConfig>
@@ -325,7 +331,7 @@ export interface ProviderDefinition<TConfig = Record<string, unknown>, TId exten
    *
    * @default false
    */
-  validationRequiredWhen?: (config: TConfig) => MaybePromise<boolean>
+  validationRequiredWhen?: (config: ProviderConfigDraft<TConfig>) => MaybePromise<boolean>
   validators?: {
     validateConfig?: Array<(contextOptions: ProviderContext) => MaybePromise<ProviderConfigValidator<TConfig>>>
     validateProvider?: Array<(contextOptions: ProviderContext) => MaybePromise<ProviderRuntimeValidator<TConfig>>>
@@ -391,6 +397,12 @@ export interface ProviderDefinition<TConfig = Record<string, unknown>, TId exten
       }
     }
   }
+}
+
+/** A typed declaration paired with its validated runtime lookup boundary. */
+export interface RegisteredProviderDefinition<TConfig extends Record<string, unknown>, TId extends string = string> extends ProviderDefinition<TConfig, TId> {
+  /** Validates persisted values before invoking typed execution callbacks. */
+  runtime: ProviderDefinition<Record<string, unknown>, TId>
 }
 
 /** Reasoning modes that AIRI can request from a chat provider. */

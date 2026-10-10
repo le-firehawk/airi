@@ -12,7 +12,7 @@ import './nvidia'
 import './official'
 import './prompt-api'
 
-registerProviders(portableProviderDefinitions)
+registerProviders(portableProviderDefinitions.map(definition => definition.runtime))
 
 export {
   OFFICIAL_TRANSCRIPTION_PROVIDER_ID,

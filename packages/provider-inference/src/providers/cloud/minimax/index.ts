@@ -55,7 +55,7 @@ export const providerMinimax = defineProvider<MinimaxCnConfig, 'minimax'>({
   },
 
   validationRequiredWhen(config) {
-    return !!config.apiKey?.trim()
+    return !!(typeof config.apiKey === 'string' && config.apiKey.trim())
   },
   validators: {
     ...createOpenAICompatibleValidators({
@@ -92,7 +92,7 @@ export const providerMinimaxGlobal = defineProvider<MinimaxGlobalConfig, 'minima
   },
 
   validationRequiredWhen(config) {
-    return !!config.apiKey?.trim()
+    return !!(typeof config.apiKey === 'string' && config.apiKey.trim())
   },
   validators: {
     ...createOpenAICompatibleValidators({

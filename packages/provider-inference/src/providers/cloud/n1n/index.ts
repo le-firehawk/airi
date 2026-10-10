@@ -45,7 +45,7 @@ export const providerN1N = defineProvider<N1NConfig, 'n1n'>({
   },
 
   validationRequiredWhen(config) {
-    return !!config.apiKey?.trim()
+    return !!(typeof config.apiKey === 'string' && config.apiKey.trim())
   },
   validators: {
     ...createOpenAICompatibleValidators({

@@ -1,25 +1,31 @@
-import type { ProviderDefinition } from '../types'
+import type { ProviderDefinition, RegisteredProviderDefinition } from '../types'
+
+import { createRuntimeProviderDefinition } from './runtime-definition'
+
+/** Fields used for lookup and deterministic display ordering. */
+type ProviderRegistration = Pick<ProviderDefinition, 'id' | 'name' | 'order'>
 
 /**
- * A read-only lookup surface for provider definitions.
- *
- * The caller supplies the definitions. Importing a provider module does not
- * change a shared registry.
+ * A read-only lookup surface that retains each definition's configuration contract.
+ * The caller supplies definitions. Provider imports do not change a shared registry.
  */
-export interface ProviderRegistry {
-  get: (id: string) => ProviderDefinition | undefined
-  list: () => ProviderDefinition[]
+export interface ProviderRegistry<TDefinition extends ProviderRegistration> {
+  get: <TId extends string>(id: TId) => (TDefinition & { id: TId }) | undefined
+  list: () => TDefinition[]
 }
 
-/**
- * Keeps the existing declaration style while making provider modules pure.
- *
- * The application registry receives the returned definitions explicitly.
- */
-export function defineProvider<TConfig, const TId extends string = string>(
+/** Pairs a typed declaration with an explicit boundary for unvalidated persisted configuration. */
+export function defineProvider<TConfig extends Record<string, unknown>, const TId extends string = string>(
   definition: ProviderDefinition<TConfig, TId>,
-): ProviderDefinition<TConfig, TId> {
-  return definition
+): RegisteredProviderDefinition<TConfig, TId> {
+  return { ...definition, runtime: createRuntimeProviderDefinition(definition) }
+}
+
+function hasId<TDefinition extends ProviderRegistration, TId extends string>(
+  definition: TDefinition | undefined,
+  id: TId,
+): definition is TDefinition & { id: TId } {
+  return definition?.id === id
 }
 
 /**
@@ -27,8 +33,10 @@ export function defineProvider<TConfig, const TId extends string = string>(
  *
  * @throws {Error} When more than one definition declares the same id.
  */
-export function createProviderRegistry(definitions: readonly ProviderDefinition[]): ProviderRegistry {
-  const definitionsById = new Map<string, ProviderDefinition>()
+export function createProviderRegistry<const TDefinitions extends readonly ProviderRegistration[]>(
+  definitions: TDefinitions,
+): ProviderRegistry<TDefinitions[number]> {
+  const definitionsById = new Map<string, TDefinitions[number]>()
 
   for (const definition of definitions) {
     if (definitionsById.has(definition.id))
@@ -52,7 +60,12 @@ export function createProviderRegistry(definitions: readonly ProviderDefinition[
   })
 
   return {
-    get: id => definitionsById.get(id),
+    get: (id) => {
+      const definition = definitionsById.get(id)
+      return hasId(definition, id) ? definition : undefined
+    },
     list: () => [...sortedDefinitions],
   }
 }
+
+export { createRuntimeProviderDefinition } from './runtime-definition'

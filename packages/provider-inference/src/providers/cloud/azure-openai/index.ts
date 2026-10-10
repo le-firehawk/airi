@@ -1,5 +1,3 @@
-import type { JsonSchema } from 'xsschema'
-
 import { errorMessageFrom } from '@moeru/std'
 import { createOpenAI } from '@xsai-ext/providers/create'
 import { z } from 'zod'
@@ -101,10 +99,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value))
 }
 
-function isJsonSchema(value: unknown): value is JsonSchema {
-  return isRecord(value)
-}
-
 /**
  * Converts primitive tool unions to the form that Azure OpenAI accepts.
  *
@@ -123,7 +117,7 @@ function normalizeAzureOpenAIChatTools(tools: unknown): unknown {
       return tool
 
     const parameters = tool.function.parameters
-    if (!isJsonSchema(parameters))
+    if (!isRecord(parameters))
       return tool
 
     return {
@@ -270,7 +264,7 @@ export const providerAzureOpenAI = defineProvider<AzureOpenAIConfig, 'azure-open
   },
 
   validationRequiredWhen(config) {
-    return !!config.apiKey?.trim()
+    return !!(typeof config.apiKey === 'string' && config.apiKey.trim())
   },
   validators: {
     validateConfig: [

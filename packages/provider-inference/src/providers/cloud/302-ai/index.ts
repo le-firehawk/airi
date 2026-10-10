@@ -49,7 +49,7 @@ export const provider302AI = defineProvider<AI302Config, '302-ai'>({
   },
 
   validationRequiredWhen(config) {
-    return !!config.apiKey?.trim()
+    return !!(typeof config.apiKey === 'string' && config.apiKey.trim())
   },
   validators: {
     ...createOpenAICompatibleValidators({

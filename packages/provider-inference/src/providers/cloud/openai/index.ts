@@ -46,7 +46,7 @@ export const providerOpenAI = defineProvider<Config, 'openai'>({
       type: 'boolean',
       labelLocalized: t('settings.pages.providers.catalog.edit.config.common.fields.field.web-search.label'),
       descriptionLocalized: t('settings.pages.providers.catalog.edit.config.common.fields.field.web-search.description'),
-      disabled: config?.api === 'chat-completions' || !supportsOpenAIWebSearchEndpoint(config?.baseUrl ?? 'https://api.openai.com/v1'),
+      disabled: config?.api === 'chat-completions' || !supportsOpenAIWebSearchEndpoint(typeof config?.baseUrl === 'string' ? config.baseUrl : 'https://api.openai.com/v1'),
     }),
     apiKey: configSchema.shape.apiKey.meta({
       labelLocalized: t('settings.pages.providers.catalog.edit.config.common.fields.field.api-key.label'),
@@ -103,7 +103,7 @@ export const providerOpenAI = defineProvider<Config, 'openai'>({
   },
 
   validationRequiredWhen(config) {
-    return !!config.apiKey?.trim()
+    return !!(typeof config.apiKey === 'string' && config.apiKey.trim())
   },
   validators: {
     ...createOpenAICompatibleValidators({

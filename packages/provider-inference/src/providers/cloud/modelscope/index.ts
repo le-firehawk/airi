@@ -44,7 +44,7 @@ export const providerModelScope = defineProvider<ModelscopeConfig, 'modelscope'>
   },
 
   validationRequiredWhen(config) {
-    return !!config.apiKey?.trim()
+    return !!(typeof config.apiKey === 'string' && config.apiKey.trim())
   },
   validators: {
     ...createOpenAICompatibleValidators({

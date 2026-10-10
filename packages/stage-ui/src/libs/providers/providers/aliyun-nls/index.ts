@@ -67,7 +67,7 @@ export const providerAliyunNlsTranscription = defineProvider<AliyunNlsConfig, 'a
       }),
     } as TranscriptionProviderWithExtraOptions<string, AliyunRealtimeSpeechExtraOptions>
   },
-  validationRequiredWhen: config => Boolean(config.accessKeyId?.trim() && config.accessKeySecret?.trim() && config.appKey?.trim()),
+  validationRequiredWhen: config => Boolean((typeof config.accessKeyId === 'string' && config.accessKeyId.trim()) && (typeof config.accessKeySecret === 'string' && config.accessKeySecret.trim()) && (typeof config.appKey === 'string' && config.appKey.trim())),
   validators: {
     validateConfig: [
       ({ t }) => ({

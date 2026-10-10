@@ -1,5 +1,3 @@
-import type { ProviderDefinition } from '../types'
-
 import { provider302AI } from './cloud/302-ai'
 import { providerAIHubMix } from './cloud/aihubmix'
 import { providerAmazonBedrock } from './cloud/amazon-bedrock'
@@ -59,32 +57,12 @@ import { providerSpeechNoop } from './local/speech-noop'
 import { providerAivisSpeech, providerVoicevox } from './local/voicevox'
 
 /**
- * Erases configuration types at the registry boundary.
- *
- * A registry selects definitions by a runtime id. It cannot know the selected
- * configuration type. Individual provider exports preserve their exact type.
- */
-type ProviderDefinitionRegistration<TId extends string = string> = Pick<ProviderDefinition, 'name' | 'order'> & { id: TId }
-
-type ErasedProviderDefinitions<TDefinitions extends readonly ProviderDefinitionRegistration[]> = {
-  [K in keyof TDefinitions]: TDefinitions[K] extends ProviderDefinitionRegistration<infer TId>
-    ? ProviderDefinition<Record<string, unknown>, TId>
-    : never
-}
-
-function eraseProviderDefinitions<const TDefinitions extends readonly ProviderDefinitionRegistration[]>(
-  ...definitions: TDefinitions
-): ErasedProviderDefinitions<TDefinitions> {
-  return definitions as unknown as ErasedProviderDefinitions<TDefinitions>
-}
-
-/**
  * Definitions that can load without Vue, Pinia, persistence, or Electron.
  *
  * This list includes Browser-only definitions. Hosts must call
  * `isAvailableBy` before they offer one to a user in the current runtime.
  */
-export const portableProviderDefinitions = eraseProviderDefinitions(
+export const portableProviderDefinitions = [
   provider302AI,
   providerAIHubMix,
   providerAmazonBedrock,
@@ -143,6 +121,6 @@ export const portableProviderDefinitions = eraseProviderDefinitions(
   providerSpeechNoop,
   providerAivisSpeech,
   providerVoicevox,
-)
+] as const
 
 export { createProviderRegistry, defineProvider } from './registry'

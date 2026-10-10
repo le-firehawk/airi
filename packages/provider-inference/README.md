@@ -79,3 +79,22 @@ Reported search abilities do not select a native tool implementation.
 OpenAI reasoning controls use the exact model entry and effort levels from the pinned catalog.
 Unsupported effort values are omitted. In particular, models without a `none` effort keep their server default when reasoning is disabled.
 Generation validation uses the configured model before consulting the endpoint model list.
+
+## Typed and runtime registries
+
+Literal provider IDs retain their configuration types through `getDefinedProvider` and `createProviderRegistry`.
+A registry list retains the heterogeneous definition union. Narrow `definition.id` before invoking a provider-specific typed callback.
+
+Each `defineProvider` result also exposes `runtime`, for hosts that read unvalidated persisted configuration.
+The runtime definition awaits the provider's object schema before it invokes factories, validators, or asynchronous discovery methods.
+Declared fields come from schema output, including defaults and transformations. Undeclared request extras, such as `model`, survive ordinary object stripping.
+An explicit catch-all schema owns its extra fields instead.
+
+Configuration schema factories return object schemas. They must support calls without draft values and avoid editor-only discovery in those calls.
+Field transformations and object overwrites remain supported. Execution never supplies editor drafts to schema construction.
+
+Schema metadata, automatic-validation readiness, and voice-cache selectors accept unvalidated draft fields.
+Narrow each draft value before using it. Readiness and voice selectors do not parse schemas or start runtime discovery.
+The voice-cache selector remains synchronous.
+
+`stage-ui` registers these runtime definitions. Direct provider exports preserve their typed callbacks for callers with known configurations.

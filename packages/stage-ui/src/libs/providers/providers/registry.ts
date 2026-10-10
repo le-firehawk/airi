@@ -1,8 +1,6 @@
 import type { PortableProviderId } from '@proj-airi/provider-inference'
-import type { MaybePromise } from 'clustr'
-import type { $ZodType } from 'zod/v4/core'
 
-import type { ProviderConfigContext, ProviderDefinition } from '../types'
+import type { ProviderDefinition } from '../types'
 import type { providerAliyunNlsTranscription } from './aliyun-nls'
 import type { providerAppleSpeechTranscription } from './apple-speech'
 import type { providerAppleVision } from './apple-vision'
@@ -22,6 +20,7 @@ import type {
 } from './official'
 import type { providerSherpawTranscription } from './sherpaw'
 
+import { createRuntimeProviderDefinition } from '@proj-airi/provider-inference'
 import { orderBy } from 'es-toolkit'
 
 const providerRegistry = new Map<string, ProviderDefinition>()
@@ -74,18 +73,11 @@ export function getDefinedProvider(id: string): ProviderDefinition | undefined {
   return providerRegistry.get(id)
 }
 
-interface ProviderDefinitionOptions<T, TId extends string = string> extends ProviderDefinition<T, TId> {
-  createProviderConfig: (contextOptions: ProviderConfigContext<T>) => MaybePromise<$ZodType<T>>
-}
-
-export function defineProvider<T, const TId extends string = string>(definition: ProviderDefinitionOptions<T, TId>): ProviderDefinition<T, TId> {
-  const provider = {
-    ...definition,
-  }
-
-  // The registry selects a provider by id. The selected configuration shape is
-  // only known by the caller after that lookup.
-  providerRegistry.set(definition.id, definition as unknown as ProviderDefinition)
-
-  return provider
+/** Registers the validated runtime boundary while preserving the typed declaration for direct callers. */
+export function defineProvider<T extends Record<string, unknown>, const TId extends string = string>(definition: ProviderDefinition<T, TId>): ProviderDefinition<T, TId> {
+  providerRegistry.set(definition.id, {
+    ...createRuntimeProviderDefinition(definition),
+    views: definition.views,
+  })
+  return definition
 }

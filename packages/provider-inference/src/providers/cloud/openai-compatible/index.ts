@@ -68,7 +68,7 @@ export const providerOpenAICompatible = defineProvider<Config, 'openai-compatibl
   },
 
   validationRequiredWhen(config) {
-    return !!config.apiKey?.trim()
+    return !!(typeof config.apiKey === 'string' && config.apiKey.trim())
   },
   validators: {
     ...createOpenAICompatibleValidators({

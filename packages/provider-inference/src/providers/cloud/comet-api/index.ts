@@ -47,7 +47,7 @@ export const providerCometAPI = defineProvider<CometApiConfig, 'comet-api'>({
   },
 
   validationRequiredWhen(config) {
-    return !!config.apiKey?.trim()
+    return !!(typeof config.apiKey === 'string' && config.apiKey.trim())
   },
   validators: {
     ...createOpenAICompatibleValidators({
@@ -71,7 +71,7 @@ export const providerCometAPISpeech = defineProvider<CometApiConfig, 'comet-api-
       createSpeechProvider({ apiKey: config.apiKey, baseURL: config.baseUrl! }),
     )
   },
-  validationRequiredWhen: config => Boolean(config.apiKey?.trim()),
+  validationRequiredWhen: config => Boolean((typeof config.apiKey === 'string' && config.apiKey.trim())),
   validators: createOpenAICompatibleValidators({ checks: [ProviderValidationCheck.ModelList] }),
 })
 
@@ -99,6 +99,6 @@ export const providerCometAPITranscription = defineProvider<CometApiConfig, 'com
     })
     return provider
   },
-  validationRequiredWhen: config => Boolean(config.apiKey?.trim()),
+  validationRequiredWhen: config => Boolean((typeof config.apiKey === 'string' && config.apiKey.trim())),
   validators: createOpenAICompatibleValidators({ checks: [ProviderValidationCheck.ModelList] }),
 })

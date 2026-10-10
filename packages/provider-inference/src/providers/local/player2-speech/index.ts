@@ -38,7 +38,7 @@ export const providerPlayer2Speech = defineProvider<Player2Config, 'player2-spee
   icon: 'i-lobe-icons:player2',
   createProviderConfig: () => player2ConfigSchema,
   createProvider: config => createPlayer2(normalizeBaseUrl(config.baseUrl), 'airi'),
-  validationRequiredWhen: config => Boolean(config.baseUrl?.trim()),
+  validationRequiredWhen: config => Boolean((typeof config.baseUrl === 'string' && config.baseUrl.trim())),
   validators: {
     validateConfig: [
       ({ t }) => ({

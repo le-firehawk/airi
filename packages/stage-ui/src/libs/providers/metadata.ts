@@ -60,7 +60,7 @@ export function getProviderCategory(tasks: string[]): ProviderCategory {
 }
 
 /** Selects the serializable metadata fields of a provider definition. */
-export async function selectProviderMetadata<TConfig>(
+export async function selectProviderMetadata<TConfig extends Record<string, unknown>>(
   definition: ProviderDefinition<TConfig>,
   t: ComposerTranslation,
   options: {
@@ -113,7 +113,7 @@ export async function selectProviderMetadata<TConfig>(
 }
 
 /** Selects serializable metadata for a provider definition list. */
-export async function selectProvidersMetadata<TConfig>(definitions: ProviderDefinition<TConfig>[], t: ComposerTranslation) {
+export async function selectProvidersMetadata<TConfig extends Record<string, unknown>>(definitions: ProviderDefinition<TConfig>[], t: ComposerTranslation) {
   return Object.fromEntries(await Promise.all(definitions.map(async definition => [
     definition.id,
     await selectProviderMetadata(definition, t),

@@ -125,7 +125,7 @@ export const providerDeepgramTts = defineProvider<UnspeechConfig, 'deepgram-tts'
   icon: 'i-simple-icons:deepgram',
   createProviderConfig: ({ t }) => createUnspeechConfigSchema(unspeechConfigSchema, t),
   createProvider: config => createUnDeepgram(config.apiKey.trim(), config.baseUrl?.trim() ?? ''),
-  validationRequiredWhen: config => Boolean(config.apiKey?.trim() && config.baseUrl?.trim()),
+  validationRequiredWhen: config => Boolean((typeof config.apiKey === 'string' && config.apiKey.trim()) && (typeof config.baseUrl === 'string' && config.baseUrl.trim())),
   validators: createUnspeechValidators('deepgram-tts'),
   extraMethods: {
     listModels: async () => [
@@ -159,7 +159,7 @@ export const providerMicrosoftSpeech = defineProvider<MicrosoftSpeechConfig, 'mi
   iconColor: 'i-lobe-icons:microsoft',
   createProviderConfig: ({ t }) => createUnspeechConfigSchema(microsoftSpeechConfigSchema, t),
   createProvider: config => createUnMicrosoft(config.apiKey.trim(), config.baseUrl?.trim() ?? ''),
-  validationRequiredWhen: config => Boolean(config.apiKey?.trim() && config.baseUrl?.trim()),
+  validationRequiredWhen: config => Boolean((typeof config.apiKey === 'string' && config.apiKey.trim()) && (typeof config.baseUrl === 'string' && config.baseUrl.trim())),
   validators: createUnspeechValidators('microsoft-speech'),
   extraMethods: {
     listModels: async () => [{ id: 'v1', name: 'v1', provider: 'microsoft-speech', description: '', deprecated: false }],
@@ -189,7 +189,7 @@ export const providerAlibabaCloudModelStudio = defineProvider<UnspeechConfig, 'a
   iconColor: 'i-lobe-icons:alibabacloud',
   createProviderConfig: ({ t }) => createUnspeechConfigSchema(unspeechConfigSchema, t),
   createProvider: config => createUnAlibabaCloud(config.apiKey.trim(), config.baseUrl?.trim() ?? ''),
-  validationRequiredWhen: config => Boolean(config.apiKey?.trim() && config.baseUrl?.trim()),
+  validationRequiredWhen: config => Boolean((typeof config.apiKey === 'string' && config.apiKey.trim()) && (typeof config.baseUrl === 'string' && config.baseUrl.trim())),
   validators: createUnspeechValidators('alibaba-cloud-model-studio'),
   extraMethods: {
     listModels: async () => [
@@ -223,7 +223,7 @@ export const providerVolcengineSpeech = defineProvider<VolcengineSpeechConfig, '
   iconColor: 'i-lobe-icons:volcengine',
   createProviderConfig: ({ t }) => createUnspeechConfigSchema(volcengineSpeechConfigSchema, t),
   createProvider: config => createUnVolcengine(config.apiKey.trim(), config.baseUrl?.trim() ?? ''),
-  validationRequiredWhen: config => Boolean(config.apiKey?.trim() && config.baseUrl?.trim() && config.app?.appId.trim()),
+  validationRequiredWhen: config => Boolean((typeof config.apiKey === 'string' && config.apiKey.trim()) && (typeof config.baseUrl === 'string' && config.baseUrl.trim()) && (typeof config.app === 'object' && config.app !== null && 'appId' in config.app && typeof config.app.appId === 'string' && config.app.appId.trim())),
   validators: createUnspeechValidators<VolcengineSpeechConfig>('volcengine', true),
   extraMethods: {
     listModels: async () => [{ id: 'v1', name: 'v1', provider: 'volcano-engine', description: '', deprecated: false }],

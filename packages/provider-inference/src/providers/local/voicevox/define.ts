@@ -1,4 +1,4 @@
-import type { ProviderDefinition, VoiceInfo } from '../../../types'
+import type { RegisteredProviderDefinition, VoiceInfo } from '../../../types'
 import type { VoicevoxSynthesisParameters } from './engine'
 
 import { errorMessageFrom } from '@moeru/std'
@@ -69,7 +69,7 @@ export interface VoicevoxFamilyProviderOptions<TId extends string = string> {
  */
 export function defineVoicevoxFamilyProvider<const TId extends string>(
   options: VoicevoxFamilyProviderOptions<TId>,
-): ProviderDefinition<VoicevoxFamilyConfig, TId> {
+): RegisteredProviderDefinition<VoicevoxFamilyConfig, TId> {
   const configSchema = createVoicevoxConfigSchema(options.defaultBaseUrl)
 
   return defineProvider<VoicevoxFamilyConfig, TId>({
@@ -122,7 +122,7 @@ export function defineVoicevoxFamilyProvider<const TId extends string>(
 
     tasks: ['text-to-speech'],
 
-    validationRequiredWhen: config => Boolean(config.baseUrl?.trim()),
+    validationRequiredWhen: config => Boolean((typeof config.baseUrl === 'string' && config.baseUrl.trim())),
 
     validators: {
       validateConfig: [

@@ -1,4 +1,4 @@
-import type { ChatRequestOptions, ModelInfo, ProviderInstance } from '../../../types'
+import type { ChatRequestOptions, ModelInfo } from '../../../types'
 
 import { createAzure } from '@xsai-ext/providers/special/create'
 import { z } from 'zod'
@@ -65,12 +65,7 @@ export const providerAzureAIFoundry = defineProvider<AzureAIFoundryConfig, 'azur
       },
     }))
 
-    // NOTICE:
-    // Azure provider creation resolves its authentication-aware client asynchronously.
-    // ProviderDefinition still declares a synchronous result, while the runtime awaits it.
-    // Source: @xsai-ext/providers special/create and stores/providers/provider.ts.
-    // Remove this cast when ProviderDefinition accepts MaybePromise<ProviderInstance>.
-    return provider as unknown as ProviderInstance
+    return provider
   },
 
   extraMethods: {
@@ -85,7 +80,7 @@ export const providerAzureAIFoundry = defineProvider<AzureAIFoundryConfig, 'azur
       } satisfies ModelInfo],
   },
   validationRequiredWhen(config) {
-    return !!config.apiKey?.trim() || !!config.resourceName?.trim() || !!config.modelId?.trim()
+    return !!(typeof config.apiKey === 'string' && config.apiKey.trim()) || !!(typeof config.resourceName === 'string' && config.resourceName.trim()) || !!(typeof config.modelId === 'string' && config.modelId.trim())
   },
   validators: {
     validateConfig: [

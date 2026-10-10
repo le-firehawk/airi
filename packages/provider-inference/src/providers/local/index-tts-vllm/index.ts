@@ -31,7 +31,7 @@ export const providerIndexTtsVllm = defineProvider<IndexTtsConfig, 'index-tts-vl
       }),
     }
   },
-  validationRequiredWhen: config => Boolean(config.baseUrl?.trim()),
+  validationRequiredWhen: config => Boolean((typeof config.baseUrl === 'string' && config.baseUrl.trim())),
   validators: {
     validateConfig: [
       ({ t }) => ({

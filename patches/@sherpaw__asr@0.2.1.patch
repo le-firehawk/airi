@@ -1,0 +1,68 @@
+diff --git a/dist/asr-BgkZjkfL.js b/dist/asr-BgkZjkfL.js
+--- a/dist/asr-BgkZjkfL.js
++++ b/dist/asr-BgkZjkfL.js
+@@ -1,14 +1,11 @@
++import { ENVIRONMENT_IS_NODE, require } from "#runtime-environment";
++
+ //#region src/prebuilt/asr.js
+ async function Module(moduleArg = {}) {
+ 	var moduleRtn;
+ 	var Module$1 = moduleArg;
+ 	var ENVIRONMENT_IS_WEB = !!globalThis.window;
+ 	var ENVIRONMENT_IS_WORKER = !!globalThis.WorkerGlobalScope;
+-	var ENVIRONMENT_IS_NODE = globalThis.process?.versions?.node && globalThis.process?.type != "renderer";
+-	if (ENVIRONMENT_IS_NODE) {
+-		const { createRequire } = await import("module");
+-		var require = createRequire(import.meta.url);
+-	}
+ 	var thisProgram = "./this.program";
+ 	var quit_ = (status, toThrow) => {
+ 		throw toThrow;
+@@ -122,7 +119,7 @@
+ 	var wasmBinaryFile;
+ 	function findWasmBinary() {
+ 		if (Module$1["locateFile"]) return locateFile("asr.wasm");
+-		return new URL("asr.wasm", import.meta.url).href;
++		return new URL("./prebuilt/asr.wasm", import.meta.url).href;
+ 	}
+ 	function getBinarySync(file) {
+ 		if (file == wasmBinaryFile && wasmBinary) return new Uint8Array(wasmBinary);
+diff --git a/dist/environment-browser.js b/dist/environment-browser.js
+new file mode 100644
+--- /dev/null
++++ b/dist/environment-browser.js
+@@ -0,0 +1,4 @@
++const ENVIRONMENT_IS_NODE = false;
++const require = undefined;
++
++export { ENVIRONMENT_IS_NODE, require };
+diff --git a/dist/environment-node.js b/dist/environment-node.js
+new file mode 100644
+--- /dev/null
++++ b/dist/environment-node.js
+@@ -0,0 +1,6 @@
++import { createRequire } from "node:module";
++
++const ENVIRONMENT_IS_NODE = globalThis.process?.versions?.node && globalThis.process?.type != "renderer";
++const require = ENVIRONMENT_IS_NODE ? createRequire(import.meta.url) : undefined;
++
++export { ENVIRONMENT_IS_NODE, require };
+diff --git a/package.json b/package.json
+--- a/package.json
++++ b/package.json
+@@ -14,8 +14,14 @@
+   "exports": {
+     ".": "./dist/index.js",
+     "./package.json": "./package.json",
+-    "./module.wasm": "./dist/asr.wasm",
++    "./module.wasm": "./dist/prebuilt/asr.wasm",
+     "./webgpu": "./dist/webgpu.js"
++  },
++  "imports": {
++    "#runtime-environment": {
++      "browser": "./dist/environment-browser.js",
++      "default": "./dist/environment-node.js"
++    }
+   },
+   "main": "./dist/index.js",
+   "module": "./dist/index.js",

@@ -1,0 +1,132 @@
+diff --git a/dist/index.mjs b/dist/index.mjs
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -1,4 +1,5 @@
+-import { AsyncDuckDB, ConsoleLogger, DuckDBAccessMode, VoidLogger, selectBundle } from "@duckdb/duckdb-wasm";
++import { createWorker, getEnvironment } from "#runtime";
++import { AsyncDuckDB, ConsoleLogger, DuckDBAccessMode, VoidLogger } from "@duckdb/duckdb-wasm";
+ import { defu } from "defu";
+ import { TZDateMini } from "@date-fns/tz";
+ import { DataType, Struct, TimeUnit, util } from "apache-arrow";
+@@ -18,16 +19,6 @@
+ */
+ function notNullOrUndefined(value) {
+ 	return value !== null && value !== void 0;
+-}
+-async function getEnvironment() {
+-	if (typeof window !== "undefined" && window !== null) return "browser";
+-	try {
+-		const process = await import("node:process");
+-		if (typeof process !== "undefined" && process.versions != null && process.versions.node != null) return "node";
+-		return "unknown";
+-	} catch {
+-		return "unknown";
+-	}
+ }
+ //#endregion
+ //#region src/types.ts
+@@ -445,26 +436,7 @@
+ //#region src/duckdb.ts
+ async function connect(options) {
+ 	const opts = defu(options, { logger: false });
+-	let worker;
+-	let bundle;
+-	const env = await getEnvironment();
+-	if (env === "browser") {
+-		if (typeof opts.bundles === "undefined") {
+-			const { getBundles } = await import("./bundles/default-browser.mjs");
+-			opts.bundles = await getBundles();
+-		}
+-		bundle = await selectBundle(await opts.bundles);
+-		worker = new Worker(bundle.mainWorker);
+-	} else if (env === "node") {
+-		if (typeof opts.bundles === "undefined") {
+-			const { getBundles } = await import("./bundles/default-node.mjs");
+-			opts.bundles = await getBundles();
+-		}
+-		bundle = await selectBundle(await opts.bundles);
+-		let workerUrl = bundle.mainWorker;
+-		if (workerUrl.startsWith("/@fs/")) workerUrl = workerUrl.replace("/@fs/", "file://");
+-		worker = new (await (import("web-worker"))).default(workerUrl, { type: "module" });
+-	} else throw new Error(`Unsupported environment: ${env}`);
++	const { worker, bundle } = await createWorker(opts);
+ 	let logger;
+ 	if (opts.logger === true) logger = new ConsoleLogger();
+ 	else if (opts.logger === false) logger = new VoidLogger();
+diff --git a/dist/runtime-browser.mjs b/dist/runtime-browser.mjs
+new file mode 100644
+--- /dev/null
++++ b/dist/runtime-browser.mjs
+@@ -0,0 +1,13 @@
++import { selectBundle } from "@duckdb/duckdb-wasm";
++import { getBundles } from "./bundles/default-browser.mjs";
++
++async function getEnvironment() {
++	return "browser";
++}
++
++async function createWorker(opts) {
++	const bundle = await selectBundle(await (typeof opts.bundles === "undefined" ? getBundles() : opts.bundles));
++	return { worker: new Worker(bundle.mainWorker), bundle };
++}
++
++export { createWorker, getEnvironment };
+diff --git a/dist/runtime-node.mjs b/dist/runtime-node.mjs
+new file mode 100644
+--- /dev/null
++++ b/dist/runtime-node.mjs
+@@ -0,0 +1,38 @@
++import { selectBundle } from "@duckdb/duckdb-wasm";
++
++async function getEnvironment() {
++	if (typeof window !== "undefined" && window !== null) return "browser";
++	try {
++		const process = await import("node:process");
++		if (typeof process !== "undefined" && process.versions != null && process.versions.node != null) return "node";
++		return "unknown";
++	} catch {
++		return "unknown";
++	}
++}
++
++async function createWorker(opts) {
++	let worker;
++	let bundle;
++	const env = await getEnvironment();
++	if (env === "browser") {
++		if (typeof opts.bundles === "undefined") {
++			const { getBundles } = await import("./bundles/default-browser.mjs");
++			opts.bundles = await getBundles();
++		}
++		bundle = await selectBundle(await opts.bundles);
++		worker = new Worker(bundle.mainWorker);
++	} else if (env === "node") {
++		if (typeof opts.bundles === "undefined") {
++			const { getBundles } = await import("./bundles/default-node.mjs");
++			opts.bundles = await getBundles();
++		}
++		bundle = await selectBundle(await opts.bundles);
++		let workerUrl = bundle.mainWorker;
++		if (workerUrl.startsWith("/@fs/")) workerUrl = workerUrl.replace("/@fs/", "file://");
++		worker = new (await (import("web-worker"))).default(workerUrl, { type: "module" });
++	} else throw new Error(`Unsupported environment: ${env}`);
++	return { worker, bundle };
++}
++
++export { createWorker, getEnvironment };
+diff --git a/package.json b/package.json
+--- a/package.json
++++ b/package.json
+@@ -39,6 +39,12 @@
+       "node": "./dist/bundles/import-url-node.mjs"
+     }
+   },
++  "imports": {
++    "#runtime": {
++      "browser": "./dist/runtime-browser.mjs",
++      "default": "./dist/runtime-node.mjs"
++    }
++  },
+   "main": "./dist/index.mjs",
+   "module": "./dist/index.mjs",
+   "types": "./dist/index.d.mts",

@@ -1,0 +1,104 @@
+diff --git a/dist/bundles-browser.mjs b/dist/bundles-browser.mjs
+new file mode 100644
+--- /dev/null
++++ b/dist/bundles-browser.mjs
+@@ -0,0 +1,8 @@
++import { getImportUrlBundles } from "@proj-airi/duckdb-wasm/bundles/import-url-browser";
++import { getBundles } from "@proj-airi/duckdb-wasm/bundles/default-browser";
++
++async function getDSNBundles(importUrl) {
++	return importUrl ? getImportUrlBundles() : getBundles();
++}
++
++export { getDSNBundles };
+diff --git a/dist/bundles-node.mjs b/dist/bundles-node.mjs
+new file mode 100644
+--- /dev/null
++++ b/dist/bundles-node.mjs
+@@ -0,0 +1,29 @@
++import { getEnvironment as getEnvironment$1 } from "@proj-airi/duckdb-wasm";
++
++function getDSNBundles(importUrl) {
++	let bundles;
++	if (importUrl) {
++		const getBundles = async () => {
++			const env = await getEnvironment$1();
++			switch (env) {
++				case "browser": return (await import("@proj-airi/duckdb-wasm/bundles/import-url-browser")).getImportUrlBundles();
++				case "node": return await (await import("@proj-airi/duckdb-wasm/bundles/import-url-node")).getImportUrlBundles();
++				default: throw new Error(`Unsupported environment: "${env}"`);
++			}
++		};
++		bundles = getBundles();
++	} else {
++		const getBundles = async () => {
++			const env = await getEnvironment$1();
++			switch (env) {
++				case "browser": return (await import("@proj-airi/duckdb-wasm/bundles/default-browser")).getBundles();
++				case "node": return await (await import("@proj-airi/duckdb-wasm/bundles/default-node")).getBundles();
++				default: throw new Error(`Unsupported environment: "${env}"`);
++			}
++		};
++		bundles = getBundles();
++	}
++	return bundles;
++}
++
++export { getDSNBundles };
+diff --git a/dist/index.mjs b/dist/index.mjs
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -1,5 +1,6 @@
++import { getDSNBundles } from "#bundles";
+ import { AsyncDuckDB, ConsoleLogger, ConsoleLogger as ConsoleLogger$1, DuckDBAccessMode as DuckDBAccessMode$1, VoidLogger, getJsDelivrBundles, selectBundle } from "@duckdb/duckdb-wasm";
+-import { DBStorageType, DBStorageType as DBStorageType$1, DataFrameCellType, DuckDBAccessMode, beginTransaction, connect, connect as connect$1, getEnvironment, getEnvironment as getEnvironment$1, mapColumnData, mapStructRowData, withSavepoint, withSavepoint as withSavepoint$1 } from "@proj-airi/duckdb-wasm";
++import { DBStorageType, DBStorageType as DBStorageType$1, DataFrameCellType, DuckDBAccessMode, beginTransaction, connect, connect as connect$1, getEnvironment, mapColumnData, mapStructRowData, withSavepoint, withSavepoint as withSavepoint$1 } from "@proj-airi/duckdb-wasm";
+ import { DefaultLogger, NoopLogger, createTableRelationsHelpers, entityKind, extractTablesRelationalConfig, fillPlaceholders, isConfig } from "drizzle-orm";
+ import { PgDatabase, PgDialect, PgPreparedQuery, PgSession, PgTransaction } from "drizzle-orm/pg-core";
+ //#region src/dsn.ts
+@@ -171,28 +172,7 @@
+ }
+ function constructByDSN(dsn, drizzleConfig) {
+ 	const structured = parseDSN(dsn);
+-	let bundles;
+-	if (structured.bundles === "import-url") {
+-		const getBundles = async () => {
+-			const env = await getEnvironment$1();
+-			switch (env) {
+-				case "browser": return (await import("@proj-airi/duckdb-wasm/bundles/import-url-browser")).getImportUrlBundles();
+-				case "node": return await (await import("@proj-airi/duckdb-wasm/bundles/import-url-node")).getImportUrlBundles();
+-				default: throw new Error(`Unsupported environment: "${env}"`);
+-			}
+-		};
+-		bundles = getBundles();
+-	} else {
+-		const getBundles = async () => {
+-			const env = await getEnvironment$1();
+-			switch (env) {
+-				case "browser": return (await import("@proj-airi/duckdb-wasm/bundles/default-browser")).getBundles();
+-				case "node": return await (await import("@proj-airi/duckdb-wasm/bundles/default-node")).getBundles();
+-				default: throw new Error(`Unsupported environment: "${env}"`);
+-			}
+-		};
+-		bundles = getBundles();
+-	}
++	const bundles = getDSNBundles(structured.bundles === "import-url");
+ 	return construct(connect$1({
+ 		bundles,
+ 		logger: structured.logger ? new ConsoleLogger$1() : void 0,
+diff --git a/package.json b/package.json
+--- a/package.json
++++ b/package.json
+@@ -40,6 +40,12 @@
+       "types": "./dist/bundles/import-url-node.d.mts",
+       "import": "./dist/bundles/import-url-node.mjs",
+       "node": "./dist/bundles/import-url-node.mjs"
++    }
++  },
++  "imports": {
++    "#bundles": {
++      "browser": "./dist/bundles-browser.mjs",
++      "default": "./dist/bundles-node.mjs"
+     }
+   },
+   "main": "./dist/index.mjs",

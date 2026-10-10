@@ -28,8 +28,19 @@ const versions: { version: SpineVersion, sdk: typeof sdk40 | typeof sdk41 | type
 ]
 
 describe.each(versions)('spine $version adapter', ({ version, sdk }) => {
+  // https://github.com/le-firehawk/airi/actions/runs/38054109686/job/114218935358
+  // ROOT CAUSE:
+  // Spine 4.0 and 4.1 leave empty atlases pending. A real texture page lets every SDK initialize the model.
   it('uses matching skeleton physics, background blending, and disposal', async () => {
     const runtime = await loadSpineRuntime(version)
+    const image = new Image()
+    const pixel = document.createElement('canvas')
+    pixel.width = 1
+    pixel.height = 1
+    image.src = pixel.toDataURL('image/png')
+    await image.decode()
+    expect(image.naturalWidth).toBe(1)
+    expect(image.naturalHeight).toBe(1)
     const element = document.createElement('canvas')
     element.width = 64
     element.height = 64
@@ -51,9 +62,10 @@ describe.each(versions)('spine $version adapter', ({ version, sdk }) => {
           const downloader = getSpineDownloader(canvas.assetManager.source)
           if (!downloader)
             throw new Error('Missing SDK downloader.')
+          downloader.rawDataUris['pixel.png'] = image.src
           downloader.downloadText = (path, success) => {
             queueMicrotask(() => success(path.endsWith('.atlas')
-              ? ''
+              ? 'pixel.png\nsize: 1,1\nformat: RGBA8888\nfilter: Nearest,Nearest\nrepeat: none\npixel\n  rotate: false\n  xy: 0, 0\n  size: 1, 1\n  orig: 1, 1\n  offset: 0, 0\n  index: -1\n'
               : JSON.stringify({
                   skeleton: { spine: `${version}.0` },
                   bones: [{ name: 'root' }],
@@ -81,12 +93,6 @@ describe.each(versions)('spine $version adapter', ({ version, sdk }) => {
     else
       expect(physics).toHaveBeenLastCalledWith()
 
-    const image = new Image()
-    const pixel = document.createElement('canvas')
-    pixel.width = 1
-    pixel.height = 1
-    image.src = pixel.toDataURL('image/png')
-    await image.decode()
     const texture = canvas.createTexture(image)
     canvas.begin()
     texture.draw(0, 0, 1, 1)
@@ -101,9 +107,15 @@ describe.each(versions)('spine $version adapter', ({ version, sdk }) => {
       expect(blend).toHaveBeenLastCalledWith(sdk.BlendMode.Normal, false)
     }
     canvas.dispose()
-    expect(releaseTexture).toHaveBeenCalledOnce()
+    // Spine 4.0/4.1 dispose pages through both AssetManagerBase.removeAll and TextureAtlas.dispose.
+    // Spine 4.2 reference-counts page textures. AIRI disposes its background texture once in every version.
+    const expectedTextureDisposals = version === '4.2' ? 2 : 3
+    expect(releaseTexture).toHaveBeenCalledTimes(expectedTextureDisposals)
+    expect(new Set(releaseTexture.mock.contexts).size).toBe(2)
+    expect(releaseTexture.mock.contexts.filter(texture => texture instanceof sdk.GLTexture && texture.getImage() === image)).toHaveLength(1)
     texture.dispose()
-    expect(releaseTexture).toHaveBeenCalledOnce()
+    expect(releaseTexture).toHaveBeenCalledTimes(expectedTextureDisposals)
+    expect(releaseTexture.mock.contexts.filter(texture => texture instanceof sdk.GLTexture && texture.getImage() === image)).toHaveLength(1)
     const frames = update.mock.calls.length
     await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
     expect(update).toHaveBeenCalledTimes(frames)

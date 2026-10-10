@@ -20,26 +20,23 @@ afterEach(() => vi.restoreAllMocks())
 
 async function createPreviewZip(version: SpineVersion, visible: boolean) {
   const zip = new JSZip()
-  if (visible) {
-    const pixel = document.createElement('canvas')
-    pixel.width = 1
-    pixel.height = 1
-    const context = pixel.getContext('2d')
-    if (!context)
-      throw new Error('Expected a native canvas context.')
-    context.fillStyle = '#ffffff'
-    context.fillRect(0, 0, 1, 1)
-    const blob = await new Promise<Blob>((resolve, reject) => pixel.toBlob((value) => {
-      if (value)
-        resolve(value)
-      else
-        reject(new Error('Unable to create texture.'))
-    }))
-    zip.file('pixel.png', await blob.arrayBuffer())
-  }
-  zip.file('model.atlas', visible
-    ? 'pixel.png\nsize: 1,1\nformat: RGBA8888\nfilter: Nearest,Nearest\nrepeat: none\npixel\n  rotate: false\n  xy: 0, 0\n  size: 1, 1\n  orig: 1, 1\n  offset: 0, 0\n  index: -1\n'
-    : '')
+  const pixel = document.createElement('canvas')
+  pixel.width = 1
+  pixel.height = 1
+  const context = pixel.getContext('2d')
+  if (!context)
+    throw new Error('Expected a native canvas context.')
+  context.fillStyle = '#ffffff'
+  context.fillRect(0, 0, 1, 1)
+  const blob = await new Promise<Blob>((resolve, reject) => pixel.toBlob((value) => {
+    if (value)
+      resolve(value)
+    else
+      reject(new Error('Unable to create texture.'))
+  }))
+  zip.file('pixel.png', await blob.arrayBuffer())
+  // The empty model still needs a texture page so every SDK completes asset loading.
+  zip.file('model.atlas', 'pixel.png\nsize: 1,1\nformat: RGBA8888\nfilter: Nearest,Nearest\nrepeat: none\npixel\n  rotate: false\n  xy: 0, 0\n  size: 1, 1\n  orig: 1, 1\n  offset: 0, 0\n  index: -1\n')
   zip.file('model.json', JSON.stringify({
     skeleton: { spine: `${version}.0` },
     bones: [{ name: 'root', x: 100, y: 200 }],
@@ -77,8 +74,15 @@ describe.each(versions)('spine $version preview cleanup', ({ version, sdk }) => 
 
   it('releases a zero-bounds model when preview capture times out', async () => {
     const releaseRenderer = vi.spyOn(sdk.SceneRenderer.prototype, 'dispose')
+    const assetsReady = vi.spyOn(sdk.AssetManagerBase.prototype, 'isLoadingComplete')
+    const measureBounds = vi.spyOn(sdk.Skeleton.prototype, 'getBounds')
     const previousCanvases = document.querySelectorAll('canvas').length
     const result = await loadSpineModelPreview(await createPreviewZip(version, false))
+    expect(assetsReady).toHaveReturnedWith(true)
+    expect(measureBounds).toHaveBeenCalled()
+    const [, size] = measureBounds.mock.calls[0]
+    expect(size.x).toBeLessThanOrEqual(0)
+    expect(size.y).toBeLessThanOrEqual(0)
     expect(result).toBeUndefined()
     expect(document.querySelectorAll('canvas')).toHaveLength(previousCanvases)
     expect(releaseRenderer).toHaveBeenCalledOnce()

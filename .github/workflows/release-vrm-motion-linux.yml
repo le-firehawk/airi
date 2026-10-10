@@ -1,10 +1,12 @@
 name: VRM Motion Linux Candidate
 
-# A release-branch push is an intentional publication request. Feature pushes only build artifacts.
+# Push a dedicated candidate ref only after the final local batch and approval.
+# Ordinary feature pushes do not consume full packaging minutes.
+# A release-branch push is an intentional publication request.
 on:
   push:
     branches:
-      - le-firehawk/feat/vrm-motion-library
+      - le-firehawk/candidate/vrm-motion-*
       - le-firehawk/release/vrm-motion-v*
 
 permissions:
@@ -31,12 +33,12 @@ jobs:
           persist-credentials: false
       - name: Free build space
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
-      - uses: pnpm/setup@v2
+      - uses: pnpm/setup@v3
         with:
           runtime: node@26.7.0
           cache: true
           install: false
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
       - uses: chickensoft-games/setup-godot@v2
@@ -55,27 +57,105 @@ jobs:
       - name: Check repository lint
         run: pnpm lint
       - name: Check repository types
-        run: pnpm run typecheck --concurrency=2
+        run: pnpm run typecheck --concurrency=2 --filter='./integrations/**'
+      # The module runner supports this monorepo's extensionless TypeScript imports.
+      # Select it explicitly instead of relying on Vite's future native default.
+      - name: Test CI diagnostic gates
+        run: pnpm exec vitest run --configLoader runner --project github-scripts .github/scripts/run-godot-checked.test.ts
       - name: Test Three runtime and pivot
-        run: pnpm -F @proj-airi/stage-ui-three exec vitest run
+        run: pnpm -F @proj-airi/stage-ui-three exec vitest run --configLoader runner
       - name: Test desktop foundations and update routing
-        run: pnpm -F @proj-airi/stage-tamagotchi exec vitest run --project node
+        run: pnpm -F @proj-airi/stage-tamagotchi exec vitest run --configLoader runner --project node
       - name: Test imports, games, and prompts
-        run: pnpm -F @proj-airi/stage-ui exec vitest run --project node src/features/motions/vrm src/features/companion-games src/composables/use-airi-runtime-prompt.test.ts
+        run: pnpm -F @proj-airi/stage-ui exec vitest run --configLoader runner --project node src/features/motions/vrm src/features/companion-games src/composables/use-airi-runtime-prompt.test.ts src/composables/use-optimistic.test.ts src/libs/chat-sync/cloud-mapper.test.ts src/libs/speech/streaming-pipeline.test.ts src/workers/vad/vad.test.ts src/stores/ai/chat-llm/llm.test.ts src/tools/web-search.test.ts
+      - name: Test affected API regressions
+        run: >-
+          pnpm -F @proj-airi/api-server exec vitest run --configLoader runner --maxWorkers=1
+          src/libs/tests/env.test.ts
+          src/libs/tests/request-auth.test.ts
+          src/libs/tests/ws-auth.test.ts
+          src/otel/gauges/db-pool.test.ts
+          src/otel/gauges/tts-pool.test.ts
+          src/otel/gauges/ws-online-users.test.ts
+          src/routes/audio-speech-ws/route.test.ts
+          src/routes/audio-transcription-stream/route.test.ts
+          src/routes/chat-ws/v1/protocol.test.ts
+          src/routes/chat-ws/v2/auth.test.ts
+          src/routes/openai/v1/route.test.ts
+          src/routes/stripe/price-catalog.test.ts
+          src/routes/voice-packs/route.test.ts
+          src/services/adapters/tts/dashscope-cosyvoice.test.ts
+          src/services/adapters/tts/index.test.ts
+          src/services/domain/billing/tests/billing-service.test.ts
+          src/services/domain/llm-router/tests/config-loader.test.ts
+          src/services/domain/llm-router/tests/error-mapping.test.ts
+          src/services/domain/llm-router/tests/key-rotator.test.ts
+          src/services/domain/llm-router/tests/router.test.ts
+          src/utils/tests/chat-broadcast.test.ts
+          src/utils/tests/origin.test.ts
+          src/services/domain/billing/tests/flux-usage-concurrency.test.ts
+          src/libs/mock-db.test.ts
+          src/services/adapters/config-kv/store.test.ts
+          src/services/domain/billing/tests/flux-usage.test.ts
+          src/routes/apple-iap/route.test.ts
+          src/routes/character-cards/route.test.ts
+          src/routes/characters/route.test.ts
+          src/routes/providers/route.test.ts
+          src/routes/stripe/checkout.test.ts
+          src/routes/stripe/payment-release.test.ts
+          src/services/domain/billing/tests/llm-billing.test.ts
+          src/services/domain/character-cards.test.ts
+          src/services/domain/characters.test.ts
+          src/services/domain/chats.test.ts
+          src/services/domain/field-sync/store.test.ts
+          src/services/domain/flux-transaction.test.ts
+          src/services/domain/flux.test.ts
+          src/services/domain/payment/tests/payment.test.ts
+          src/services/domain/provider-catalog/index.test.ts
+          src/services/domain/providers.test.ts
+          src/services/domain/request-log.test.ts
+          src/services/domain/user-deletion/tests/service-deletion.test.ts
+          src/services/domain/voice-packs/index.test.ts
+      - name: Test affected Auth regressions
+        run: >-
+          pnpm -F @proj-airi/auth-server exec vitest run --configLoader runner --maxWorkers=1
+          src/tests/auth.test.ts src/tests/ban-guard.test.ts
+          src/tests/rate-limit.test.ts src/tests/social-authorization.test.ts
       - name: Install browser test runtime
         run: pnpm exec playwright install --with-deps chromium
+      - name: Test presence-bubble browser canvas
+        run: pnpm exec vitest run --configLoader runner --config packages/stage-shared/vitest.config.ts --project stage-shared:browser
+      - name: Test Live2D browser file storage
+        run: pnpm run test-stage-ui-live2d:run --configLoader runner
+      - name: Test Spine browser runtimes
+        run: pnpm exec vitest run --configLoader runner --config packages/stage-ui-spine/vitest.config.ts --project stage-ui-spine:browser
       - name: Test motion library and games in the browser
-        run: pnpm -F @proj-airi/stage-ui exec vitest run --project browser src/features/motions/vrm src/features/companion-games src/components/scenarios/companion-games
+        run: pnpm -F @proj-airi/stage-ui exec vitest run --configLoader runner --project browser src/features/motions/vrm src/features/companion-games src/components/scenarios/companion-games src/composables/canvas-alpha.browser.test.ts src/composables/canvas-alpha-use-pixel.browser.test.ts src/libs/audio/vad.browser.test.ts src/stores/settings/general.browser.test.ts
+      - name: Test Kirie browser events
+        run: pnpm exec vitest run --configLoader runner --config apps/stage-tamagotchi-kirie/vitest.config.ts --project browser src-web/src/renderer/widgets/extension-ui/shared/eventa-runtime.browser.test.ts
       - name: Test desktop browser behavior
-        run: pnpm -F @proj-airi/stage-tamagotchi exec vitest run --project browser
+        run: pnpm -F @proj-airi/stage-tamagotchi exec vitest run --configLoader runner --project browser
       - name: Export Linux stage sidecar
+        id: godot-export
         working-directory: engines/stage-tamagotchi-godot
         run: |
+          set -euo pipefail
           mkdir -p out/linux
-          godot --headless --export-release "Linux x64" out/linux/godot-stage
+          bash ../../.github/scripts/run-godot-checked.sh out/export.log godot --headless --export-release "Linux x64" out/linux/godot-stage
+          test -s out/linux/godot-stage
+          test -x out/linux/godot-stage
+          bash ../../.github/scripts/run-godot-checked.sh out/vrm-extension-check.log godot --headless --script res://tests/vrm-extension-check.gd
+      - name: Upload Godot export diagnostics
+        if: always() && steps.godot-export.outcome != 'skipped' && steps.godot-export.outcome != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: vrm-motion-godot-export-${{ github.sha }}
+          path: engines/stage-tamagotchi-godot/out/*.log
+          if-no-files-found: error
       - name: Build desktop app
         run: pnpm -F @proj-airi/stage-tamagotchi build
       - name: Verify the built Linux window renders
+        id: window-smoke
         env:
           # Match the existing hosted-runner smoke. This does not change packaged app settings.
           ELECTRON_DISABLE_SANDBOX: '1'
@@ -83,14 +163,14 @@ jobs:
           SMOKE_REPORT_DIR: ${{ github.workspace }}/motion-smoke
         run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24 -nolisten tcp" pnpm -F @proj-airi/stage-tamagotchi run smoke:linux-window-render
       - name: Upload window smoke report
-        if: always()
+        if: always() && steps.window-smoke.outcome != 'skipped' && steps.window-smoke.outcome != ''
         uses: actions/upload-artifact@v7
         with:
           name: vrm-motion-window-smoke-${{ github.sha }}
           path: |
             motion-smoke/*
             !motion-smoke/stage-user-data/**
-          if-no-files-found: warn
+          if-no-files-found: error
       - name: Resolve candidate version
         shell: bash
         run: |

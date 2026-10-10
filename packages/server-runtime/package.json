@@ -26,9 +26,10 @@
   },
   "main": "./dist/index.mjs",
   "types": "./dist/index.d.mts",
-  "bin": "./dist/bin/run.mjs",
+  "bin": "./bin/run.mjs",
   "files": [
     "README.md",
+    "bin",
     "dist",
     "package.json"
   ],

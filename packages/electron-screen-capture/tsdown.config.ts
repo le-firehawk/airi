@@ -4,10 +4,13 @@ import { defineConfig } from 'tsdown'
 
 const sharedConfig: UserConfig = {
   format: 'esm',
-  external: [
-    'electron',
-    'vue',
-  ],
+  deps: {
+    neverBundle: [
+      'electron',
+      'vue',
+    ],
+    onlyBundle: false,
+  },
   exports: true,
 }
 
@@ -18,7 +21,6 @@ export default defineConfig([
     entry: {
       main: 'src/main/index.ts',
     },
-    inlineOnly: false,
   },
   {
     ...sharedConfig,
@@ -26,7 +28,6 @@ export default defineConfig([
     entry: {
       index: 'src/index.ts',
     },
-    inlineOnly: false,
   },
   {
     ...sharedConfig,
@@ -36,6 +37,5 @@ export default defineConfig([
       vue: 'src/vue/index.ts',
       renderer: 'src/renderer.ts',
     },
-    inlineOnly: false,
   },
 ])

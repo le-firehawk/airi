@@ -23,10 +23,11 @@
   "main": "./dist/index.mjs",
   "types": "./dist/index.d.mts",
   "bin": {
-    "cap-vite": "./dist/bin/run.mjs"
+    "cap-vite": "./bin/run.mjs"
   },
   "files": [
     "README.md",
+    "bin",
     "dist",
     "package.json"
   ],

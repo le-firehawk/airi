@@ -12,6 +12,18 @@
     "@proj-airi/electron-vueuse#build": {
       "dependsOn": ["@proj-airi/electron-eventa#build"],
       "outputs": ["dist/**"]
+    },
+    "@proj-airi/stage-ui#build": {
+      "outputs": []
+    },
+    "@proj-airi/ui-loading-screens#build": {
+      "outputs": []
+    },
+    "@proj-airi/ui-transitions#build": {
+      "outputs": []
+    },
+    "@proj-airi/api-server#build": {
+      "outputs": ["*.tsbuildinfo"]
     }
   }
 }

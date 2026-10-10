@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitest/config'
 
 import { providerInferenceProjects } from './packages/provider-inference/vitest.config'
+import { stageSharedProjects } from './packages/stage-shared/vitest.config'
 
 export default defineConfig({
   test: {
@@ -26,7 +27,7 @@ export default defineConfig({
       'packages/scenarios-stage-tamagotchi-electron',
       'packages/server-runtime',
       'packages/server-sdk',
-      'packages/stage-shared',
+      ...stageSharedProjects.map(project => ({ ...project, root: 'packages/stage-shared' })),
       'packages/stage-ui-live2d/vitest.node.config.ts',
       'packages/stage-ui-three',
       'packages/vitest-plugin-fakemic',

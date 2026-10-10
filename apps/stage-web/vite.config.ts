@@ -118,7 +118,7 @@ export default defineConfig({
     format: 'es',
     rollupOptions: {
       output: {
-        inlineDynamicImports: false,
+        codeSplitting: true,
       },
     },
   },
@@ -180,17 +180,9 @@ export default defineConfig({
 
     // https://github.com/antfu/vite-plugin-pwa
     // NOTICE:
-    // The plugin must stay registered in dev — `src/modules/pwa.ts` imports
-    // the `virtual:pwa-register` module the plugin synthesises, and dropping
-    // the plugin breaks Vite's import-analysis with a "Failed to resolve
-    // import" error.
-    // SW generation in dev is already disabled by `devOptions.enabled:
-    // false` (the plugin's own default). So new SWs do NOT register from
-    // `pnpm dev` alone — but a previously-registered SW (e.g. from an
-    // earlier `vite preview` / `vite build`) lives on per-origin in the
-    // browser and keeps intercepting fetches even in dev. To recover from
-    // that state, unregister via DevTools → Application → Storage → Clear
-    // site data.
+    // Keep the plugin in development because pwa.ts imports virtual:pwa-register. Service-worker generation remains disabled.
+    // Previously registered workers still intercept requests. Clear site data in DevTools to unregister them.
+    // Remove this requirement when pwa.ts stops importing the virtual module.
     ...(env.TARGET_HUGGINGFACE_SPACE
       ? []
       : [VitePWA({
@@ -293,17 +285,8 @@ export default defineConfig({
       short_description: 'AI driven VTuber & Companion, supports Live2D and VRM.',
     }),
 
-    // For the following example assets:
-    //
-    // dist/assets/ort-wasm-simd-threaded.jsep-B0T3yYHD.wasm                21,596.01 kB │ gzip: 5,121.95 kB
-    // dist/assets/XiaolaiSC-Regular-SNWuh554.ttf                           22,183.94 kB
-    // dist/assets/cjkFonts_allseto_v1.11-ByBdljxl.ttf                      31,337.14 kB
-    // dist/assets/duckdb-coi-CSr8FQO4.wasm                                 32,320.49 kB │ gzip: 7,194.65 kB
-    // dist/assets/duckdb-eh-BJOC5S4x.wasm                                  32,604.02 kB │ gzip: 7,133.37 kB
-    // dist/assets/duckdb-mvp-8HYqhb4i.wasm                                 37,345.64 kB │ gzip: 8,099.69 kB
-    //
-    // they are too large to be able to put into deployments like Cloudflare Workers or Pages,
-    // we need to upload them to external storage and use renderBuiltUrl to rewrite their URLs.
+    // Fonts and WASM assets exceed Cloudflare deployment limits.
+    // Upload these assets to external storage and rewrite their URLs with renderBuiltUrl.
     ...((!env.S3_ENDPOINT || !env.S3_ACCESS_KEY_ID || !env.S3_SECRET_ACCESS_KEY)
       ? []
       : [

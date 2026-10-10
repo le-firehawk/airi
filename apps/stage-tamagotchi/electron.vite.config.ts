@@ -190,7 +190,7 @@ export default defineConfig({
       format: 'es',
       rollupOptions: {
         output: {
-          inlineDynamicImports: false,
+          codeSplitting: true,
         },
       },
     },

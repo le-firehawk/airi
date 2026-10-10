@@ -1,5 +1,3 @@
-import type { Preset } from 'unocss'
-
 import { presetChromatic } from '@proj-airi/unocss-preset-chromatic'
 import { blackA, cyan, grass, green, indigo, mauve, purple, red, slate, teal, violet } from '@radix-ui/colors'
 import { defineConfig, presetAttributify, presetIcons, presetTypography, presetWebFonts, presetWind3, transformerDirectives, transformerVariantGroup } from 'unocss'
@@ -140,18 +138,13 @@ code,kbd,samp,pre {
       },
     }),
     presetIcons(),
-    // NOTICE:
-    // This cast bridges the preset's bundled UnoCSS declarations to the workspace declarations.
-    // Version 1.1.4 embeds @unocss/core types in its generated shared declaration file.
-    // Source: node_modules/@proj-airi/unocss-preset-chromatic/dist/shared-3Rd5ey9i.d.mts.
-    // Remove this when the package emits imports for UnoCSS types instead of bundling them.
     presetChromatic({
       baseHue: 220.44,
       colors: {
         complementary: 180,
         primary: 0,
       },
-    }) as unknown as Preset<object>,
+    }),
   ],
   rules: [
     [/^bg-gradient-radial-\[(.+)\]$/, ([, d]) => ({ 'background-image': `radial-gradient(${d})` })],

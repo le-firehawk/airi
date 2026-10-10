@@ -7,5 +7,7 @@ export default defineConfig({
   },
   sourcemap: true,
   unused: true,
-  inlineOnly: false,
+  deps: {
+    onlyBundle: false,
+  },
 })

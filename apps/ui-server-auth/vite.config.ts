@@ -13,13 +13,9 @@ import VueRouter from 'vue-router/vite'
 import { defineConfig, loadEnv } from 'vite'
 
 // NOTICE:
-// Keep this namespace distinct from `/assets/`, where an earlier Pages SPA
-// fallback allowed missing JavaScript URLs to cache index.html as immutable.
-// Root cause: the old asset cache policy outlived the deployment that restored
-// those files, so affected browsers cannot observe corrected response headers.
-// Source/context: `apps/ui-server-auth/public/_headers` and `public/404.html`.
-// Removal condition: keep the namespace permanently; reusing `/assets/` can
-// reactivate poisoned browser entries that remain fresh for up to one year.
+// Old /assets/ URLs cached HTML as immutable for up to a year. Corrected response headers cannot repair those fresh browser entries.
+// Sources: public/_headers and public/404.html.
+// Keep assets-v2 permanently to avoid reactivating poisoned entries.
 const assetsDirectory = 'assets-v2'
 
 const config = defineConfig({
@@ -80,7 +76,7 @@ const config = defineConfig({
     format: 'es',
     rollupOptions: {
       output: {
-        inlineDynamicImports: false,
+        codeSplitting: true,
       },
     },
   },

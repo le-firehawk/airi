@@ -104,17 +104,6 @@
     "vitest-browser-vue": "catalog:",
     "yaml": "catalog:"
   },
-  "workspaces": [
-    "packages/**",
-    "plugins/**",
-    "integrations/**",
-    "services/**",
-    "examples/**",
-    "docs/**",
-    "engines/**",
-    "apps/**",
-    "server/**"
-  ],
   "simple-git-hooks": {
     "pre-commit": "pnpm nano-staged"
   },

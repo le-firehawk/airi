@@ -8,7 +8,9 @@ export default defineConfig({
     'encoding/index': 'src/encoding/index.ts',
   },
   unbundle: true,
-  external: [
-    './capture.worklet?worker&url',
-  ],
+  deps: {
+    neverBundle: [
+      './capture.worklet?worker&url',
+    ],
+  },
 })

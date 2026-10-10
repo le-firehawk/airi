@@ -70,6 +70,12 @@ packages:
 
 overrides:
   '@types/hast': 'catalog:'
+  # NOTICE:
+  # The collector skips duplicate peer-context subtrees of this prerelease.
+  # Generator/shared JS and declarations are byte-identical to stable 0.5.1.
+  # Source: app-builder-lib 26.16.1 PnpmNodeModulesCollector.
+  # Remove once the plugin declares stable xsAI itself.
+  '@xsai-apple-speech/transcription-electron-plugin@0.1.3>@xsai/generate-transcription': 0.5.1
   array-flatten: npm:@nolyfill/array-flatten@^1.0.44
   axios: npm:feaxios@^0.0.23
   'eslint-plugin-sonarjs>typescript': 'catalog:'
@@ -82,7 +88,33 @@ overrides:
   side-channel: npm:@nolyfill/side-channel@^1.0.44
   string.prototype.matchall: npm:@nolyfill/string.prototype.matchall@^1.0.44
 patchedDependencies:
+  # NOTICE:
+  # The Drizzle adapter also mixes both environment loaders in its DSN entry.
+  # Resolve that boundary per runtime until upstream separates it.
+  # Source: @proj-airi/drizzle-duckdb-wasm/dist/index.mjs.
+  '@proj-airi/drizzle-duckdb-wasm@0.6.0': patches/@proj-airi__drizzle-duckdb-wasm@0.6.0.patch
+  # NOTICE:
+  # DuckDB 0.6.0 mixes Node imports into its browser worker entry.
+  # Select its environment-specific runtime until upstream separates that graph.
+  # Source: @proj-airi/duckdb-wasm/dist/index.mjs.
+  '@proj-airi/duckdb-wasm@0.6.0': patches/@proj-airi__duckdb-wasm@0.6.0.patch
+  # NOTICE:
+  # Chromatic 1.1.4 bundles duplicate UnoCSS types in its public declarations.
+  # Import the owning types until the package emits external UnoCSS declarations.
+  # Source: @proj-airi/unocss-preset-chromatic/dist/index.d.mts.
+  '@proj-airi/unocss-preset-chromatic@1.1.4': patches/@proj-airi__unocss-preset-chromatic@1.1.4.patch
+  # NOTICE:
+  # Sherpaw 0.2.1 exposes an absent WASM path and browser-incompatible Node imports.
+  # Select the browser environment and shipped asset until upstream fixes both.
+  # Sources: @sherpaw/asr/package.json and dist/asr-BgkZjkfL.js.
+  '@sherpaw/asr@0.2.1': patches/@sherpaw__asr@0.2.1.patch
   '@xsai-ext/responses@0.5.1': patches/@xsai-ext__responses@0.5.1.patch
+  # NOTICE:
+  # Arrow 17 publishes a .cjs bin path, but ships the executable as .js.
+  # Correct its installed CLI metadata until upstream publishes a compatible fix.
+  # pnpm currently links nested bins before applying patches, so that early warning remains.
+  # Source: apache-arrow@17.0.0/package.json and bin/arrow2csv.js.
+  apache-arrow@17.0.0: patches/apache-arrow@17.0.0.patch
   mineflayer-pathfinder: patches/mineflayer-pathfinder.patch
   pixi-live2d-display: patches/pixi-live2d-display.patch
   sponsorkit@17.1.0: patches/sponsorkit@17.1.0.patch
@@ -569,6 +601,9 @@ packageExtensions:
   '@pmndrs/pointer-events':
     peerDependencies:
       three: '*'
+  '@proj-airi/unocss-preset-chromatic@1.1.4':
+    peerDependencies:
+      '@unocss/core': ^66.7.5
   '@tresjs/core':
     peerDependencies:
       '@types/three': '*'

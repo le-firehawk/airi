@@ -1,0 +1,12 @@
+diff --git a/package.json b/package.json
+--- a/package.json
++++ b/package.json
+@@ -43,7 +43,7 @@
+     "tslib": "^2.6.2"
+   },
+   "bin": {
+-    "arrow2csv": "bin/arrow2csv.cjs"
++    "arrow2csv": "bin/arrow2csv.js"
+   },
+   "exports": {
+     ".": {

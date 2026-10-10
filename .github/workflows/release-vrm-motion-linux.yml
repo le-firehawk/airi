@@ -59,26 +59,37 @@ jobs:
       - name: Check repository lint
         run: pnpm lint
       - name: Check repository types
+        id: repository-types
         run: pnpm run typecheck --concurrency=2 --continue=always --filter='./integrations/**'
       # The module runner supports this monorepo's extensionless TypeScript imports.
       # Select it explicitly instead of relying on Vite's future native default.
+      # After prerequisites pass, collect all test failures. Any failed test still blocks packaging.
       - name: Test CI diagnostic gates
+        if: ${{ !cancelled() && steps.repository-types.outcome == 'success' }}
         run: pnpm exec vitest run --configLoader runner --project github-scripts .github/scripts/run-godot-checked.test.ts
       - name: Test Telegram integration regressions
+        if: ${{ !cancelled() && steps.repository-types.outcome == 'success' }}
         run: pnpm -F @proj-airi/telegram-bot exec vitest run --configLoader runner --project node --maxWorkers=1
       - name: Test Satori integration regressions
+        if: ${{ !cancelled() && steps.repository-types.outcome == 'success' }}
         run: pnpm -F @proj-airi/satori-bot exec vitest run --configLoader runner --config vitest.config.ts --project satori-bot --maxWorkers=1
       - name: Test Discord integration regressions
+        if: ${{ !cancelled() && steps.repository-types.outcome == 'success' }}
         run: pnpm -F @proj-airi/discord-bot exec vitest run --configLoader runner --config vitest.config.ts --project discord-bot --maxWorkers=1
       - name: Test Minecraft integration regressions
+        if: ${{ !cancelled() && steps.repository-types.outcome == 'success' }}
         run: pnpm -F @proj-airi/minecraft-bot run test --run --configLoader runner --project minecraft-bot --maxWorkers=1
       - name: Test Three runtime and pivot
+        if: ${{ !cancelled() && steps.repository-types.outcome == 'success' }}
         run: pnpm -F @proj-airi/stage-ui-three exec vitest run --configLoader runner
       - name: Test desktop foundations and update routing
+        if: ${{ !cancelled() && steps.repository-types.outcome == 'success' }}
         run: pnpm -F @proj-airi/stage-tamagotchi exec vitest run --configLoader runner --project node
       - name: Test imports, games, and prompts
+        if: ${{ !cancelled() && steps.repository-types.outcome == 'success' }}
         run: pnpm -F @proj-airi/stage-ui exec vitest run --configLoader runner --project node src/features/motions/vrm src/features/companion-games src/composables/use-airi-runtime-prompt.test.ts src/composables/use-optimistic.test.ts src/libs/chat-sync/cloud-mapper.test.ts src/libs/speech/streaming-pipeline.test.ts src/workers/vad/vad.test.ts src/stores/ai/chat-llm/llm.test.ts src/tools/web-search.test.ts
       - name: Test affected API regressions
+        if: ${{ !cancelled() && steps.repository-types.outcome == 'success' }}
         run: >-
           pnpm -F @proj-airi/api-server exec vitest run --configLoader runner --maxWorkers=1
           src/libs/tests/env.test.ts
@@ -127,6 +138,7 @@ jobs:
           src/services/domain/user-deletion/tests/service-deletion.test.ts
           src/services/domain/voice-packs/index.test.ts
       - name: Test affected Auth regressions
+        if: ${{ !cancelled() && steps.repository-types.outcome == 'success' }}
         run: >-
           pnpm -F @proj-airi/auth-server exec vitest run --configLoader runner --maxWorkers=1
           src/tests/auth.test.ts src/tests/ban-guard.test.ts
@@ -134,6 +146,7 @@ jobs:
           src/tests/routes-discovery.test.ts
       - name: Install browser test runtime
         id: browser-runtime
+        if: ${{ !cancelled() && steps.repository-types.outcome == 'success' }}
         run: pnpm exec playwright install --with-deps chromium
       # Collect independent browser failures in one run. Packaging still requires every test to pass.
       - name: Test presence-bubble browser canvas

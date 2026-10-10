@@ -5382,6 +5382,9 @@ importers:
       '@pinia/testing':
         specifier: 'catalog:'
         version: 2.0.1(pinia@4.0.3(@vue/devtools-api@8.2.1)(typescript@6.0.3)(vue@3.5.41(typescript@6.0.3)))
+      '@pixiv/three-vrm-core':
+        specifier: 'catalog:'
+        version: 3.5.5(@types/three@0.185.4)(three@0.185.1)
       '@proj-airi/api-server':
         specifier: workspace:*
         version: link:../../server/apps/api
@@ -5409,6 +5412,9 @@ importers:
       '@types/splitpanes':
         specifier: 'catalog:'
         version: 2.2.6
+      '@types/three':
+        specifier: 'catalog:'
+        version: 0.185.4
       '@types/unist':
         specifier: 'catalog:'
         version: 3.0.3
@@ -5433,6 +5439,9 @@ importers:
       is-network-error:
         specifier: 'catalog:'
         version: 1.3.2
+      three:
+        specifier: 'catalog:'
+        version: 0.185.1
       unocss:
         specifier: 'catalog:'
         version: 66.7.5(vite@8.2.2(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.0(supports-color@10.2.2))(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))

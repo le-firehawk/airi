@@ -11,7 +11,7 @@ import 'virtual:uno.css'
 afterEach(cleanup)
 
 async function openRoom(game: string) {
-  const screen = await render(PlayRoom, {
+  const screen = await render<typeof PlayRoom>(PlayRoom, {
     props: { modelId: 'model-one' },
     global: { plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } })] },
   })

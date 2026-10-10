@@ -1,6 +1,4 @@
-import type { Database } from '../../../libs/db'
-
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { createVoicePackService } from '.'
 import { mockDB } from '../../../libs/mock-db'
@@ -8,7 +6,7 @@ import { mockDB } from '../../../libs/mock-db'
 import * as schema from '../../../schemas'
 
 describe('voicePackService', () => {
-  let db: Database
+  let db: Awaited<ReturnType<typeof mockDB>>
   let service: ReturnType<typeof createVoicePackService>
 
   beforeAll(async () => {
@@ -18,6 +16,10 @@ describe('voicePackService', () => {
 
   beforeEach(async () => {
     await db.delete(schema.voicePacks)
+  })
+
+  afterAll(async () => {
+    await db?.$client.close()
   })
 
   it('creates a Voice Pack with provider, model, voice, params, cost multiplier, and tts model pin', async () => {

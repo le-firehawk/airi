@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { mockDB } from '../../libs/mock-db'
 import { createFluxTransactionService } from './flux-transaction'
@@ -6,7 +6,7 @@ import { createFluxTransactionService } from './flux-transaction'
 import * as schema from '../../schemas'
 
 describe('fluxTransactionService', () => {
-  let db: any
+  let db: Awaited<ReturnType<typeof mockDB>>
   let service: ReturnType<typeof createFluxTransactionService>
 
   beforeAll(async () => {
@@ -17,6 +17,10 @@ describe('fluxTransactionService', () => {
       email: 'tx@example.com',
     })
     service = createFluxTransactionService(db)
+  })
+
+  afterAll(async () => {
+    await db?.$client.close()
   })
 
   it('log should insert a single transaction entry', async () => {

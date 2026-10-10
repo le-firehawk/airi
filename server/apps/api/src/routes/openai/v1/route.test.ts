@@ -1,4 +1,3 @@
-import type { Database } from '../../../libs/db'
 import type { GenAiMetrics } from '../../../otel'
 import type { ConfigKVService } from '../../../services/adapters/config-kv'
 import type { BillingService as WalletBillingService } from '../../../services/domain/billing/billing-service'
@@ -78,7 +77,7 @@ function createMockGenAiMetrics(): GenAiMetrics {
     fluxConsumed: { add: vi.fn() },
     firstTokenDuration: { record: vi.fn() },
     streamInterrupted: { add: vi.fn() },
-  } as unknown as GenAiMetrics
+  }
 }
 
 function createMockConfigKV(overrides: Record<string, any> = {}): ConfigKVService {
@@ -209,10 +208,10 @@ function createMockVoicePackService(impl?: Partial<VoicePackService>): VoicePack
     create: vi.fn(),
     update: vi.fn(),
     disable: vi.fn(),
-    findById: vi.fn(async () => null),
-    findEnabledByVoiceId: vi.fn(async () => null),
+    findById: vi.fn(async () => undefined),
+    findEnabledByVoiceId: vi.fn(async () => undefined),
     ...impl,
-  } as unknown as VoicePackService
+  }
 }
 
 function createMockProviderCatalogService(impl?: Partial<ProviderCatalogService>): ProviderCatalogService {
@@ -539,14 +538,8 @@ describe('v1CompletionsRoutes', () => {
     })
 
     // ROOT CAUSE:
-    //
-    // Before: when usage arrived and `fluxConsumed > balance`, debitFlux
-    // threw, the response had already been delivered, and the user's balance
-    // never moved. Same user with the same script kept replaying.
-    //
-    // After: balance is drained to zero (`charged = balance`), the request
-    // log is still written, and the next
-    // request fails the pre-flight gate.
+    // Usage larger than the balance previously threw after delivery and left the balance untouched, permitting repeats.
+    // Now settlement drains the balance, records the request, and blocks the next request at the preflight gate.
     it('non-streaming completion drains partial balance and logs the request (Issue: unpaid-usage-exploit)', async () => {
       const upstreamBody = JSON.stringify({
         id: 'chatcmpl-partial',
@@ -1704,21 +1697,9 @@ describe('v1CompletionsRoutes', () => {
     })
 
     // ROOT CAUSE:
-    //
-    // Before patch, `handleTTS` ran `speechBilling.settle()` outside any
-    // try/finally and set the billing attribute + called `span.end()`
-    // *afterwards*. If `settle()` rejected (e.g. Redis blip on
-    // INCRBY), the call site threw straight to `app.onError` and the
-    // active span was never closed — OTel batched-span buffer leaked one
-    // span per failed TTS billing event, and `recordRequestLog` was
-    // skipped silently.
-    //
-    // After patch (server/apps/api/src/routes/openai/v1/index.ts:471-493):
-    // `settle()` + `span.setAttribute()` are wrapped in try/finally,
-    // span.end() runs unconditionally, and the error propagates to the
-    // global handler. recordRequestLog is still skipped (we can't log a
-    // billing-failed request without a fluxConsumed value), but the
-    // failure is now observable instead of hidden by a leaked span.
+    // A rejected settlement previously skipped span.end(), leaking spans and hiding billing failures.
+    // The finally block now closes the span before the global error handler runs.
+    // Request logging still skips failed settlement because fluxConsumed is unavailable.
     it('tTS billing failure closes the span and surfaces error to onError (regression)', async () => {
       globalThis.fetch = vi.fn(async () => new Response(new Uint8Array([1]), {
         status: 200,
@@ -2559,7 +2540,7 @@ function responsesHarness(response: () => Response, balance = 100, genAi: GenAiM
 }
 
 describe('openRouter cost billing through HTTP routes', () => {
-  let db: Database
+  let db: Awaited<ReturnType<typeof mockDB>>
   const pricing = { fluxPerUsd: 1000, multiplier: 1.5 }
 
   it.each(['chat/completions', 'responses'])('rejects missing cost prices before dispatch for %s', async (protocol) => {
@@ -2615,6 +2596,7 @@ describe('openRouter cost billing through HTTP routes', () => {
   beforeAll(async () => {
     db = await mockDB({ userFlux, fluxTransaction, fluxUsage, llmRequestLog, llmRequestAttempt })
   })
+
   beforeEach(async () => {
     await db.delete(fluxUsage)
     await db.delete(llmRequestAttempt)
@@ -2622,6 +2604,9 @@ describe('openRouter cost billing through HTTP routes', () => {
     await db.delete(fluxTransaction)
     await db.delete(userFlux)
     await db.insert(userFlux).values({ userId: testUser.id, flux: 100 })
+  })
+  afterAll(async () => {
+    await db?.$client.close()
   })
 
   function harness(response: () => Response, provider = 'openrouter.ai', pricesProvided = true) {

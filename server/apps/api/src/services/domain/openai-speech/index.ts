@@ -203,9 +203,6 @@ export function createOpenAiSpeechService(deps: OpenAiSpeechServiceDeps) {
       fluxConsumed = result.feeFlux
       span.setAttribute(AIRI_ATTR_BILLING_FLUX_CONSUMED, fluxConsumed)
     }
-    catch (err) {
-      throw err
-    }
     finally {
       span.end()
     }

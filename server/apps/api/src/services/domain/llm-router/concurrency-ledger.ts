@@ -6,16 +6,9 @@ import {
   ttsPoolSaturatedRedisKey,
 } from '../../../utils/redis-keys'
 
-// NOTICE: Atomic capacity-gated acquire. The TTSpool routes requests across
-// multiple app_ids, each capped at a small concurrency limit (e.g. 10). To use
-// the pooled capacity without overshooting any single app_id, we track in-flight
-// requests per pool in Redis (shared across replicas — the server is multi-instance
-// on Railway). A check-then-INCR done in two round-trips would race between
-// replicas and overshoot the cap, so the check + increment happen inside one Lua
-// script. The EXPIRE bounds leakage: if a replica crashes between acquire and
-// release, the counter self-heals after `inflightTtlSeconds` instead of pinning
-// the pool as permanently full. Source: flux-meter.ts ACCUMULATE_SCRIPT (same
-// "INCR + EXPIRE, TTL survives crash" shape).
+// Redis shares pool capacity across replicas. Lua checks and increments atomically to prevent oversubscription.
+// EXPIRE releases leaked capacity after a replica crashes before release.
+// Source: flux-meter.ts ACCUMULATE_SCRIPT uses the same increment-plus-TTL contract.
 const ACQUIRE_SCRIPT = `
 local inflightKey = KEYS[1]
 local knownKey = KEYS[2]
@@ -34,11 +27,8 @@ end
 return -1
 `
 
-// NOTICE: Floor-guarded release. A bare DECR on a missing/expired key would
-// drive the counter negative (Redis DECR on a nonexistent key yields -1), which
-// would then let the pool accept more than `max` concurrent requests. Guarding
-// with GET>0 inside Lua keeps release idempotent against the TTL self-heal: if
-// the inflight key already expired, release is a no-op rather than a corruption.
+// Release only positive counters. DECR on a missing key produces -1 and permits excess concurrency.
+// The Lua guard makes release harmless after the capacity key expires.
 const RELEASE_SCRIPT = `
 local inflightKey = KEYS[1]
 local current = tonumber(redis.call('GET', inflightKey) or '0')

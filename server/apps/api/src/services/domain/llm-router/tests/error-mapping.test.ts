@@ -76,7 +76,7 @@ describe('mapUpstreamError', () => {
     // request succeeded but is still trying to map it to a failure. Silently
     // returning 502 would hide that bug. We throw INTERNAL_SERVER_ERROR to
     // surface it instead.
-    expect(() => mapUpstreamError(200, { ...exampleContext, lastStatusCode: 200 as unknown as 401 })).toThrow(/success status/)
-    expect(() => mapUpstreamError(299, { ...exampleContext, lastStatusCode: 299 as unknown as 401 })).toThrow(/success status/)
+    expect(() => mapUpstreamError(200, { ...exampleContext, lastStatusCode: 200 })).toThrow(/success status/)
+    expect(() => mapUpstreamError(299, { ...exampleContext, lastStatusCode: 299 })).toThrow(/success status/)
   })
 })

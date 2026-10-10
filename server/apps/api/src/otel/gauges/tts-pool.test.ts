@@ -16,11 +16,12 @@ import { registerTtsPoolGauge } from './tts-pool'
  * expect(observe).toHaveBeenCalledWith(3, { app_id: 'app-1' })
  */
 function makeGauge() {
-  let cb: ((result: { observe: (v: number, attrs: Record<string, string>) => void }) => void | Promise<void>) | null = null
+  let cb: Parameters<GatewayMetrics['poolInflight']['addCallback']>[0] | null = null
   const observe = vi.fn()
-  const gauge = {
+  const gauge: GatewayMetrics['poolInflight'] = {
     addCallback: vi.fn((fn: typeof cb) => { cb = fn }),
-  } as unknown as GatewayMetrics['poolInflight']
+    removeCallback: vi.fn(),
+  }
   return {
     gauge,
     observe,
@@ -40,12 +41,12 @@ function makeLedger(snapshot: () => Promise<Array<{ poolId: string, inflight: nu
     isSaturated: vi.fn(),
     currentInflight: vi.fn(),
     snapshot: vi.fn(snapshot),
-  } as unknown as ConcurrencyLedger
+  }
 }
 
 function makeReadErrors() {
-  const add = vi.fn()
-  return { metricReadErrors: { add } as unknown as ObservabilityMetrics['metricReadErrors'], add }
+  const add = vi.fn<ObservabilityMetrics['metricReadErrors']['add']>()
+  return { metricReadErrors: { add }, add }
 }
 
 describe('registerTtsPoolGauge', () => {

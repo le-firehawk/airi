@@ -1,8 +1,7 @@
-import type { Database } from '../../libs/db'
 import type { createConfigKVService } from '../adapters/config-kv'
 
 import { eq } from 'drizzle-orm'
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { mockDB } from '../../libs/mock-db'
 import { createTestRedis } from '../../libs/tests/redis'
@@ -22,7 +21,7 @@ function createMockConfigKV(overrides: Record<string, number> = {}): ReturnType<
 }
 
 describe('fluxService (DB-backed)', () => {
-  let db: Database
+  let db: Awaited<ReturnType<typeof mockDB>>
   let redis: ReturnType<typeof createTestRedis>
   let read: ReturnType<typeof vi.spyOn>
   let set: ReturnType<typeof vi.spyOn>
@@ -49,6 +48,10 @@ describe('fluxService (DB-backed)', () => {
     // Clean up flux-related tables
     await db.delete(schema.fluxTransaction).where(eq(schema.fluxTransaction.userId, testUser.id))
     await db.delete(schema.userFlux).where(eq(schema.userFlux.userId, testUser.id))
+  })
+
+  afterAll(async () => {
+    await db?.$client.close()
   })
 
   it('getFlux should initialize new user with INITIAL_USER_FLUX and populate Redis', async () => {

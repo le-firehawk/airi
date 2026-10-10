@@ -721,13 +721,9 @@ export async function createApp() {
     build: ({ dependsOn }) => createPaymentService(dependsOn.db, dependsOn.billingService),
   })
 
-  // NOTICE:
-  // The deletion service is a thin scheduler that delegates to each business
-  // service's own `deleteAllForUser` method. Adding a new business module:
-  //   1. give it a `deleteAllForUser(userId)` method
-  //   2. add one `service.register(...)` line below
-  // Domain knowledge stays inside each service instead of being copied into
-  // a parallel handler file. See `server/apps/api/docs/ai-context/account-deletion.md`.
+  // The deletion coordinator calls each domain's deleteAllForUser method.
+  // Register new business modules here. Keep deletion rules in their owning service.
+  // See server/apps/api/docs/ai-context/account-deletion.md.
   const userDeletionService = injeca.provide('services:userDeletion', {
     dependsOn: { paymentService, fluxService, providerService, characterService, characterCardService, chatService },
     build: ({ dependsOn }) => {

@@ -1,10 +1,9 @@
-import type { Database } from '../../../libs/db'
 import type { PushedField } from './request'
 import type { FieldSyncHistoryOptions, FieldSyncStore } from './store'
 
 import { eq } from 'drizzle-orm'
 import { foreignKey, index, integer, pgTable, primaryKey, text, timestamp } from 'drizzle-orm/pg-core'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { jsonValue } from '../../../libs/json-value'
 import { mockDB } from '../../../libs/mock-db'
@@ -54,7 +53,7 @@ const fields = pgTable(
 )
 
 describe('fieldSyncStore', () => {
-  let db: Database
+  let db: Awaited<ReturnType<typeof mockDB>>
   let store: FieldSyncStore
 
   const push = (fields: PushedField[], ownerId = 'owner') => store.push(ownerId, 'doc', fields)
@@ -68,6 +67,10 @@ describe('fieldSyncStore', () => {
           throw createBadRequestError('Forbidden key')
       },
     })
+  })
+
+  afterEach(async () => {
+    await db?.$client.close()
   })
 
   it('stores a new document and lists it for its owner only', async () => {

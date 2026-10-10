@@ -17,7 +17,7 @@ function freshMasterKey(): Buffer {
 }
 
 function makeCounter(): Counter {
-  return { add: vi.fn() } as unknown as Counter
+  return { add: vi.fn<Counter['add']>() }
 }
 
 function makeMetrics(): { metrics: GatewayMetrics, decryptFailures: Counter } {
@@ -84,12 +84,9 @@ describe('createKeyRotator', () => {
 
   it('decrypt failure throws DECRYPT_FAILED (503) and increments decryptFailures counter — does NOT silently skip', () => {
     // ROOT CAUSE:
-    //
-    // If a stored ciphertext is corrupted or AAD-forged, decryptKey throws.
-    // Silently skipping that key would mask config-poisoning attempts (an
-    // attacker with configKV write access could overwrite a valid blob with
-    // a junk blob to force the router to fall back). Per plan U3 test (3)
-    // we surface as 503 DECRYPT_FAILED and increment the metric.
+    // Skipping corrupt or AAD-forged ciphertext hides configuration poisoning and forces fallback.
+    // Surface 503 DECRYPT_FAILED and increment its metric instead.
+    // Source: plan U3, scenario 3.
     const crypto = createEnvelopeCrypto({ masterKey: freshMasterKey() })
     const modelName = 'm'
     const upstream = {

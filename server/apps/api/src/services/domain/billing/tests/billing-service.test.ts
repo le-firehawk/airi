@@ -1,7 +1,5 @@
-import type { Database } from '../../../../libs/db'
-
 import { and, eq } from 'drizzle-orm'
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { mockDB } from '../../../../libs/mock-db'
 import { createTestRedis } from '../../../../libs/tests/redis'
@@ -11,7 +9,7 @@ import { createBillingService } from '../billing-service'
 import * as schema from '../../../../schemas'
 
 describe('billingService', () => {
-  let db: Database
+  let db: Awaited<ReturnType<typeof mockDB>>
   let redis: ReturnType<typeof createTestRedis>
   let billingService: ReturnType<typeof createBillingService>
 
@@ -31,6 +29,10 @@ describe('billingService', () => {
 
     await db.delete(schema.fluxTransaction)
     await db.delete(schema.userFlux).where(eq(schema.userFlux.userId, 'user-billing-1'))
+  })
+
+  afterAll(async () => {
+    await db?.$client.close()
   })
 
   describe('creditFlux', () => {
@@ -60,21 +62,9 @@ describe('billingService', () => {
 
     it('is idempotent across retries with the same requestId', async () => {
       // ROOT CAUSE:
-      //
-      // Worker crash window: creditFlux commits the credit, then the
-      // grant-batch poller crashes before marking its own state row
-      // (e.g. flux_grant_batch_recipient) as granted. On restart the poller
-      // re-claims the same row and calls creditFlux again with the same
-      // requestId.
-      //
-      // Before the fix: second call hit the unique index on
-      // (user_id, request_id) and threw, the poller's catch block marked
-      // the recipient as `failed` despite the user already having been credited.
-      // User got the FLUX but the recipient row was stuck in failed.
-      //
-      // After the fix: second call detects the existing flux_transaction row,
-      // returns it as an idempotent success without touching balance or cache.
-      // Poller advances to granted normally.
+      // A worker crash after credit commit can repeat the same requestId.
+      // Previously the duplicate raised a uniqueness error and marked an already-credited recipient failed.
+      // The retry now returns the existing transaction without changing balance or cache, so the worker can finish.
       const requestId = 'campaign-replay-test'
 
       const first = await billingService.creditFlux({

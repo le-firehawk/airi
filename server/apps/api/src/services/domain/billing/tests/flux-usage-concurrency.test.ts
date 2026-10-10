@@ -28,7 +28,7 @@ beforeAll(async () => {
     DB_POOL_KEEPALIVE_INITIAL_DELAY_MS: 1000,
   })
   db = database.db
-  await migrateDatabase(db)
+  await migrateDatabase(database.db)
 })
 
 afterAll(async () => {

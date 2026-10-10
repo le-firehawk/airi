@@ -18,7 +18,7 @@ function binaryResponse(bytes: Uint8Array, status = 200) {
 describe('dashscopeCosyvoiceAdapter', () => {
   it('forwards to unspeech with model=alibaba/<adapterParams.model>, voice + response_format passthrough', async () => {
     const audioBytes = new Uint8Array([0x49, 0x44, 0x33, 0x04, 0x00, 0x00]) // ID3v2 mp3 header
-    const fetchImpl = vi.fn().mockResolvedValueOnce(binaryResponse(audioBytes))
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(binaryResponse(audioBytes))
 
     const result = await dashscopeCosyvoiceAdapter.send(
       { text: 'hi there', voice: 'longxiaochun_v2', responseFormat: 'mp3' },
@@ -27,12 +27,12 @@ describe('dashscopeCosyvoiceAdapter', () => {
         baseURL: 'https://dashscope-intl.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer',
         unspeechBaseURL: UNSPEECH,
         adapterParams: { model: 'cosyvoice-v2' },
-        fetchImpl: fetchImpl as unknown as typeof fetch,
+        fetchImpl,
       },
     )
 
     expect(fetchImpl).toHaveBeenCalledTimes(1)
-    const [calledURL, init] = fetchImpl.mock.calls[0]
+    const [calledURL, init = {}] = fetchImpl.mock.calls[0]
     expect(calledURL).toBe(SPEECH_URL)
     expect(init.method).toBe('POST')
 
@@ -54,7 +54,7 @@ describe('dashscopeCosyvoiceAdapter', () => {
   })
 
   it('throws TtsUpstreamResponseError when unspeech returns non-2xx', async () => {
-    const fetchImpl = vi.fn().mockResolvedValueOnce(new Response('bad key', { status: 401 }))
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response('bad key', { status: 401 }))
 
     let caught: unknown
     try {
@@ -65,7 +65,7 @@ describe('dashscopeCosyvoiceAdapter', () => {
           baseURL: 'https://dashscope-intl.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer',
           unspeechBaseURL: UNSPEECH,
           adapterParams: {},
-          fetchImpl: fetchImpl as unknown as typeof fetch,
+          fetchImpl,
         },
       )
     }
@@ -82,7 +82,7 @@ describe('dashscopeCosyvoiceAdapter', () => {
   })
 
   it('rejects missing voice instead of hardcoding a model-specific default', async () => {
-    const fetchImpl = vi.fn().mockResolvedValueOnce(binaryResponse(new Uint8Array([0])))
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(binaryResponse(new Uint8Array([0])))
 
     await expect(dashscopeCosyvoiceAdapter.send(
       { text: 'hi' },
@@ -91,7 +91,7 @@ describe('dashscopeCosyvoiceAdapter', () => {
         baseURL: 'https://dashscope-intl.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer',
         unspeechBaseURL: UNSPEECH,
         adapterParams: {},
-        fetchImpl: fetchImpl as unknown as typeof fetch,
+        fetchImpl,
       },
     )).rejects.toMatchObject({ statusCode: 400 })
 
@@ -103,7 +103,7 @@ describe('dashscopeCosyvoiceAdapter', () => {
    * dashscopeCosyvoiceAdapter.send({ text: 'hi', extraOptions: { volume: 5 } }, ctx)
    */
   it('fails fast when Voice Pack pitch or volume params reach DashScope cosyvoice', async () => {
-    const fetchImpl = vi.fn().mockResolvedValueOnce(binaryResponse(new Uint8Array([0])))
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(binaryResponse(new Uint8Array([0])))
 
     await expect(dashscopeCosyvoiceAdapter.send(
       {
@@ -118,7 +118,7 @@ describe('dashscopeCosyvoiceAdapter', () => {
         baseURL: 'https://dashscope-intl.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer',
         unspeechBaseURL: UNSPEECH,
         adapterParams: {},
-        fetchImpl: fetchImpl as unknown as typeof fetch,
+        fetchImpl,
       },
     )).rejects.toMatchObject({ statusCode: 400 })
 
@@ -130,9 +130,9 @@ describe('dashscopeCosyvoiceAdapter', () => {
     // unspeech/pkg/backend/alibaba/voices.go). This test only verifies the
     // wire contract — fixture content is intentionally minimal so an
     // unspeech-side roster change doesn't break us.
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({
       voices: [{ id: 'longxiaochun_v2', name: 'Longxiaochun v2' }],
-    }), { status: 200 })) as unknown as typeof fetch
+    }), { status: 200 }))
     const catalog = await dashscopeCosyvoiceAdapter.getVoiceCatalog({
       adapterParams: { model: 'cosyvoice-v2' },
       unspeechBaseURL: UNSPEECH,

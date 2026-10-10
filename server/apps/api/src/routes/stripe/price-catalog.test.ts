@@ -1,4 +1,4 @@
-import type Stripe from 'stripe'
+import Stripe from 'stripe'
 
 import { describe, expect, it, vi } from 'vitest'
 
@@ -8,15 +8,22 @@ import { createStripePriceCatalog, listStripePackages } from './price-catalog'
 const productId = 'prod_flux'
 
 function createStripe(overrides: {
-  list?: ReturnType<typeof vi.fn>
-  retrieve?: ReturnType<typeof vi.fn>
+  list?: () => Promise<{ data: Stripe.Price[] }>
+  retrieve?: () => Promise<Stripe.Price>
 } = {}) {
-  return {
-    prices: {
-      list: overrides.list ?? vi.fn(async () => ({ data: [] })),
-      retrieve: overrides.retrieve ?? vi.fn(),
-    },
-  } as unknown as Stripe
+  const fetchRequest: typeof fetch = async (input, init) => {
+    const path = new URL(new Request(input, init).url).pathname
+    if (path === '/v1/prices') {
+      const result = await overrides.list?.() ?? { data: [] }
+      return Response.json({ object: 'list', url: path, has_more: false, ...result })
+    }
+    const price = await overrides.retrieve?.()
+    return price ? Response.json(price) : new Response(null, { status: 404 })
+  }
+  return new Stripe('sk_test_catalog', {
+    httpClient: Stripe.createFetchHttpClient(fetchRequest),
+    maxNetworkRetries: 0,
+  })
 }
 
 function listedPrice(overrides: Partial<Stripe.Price> = {}): Stripe.Price {

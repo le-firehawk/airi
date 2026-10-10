@@ -42,13 +42,8 @@ describe('v2 chat WebSocket authentication', () => {
   // https://github.com/moeru-ai/airi/pull/2309#discussion_r3796626514
   // https://github.com/moeru-ai/airi/pull/2309#discussion_r3796626537
   // ROOT CAUSE:
-  //
-  // An authentication resolver can finish after the socket closes or after a
-  // timeout. The old handler registered that disconnected context and allowed
-  // concurrent requests to repeat the resolver work.
-  //
-  // The authentication session now accepts one attempt, marks the socket
-  // inactive before it closes, and refuses a late resolver result.
+  // Late authentication results registered disconnected sockets. Concurrent requests repeated resolver work.
+  // Each session now permits one attempt, marks closure first, and rejects late results.
   it('does not authenticate after disconnecting during authentication', async () => {
     const deferred = createDeferred<string | null>()
     const resolveUserId = vi.fn(() => deferred.promise)

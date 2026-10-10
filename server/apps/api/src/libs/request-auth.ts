@@ -158,12 +158,8 @@ export async function resolveRequestAuth(
   if (!resolved)
     return null
 
-  // Reject banned principals on every request. OIDC JWT access tokens are
-  // stateless — verified by signature, not by a session row — so the admin
-  // plugin's session.create.before hook (which only fires on login) cannot
-  // invalidate a token mid-TTL. Re-checking `user.banned` here (free: the user
-  // row is already loaded) is what makes a ban take effect immediately across
-  // the HTTP, WebSocket, and OIDC token paths that funnel through this function.
+  // Recheck the loaded user's ban on every HTTP, WebSocket, and OIDC request.
+  // JWT signature verification cannot revoke a token mid-TTL. The login-only session hook cannot enforce later bans.
   if (isUserBannedNow(resolved.user))
     return null
 

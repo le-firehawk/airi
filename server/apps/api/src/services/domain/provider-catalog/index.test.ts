@@ -1,7 +1,5 @@
-import type { Database } from '../../../libs/db'
-
 import { eq } from 'drizzle-orm'
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { createProviderCatalogService } from '.'
 import { mockDB } from '../../../libs/mock-db'
@@ -11,7 +9,7 @@ import { ApiError } from '../../../utils/error'
 import * as schema from '../../../schemas'
 
 describe('providerCatalogService', () => {
-  let db: Database
+  let db: Awaited<ReturnType<typeof mockDB>>
   let service: ReturnType<typeof createProviderCatalogService>
 
   beforeAll(async () => {
@@ -24,6 +22,10 @@ describe('providerCatalogService', () => {
     await db.delete(capabilityAliases)
     await db.delete(providerCatalogTtsVoices)
     await db.delete(providerCatalogTtsModels)
+  })
+
+  afterAll(async () => {
+    await db?.$client.close()
   })
 
   it('syncs the default LLM auto alias and runtime model routes as enabled', async () => {

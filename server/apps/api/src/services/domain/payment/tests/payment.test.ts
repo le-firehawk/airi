@@ -1,9 +1,8 @@
-import type { Database } from '../../../../libs/db'
 import type { ClaimReceipt, EvidenceReceipt } from '../types'
 
 import { Environment } from '@apple/app-store-server-library'
 import { eq } from 'drizzle-orm'
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { mockDB } from '../../../../libs/mock-db'
 import { createTestRedis } from '../../../../libs/tests/redis'
@@ -15,7 +14,7 @@ import { createPaymentService } from '../index'
 import * as schema from '../../../../schemas'
 
 describe('payment CORE', () => {
-  let db: Database
+  let db: Awaited<ReturnType<typeof mockDB>>
   let redis: ReturnType<typeof createTestRedis>
   let payment: ReturnType<typeof createPaymentService>
 
@@ -37,6 +36,10 @@ describe('payment CORE', () => {
     await db.delete(schema.userFlux).where(eq(schema.userFlux.userId, 'user-pay-1'))
     await db.delete(schema.paymentOrder).where(eq(schema.paymentOrder.userId, 'user-pay-1'))
     await db.delete(schema.paymentCustomer).where(eq(schema.paymentCustomer.userId, 'user-pay-1'))
+  })
+
+  afterAll(async () => {
+    await db?.$client.close()
   })
 
   async function insertPendingOrder() {

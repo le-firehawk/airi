@@ -63,12 +63,8 @@ export const azureAdapter: TtsAdapter = {
   },
 
   async getVoiceCatalog(ctx: TtsVoiceCatalogContext): Promise<Voice[]> {
-    // Azure has no static catalog. Voices live at Microsoft's `voices/list`
-    // REST endpoint, which we reach via the unspeech `microsoft` backend
-    // because unspeech already maps the proprietary response shape to
-    // `types.Voice` (full formats table, masterpiece preview URLs, locale
-    // metadata). Calling unspeech also keeps a single integration point for
-    // every other provider that could grow this way later.
+    // Azure's live voices/list endpoint has no bundled catalog.
+    // Unspeech's microsoft backend normalizes its formats, preview URLs, and locale metadata into the shared Voice contract.
     if (!ctx.region)
       throw createServiceUnavailableError('azure tts region not configured', 'AZURE_TTS_NOT_CONFIGURED')
     if (!ctx.keyPlaintext)

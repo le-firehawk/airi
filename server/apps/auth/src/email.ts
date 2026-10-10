@@ -96,13 +96,10 @@ function formatFrom(config: EmailConfig): string {
  */
 export function createEmailService(config: EmailConfig, logger: Logger = useLogger('email'), metrics?: EmailMetrics | null): EmailService {
   // NOTICE:
-  // Construct Resend lazily so the server can boot in environments where the
-  // RESEND_API_KEY is intentionally empty (e.g. local dev that never exercises
-  // email flows). Calls to `send` will throw, which Better Auth surfaces.
-  // Root cause summary: Resend's constructor logs but does not throw on empty
-  // keys; explicit guard keeps the failure mode visible at the call site.
-  // Source: node_modules/.pnpm/resend@*/node_modules/resend/dist/index.cjs
-  // Removal condition: when we make RESEND_API_KEY required at env-parse time.
+  // Create Resend lazily so local servers can boot without email credentials. Sending must fail explicitly when credentials are absent.
+  // The constructor only logs empty keys.
+  // Source: resend/dist/index.cjs.
+  // Remove this guard when RESEND_API_KEY becomes required during environment parsing.
   let client: Resend | null = null
   function getClient(): Resend {
     if (!client) {

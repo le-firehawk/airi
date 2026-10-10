@@ -1,9 +1,8 @@
-import type { Database } from '../../libs/db'
 import type { ConfigKVService } from '../../services/adapters/config-kv'
 import type { CachedPrice, StripePriceCatalog } from './price-catalog'
 
 import { eq } from 'drizzle-orm'
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { mockDB } from '../../libs/mock-db'
 import { createTestRedis } from '../../libs/tests/redis'
@@ -78,7 +77,7 @@ function createCheckout(
 }
 
 describe('stripe checkout', () => {
-  let db: Database
+  let db: Awaited<ReturnType<typeof mockDB>>
   let payment: ReturnType<typeof createPaymentService>
 
   beforeAll(async () => {
@@ -99,6 +98,10 @@ describe('stripe checkout', () => {
     await db.delete(schema.userFlux).where(eq(schema.userFlux.userId, 'user-pay-1'))
     await db.delete(schema.paymentOrder).where(eq(schema.paymentOrder.userId, 'user-pay-1'))
     await db.delete(schema.paymentCustomer).where(eq(schema.paymentCustomer.userId, 'user-pay-1'))
+  })
+
+  afterAll(async () => {
+    await db?.$client.close()
   })
 
   it('inserts a pending order then creates a Checkout Session', async () => {

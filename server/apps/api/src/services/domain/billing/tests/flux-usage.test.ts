@@ -1,7 +1,5 @@
-import type { Database } from '../../../../libs/db'
-
 import { eq, sum } from 'drizzle-orm'
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { mockDB } from '../../../../libs/mock-db'
 import { createTestRedis } from '../../../../libs/tests/redis'
@@ -15,7 +13,7 @@ import { SpeechBilling } from '../speech-billing'
 import * as schema from '../../../../schemas'
 
 describe('shared Flux usage', () => {
-  let db: Database
+  let db: Awaited<ReturnType<typeof mockDB>>
   let billing: ReturnType<typeof createBillingService>
   let llmBilling: ReturnType<typeof createLlmBillingService>
   let speech: SpeechBilling
@@ -33,6 +31,7 @@ describe('shared Flux usage', () => {
   beforeAll(async () => {
     db = await mockDB(schema)
   })
+
   beforeEach(async () => {
     await db.delete(fluxTransaction)
     await db.delete(fluxUsage)
@@ -44,6 +43,9 @@ describe('shared Flux usage', () => {
     billing = createBillingService(db, redis)
     llmBilling = createLlmBillingService(billing)
     speech = new SpeechBilling(billing, config)
+  })
+  afterAll(async () => {
+    await db?.$client.close()
   })
 
   it('combines LLM and speech fees into one pool', async () => {

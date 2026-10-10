@@ -21,7 +21,7 @@ function createTestApp(service: VoicePackService, user: { id: string } | null) {
     })
 }
 
-function createService() {
+function createService(): VoicePackService {
   return {
     listEnabled: vi.fn(async () => [{
       id: 'vp-1',
@@ -44,7 +44,7 @@ function createService() {
     disable: vi.fn(),
     findById: vi.fn(),
     findEnabledByVoiceId: vi.fn(),
-  } as unknown as VoicePackService
+  }
 }
 
 describe('voice packs routes', () => {

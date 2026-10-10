@@ -97,12 +97,9 @@ const EnvSchema = intersect([S3EnvironmentSchema, object({
   DB_POOL_MAX: optionalIntegerFromString(20, 'DB_POOL_MAX', 1),
 
   HOST: optional(string(), '0.0.0.0'),
-  // Envelope-encryption master key for in-process LLM/TTS router (KTD-5).
-  // Stored as base64-encoded 32 random bytes. Validator decodes + asserts the
-  // 32-byte length at parse time so a misconfigured key fails the deploy
-  // rather than passing readiness and breaking on first router request.
-  // Required: the router has no fallback path, so an unset master key means
-  // chat completions cannot serve at all.
+  // The router requires a base64-encoded, 32-byte encryption key.
+  // Validate decoded length at startup so a bad key fails deployment before requests arrive.
+  // The router has no unencrypted fallback.
   LLM_ROUTER_MASTER_KEY: pipe(
     string(),
     nonEmpty('LLM_ROUTER_MASTER_KEY is required'),
@@ -149,11 +146,8 @@ const EnvSchema = intersect([S3EnvironmentSchema, object({
   TEST_AUTH_USER_EMAIL: optional(pipe(string(), nonEmpty('TEST_AUTH_USER_EMAIL must not be empty when set')), 'test@example.com'),
   TEST_AUTH_USER_ID: optional(pipe(string(), nonEmpty('TEST_AUTH_USER_ID must not be empty when set')), 'test-user'),
   TEST_AUTH_USER_NAME: optional(pipe(string(), nonEmpty('TEST_AUTH_USER_NAME must not be empty when set')), 'Test User'),
-  // Canonical user-facing web app origin. Used as the Stripe redirect base
-  // (success_url / cancel_url / portal return_url) when a request has no trusted
-  // browser origin — notably the Electron desktop renderer, which loads from
-  // file:// and sends no usable web origin. Web/mobile requests keep returning to
-  // their own origin; only origin-less clients fall back to this.
+  // Stripe uses this web origin when the request has no trusted browser origin, including Electron file:// renderers.
+  // Web and mobile requests keep their own trusted origin.
   WEB_APP_URL: optional(string(), 'https://airi.moeru.ai'),
 })])
 

@@ -1,3 +1,5 @@
+import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core'
+
 import type { Env } from './env'
 
 import { fileURLToPath } from 'node:url'
@@ -13,7 +15,14 @@ import * as fullSchema from '../schemas'
 const logger = useLogger('db')
 const migrationsFolder = fileURLToPath(new URL('../../drizzle', import.meta.url))
 
-export type Database = ReturnType<typeof createDrizzle>['db']
+interface PostgreSqlRows<Row> { rows: Row[] }
+
+interface PostgreSqlQueryResult extends PgQueryResultHKT {
+  type: PostgreSqlRows<this['row']>
+}
+
+/** Shared PostgreSQL query contract, independent of the production or in-memory driver. */
+export type Database = PgDatabase<PostgreSqlQueryResult, typeof fullSchema>
 
 type DrizzleEnv = Pick<Env, 'DATABASE_URL' | 'DB_POOL_MAX' | 'DB_POOL_IDLE_TIMEOUT_MS' | 'DB_POOL_CONNECTION_TIMEOUT_MS' | 'DB_POOL_KEEPALIVE_INITIAL_DELAY_MS'>
 
@@ -38,6 +47,6 @@ export function createDrizzle(env: DrizzleEnv) {
   return { db, pool }
 }
 
-export async function migrateDatabase(db: Database) {
+export async function migrateDatabase(db: ReturnType<typeof createDrizzle>['db']) {
   await migrate(db, { migrationsFolder })
 }

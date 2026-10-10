@@ -1,6 +1,6 @@
-import type { NodePgDatabase } from 'drizzle-orm/node-postgres'
 import type Redis from 'ioredis'
 
+import type { Database } from '../../../libs/db'
 import type { ConfigKey } from './definitions'
 
 import { eq } from 'drizzle-orm'
@@ -23,8 +23,8 @@ export interface ConfigKVStoreOptions {
  * PostgreSQL is the source of truth. A Redis error fails the operation so this
  * boundary never serves ConfigKV while its cache dependency is unavailable.
  */
-export function createConfigKVStore<TSchema extends Record<string, unknown>>(
-  db: NodePgDatabase<TSchema>,
+export function createConfigKVStore(
+  db: Pick<Database, 'select'>,
   redis: Redis,
   options: ConfigKVStoreOptions = {},
 ) {

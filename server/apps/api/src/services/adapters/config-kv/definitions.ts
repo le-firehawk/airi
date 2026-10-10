@@ -120,12 +120,9 @@ export const ttsUpstreamSchema = object({
   baseURL: pipe(string(), nonEmpty('tts.upstreams[].baseURL must not be empty')),
   keys: pipe(array(keyEntrySchema), check(v => v.length >= 1, 'tts.upstreams[].keys must contain at least 1 entry')),
   adapterParams: optional(record(string(), any()), {}),
-  // Per-app_id concurrency cap for the pool load balancer. One upstream maps to
-  // one app_id (Volcengine `adapterParams.appid`), capped by the provider at a
-  // small number (e.g. 10). When set on any upstream of a model, the router
-  // switches from fixed-order fallback to capacity-aware routing across pools.
-  // Absent = unlimited: that model keeps the original fixed-order behavior and
-  // makes zero Redis calls (no regression for existing single-app configs).
+  // One upstream represents one provider app_id.
+  // A concurrency cap on any upstream enables capacity-aware routing across pools.
+  // Without caps, the model keeps fixed-order fallback and makes no capacity-tracking Redis calls.
   maxConcurrency: optional(pipe(number(), check(v => v >= 1, 'tts.upstreams[].maxConcurrency must be >= 1 when set'))),
 })
 
@@ -262,20 +259,13 @@ export const configEntrySchemas = {
   // No default — absent lets Stripe auto-select payment methods via Dashboard config
   STRIPE_PAYMENT_METHODS: optional(array(string())),
   STRIPE_PAYMENT_METHOD_OPTIONS: optional(record(string(), any()), {}),
-  // model id → (BCP-47 locale → recommended voice id). Outer key is either a
-  // router TTS model id (LLM_ROUTER_CONFIG.tts.models key) for REST or a
-  // streaming api_resource_id (e.g. `seed-tts-2.0`) for the streaming surface.
-  // The two key spaces do not overlap. Consumed by the client to preselect a
-  // voice matching UI locale per active model.
+  // Maps model IDs and BCP-47 locales to recommended voice IDs for client selection.
+  // REST keys use router TTS model IDs. Streaming keys use api_resource_id values.
+  // These key spaces do not overlap.
   DEFAULT_TTS_VOICES: optional(record(string(), record(string(), string())), {}),
-  // Server-side alias resolution for `model: 'auto'` in /chat/completions and
-  // /audio/speech. The modelName written here must exist as a key in
-  // LLM_ROUTER_CONFIG.{llm,tts}.models — the router itself doesn't understand
-  // `auto`, this layer translates before dispatch. No default: missing entry
-  // surfaces CONFIG_NOT_SET (resolveWithDefault swallows ValiError) so a
-  // misconfigured deploy fails the request instead of silently routing to an
-  // empty modelName. Naked schema (not wrapped in optional) keeps the inferred
-  // type tight (`string` rather than `string | undefined`) for call sites.
+  // Resolves auto before router dispatch. Each value must name an existing LLM_ROUTER_CONFIG model.
+  // Missing values produce CONFIG_NOT_SET instead of routing an empty model name.
+  // Keep the schema required so successful lookups return string, without undefined.
   DEFAULT_CHAT_MODEL: pipe(string(), nonEmpty('DEFAULT_CHAT_MODEL must not be empty')),
   DEFAULT_TTS_MODEL: pipe(string(), nonEmpty('DEFAULT_TTS_MODEL must not be empty')),
   // No default — the router throws CONFIG_NOT_SET when this entry is absent

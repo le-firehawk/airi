@@ -1,12 +1,20 @@
 import { sql } from 'drizzle-orm'
-import { describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { mockDB } from './mock-db'
 
 describe('mockDB', () => {
-  it('registers the pgvector extension', async () => {
-    const db = await mockDB({})
+  let db: Awaited<ReturnType<typeof mockDB>>
 
+  beforeAll(async () => {
+    db = await mockDB({})
+  })
+
+  afterAll(async () => {
+    await db?.$client.close()
+  })
+
+  it('registers the pgvector extension', async () => {
     // ROOT CAUSE:
     //
     // PGlite 0.5 moved pgvector from the main package to a separate package.

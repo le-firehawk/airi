@@ -4,6 +4,7 @@ import type { RequestAuthSession } from '../request-auth'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { resolveRequestAuth } from '../request-auth'
+import { createTestDatabase } from './db-fixtures'
 
 vi.mock('jose', () => ({
   createRemoteJWKSet: vi.fn(() => 'mock-jwks'),
@@ -36,6 +37,7 @@ function createUser(overrides: Partial<RequestAuthSession['user']> = {}): Reques
     banned: false,
     banReason: null,
     banExpires: null,
+    lastSeenAt: null,
     createdAt: now,
     updatedAt: now,
     ...overrides,
@@ -43,17 +45,24 @@ function createUser(overrides: Partial<RequestAuthSession['user']> = {}): Reques
 }
 
 function createDb(user: RequestAuthSession['user'] | null, failure?: Error): Database {
-  return {
-    query: {
-      user: {
-        findFirst: vi.fn(async () => {
-          if (failure)
-            throw failure
-          return user
-        }),
-      },
-    },
-  } as unknown as Database
+  const db = createTestDatabase()
+  const findFirst = vi.spyOn(db.query.user, 'findFirst')
+  if (failure) {
+    findFirst.mockRejectedValue(failure)
+  }
+  else {
+    findFirst.mockResolvedValue(user
+      ? {
+          ...user,
+          image: user.image ?? null,
+          banned: user.banned ?? null,
+          banReason: user.banReason ?? null,
+          banExpires: user.banExpires ?? null,
+          lastSeenAt: user.lastSeenAt ?? null,
+        }
+      : undefined)
+  }
+  return db
 }
 
 function mockValidJwt(subject = 'user-1') {

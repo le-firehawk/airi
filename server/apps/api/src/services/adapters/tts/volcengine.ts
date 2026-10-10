@@ -68,13 +68,9 @@ export const volcengineAdapter: TtsAdapter = {
     const encoding = input.responseFormat ?? DEFAULT_VOLCENGINE_FORMAT
     const speed = input.speed ?? 1
 
-    // unspeech volcengine backend (unspeech/pkg/backend/volcengine/speech.go):
-    // - reads token from `Authorization: Bearer <token>` (strips "Bearer "
-    //   prefix), then re-attaches as `Bearer; <token>` to the upstream — so
-    //   we send a normal Bearer here, NOT the `Bearer; ` form.
-    // - takes `app.appid`, `app.cluster`, `user.uid`, `request.reqid`,
-    //   `audio.encoding`, `audio.speed_ratio` from `extra_body` jsonpath.
-    // - decodes the upstream base64 audio frame itself and returns binary.
+    // Unspeech expects normal Bearer authorization and converts it to Volcengine's Bearer; form.
+    // It reads app, user, request, and audio fields from extra_body, then decodes base64 audio to binary.
+    // Source: unspeech/pkg/backend/volcengine/speech.go.
     return sendSpeechViaUnSpeech({
       ctx,
       model: apiResourceId ? `volcengine/${apiResourceId}` : 'volcengine',

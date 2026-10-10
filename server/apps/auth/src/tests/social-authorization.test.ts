@@ -1,3 +1,5 @@
+import type { QueryResult } from 'pg'
+
 import type { AuthDatabase } from '../db'
 import type { AuthEnv } from '../env'
 
@@ -10,6 +12,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createAuth } from '../auth'
 import { parseAuthEnv } from '../env'
 import { createSocialAuthorizationRevoker } from '../social-authorization'
+import { createTestAuthDatabase } from './auth-fixtures'
 
 interface SocialAccount {
   providerId: string
@@ -33,13 +36,16 @@ function createCredentials(): Pick<AuthEnv, 'AUTH_GOOGLE_CLIENT_ID' | 'AUTH_GOOG
 }
 
 function createAccountDb(accounts: SocialAccount[]): AuthDatabase {
-  return {
-    select: vi.fn(() => ({
-      from: vi.fn(() => ({
-        where: vi.fn(async () => accounts),
-      })),
-    })),
-  } as unknown as AuthDatabase
+  const db = createTestAuthDatabase()
+  const result: QueryResult<Array<string | null>> = {
+    command: 'SELECT',
+    rowCount: accounts.length,
+    oid: 0,
+    fields: [],
+    rows: accounts.map(account => [account.providerId, account.accessToken, account.refreshToken]),
+  }
+  vi.spyOn(db.$client, 'query').mockImplementation(vi.fn().mockResolvedValue(result))
+  return db
 }
 
 describe('social authorization revocation', () => {

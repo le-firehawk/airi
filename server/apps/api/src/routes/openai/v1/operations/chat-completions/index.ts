@@ -76,14 +76,9 @@ export function chatCompletions(deps: V1RouteDeps): GatewayCallback<'chat-comple
     // its own `airi.gen_ai.gateway.*` attrs on success.
     const span = telemetry.startGenerationSpan({ model: requestModel, stream, operation: 'chat' })
 
-    // Router throws ApiError (502/503/504/400) on full exhaustion or unknown
-    // model. We do NOT catch here — global app.onError renders the ApiError
-    // shape. Span is closed inside the catch so failures show up in traces.
-    // NOTICE:
-    // Propagate the client disconnect signal so an upstream LLM call doesn't
-    // keep generating tokens (and burning paid upstream quota) after the
-    // caller hangs up. Without this the streaming-cancel path records
-    // fluxConsumed: 0 while real cost was incurred — a silent revenue leak.
+    // Let app.onError render router ApiErrors. Close failed spans in the catch.
+    // Propagate client disconnects so paid upstream generation stops when the caller leaves.
+    // Otherwise billing can record zero while upstream costs continue.
     // Source: codex review 2026-05-15 HIGH #1.
     const clientAbort = input.abortSignal
     let routeCtx = newRouteContext()

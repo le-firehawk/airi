@@ -1,9 +1,7 @@
-import type { Database } from '../../libs/db'
-
 import Stripe from 'stripe'
 
 import { eq } from 'drizzle-orm'
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { mockDB } from '../../libs/mock-db'
 import { createTestRedis } from '../../libs/tests/redis'
@@ -18,7 +16,7 @@ import * as schema from '../../schemas'
 // Checkout completion can precede payment. Migration snapshots also miss
 // sessions created by old replicas. Exercise signed events against the ledger.
 describe('pR #2335 payment release', () => {
-  let db: Database
+  let db: Awaited<ReturnType<typeof mockDB>>
   let payment: ReturnType<typeof createPaymentService>
   let webhook: ReturnType<typeof createWebhookOperation>
   const stripe = new Stripe('sk_test_release')
@@ -37,6 +35,10 @@ describe('pR #2335 payment release', () => {
     const redis = createTestRedis()
     payment = createPaymentService(db, createBillingService(db, redis))
     webhook = createWebhookOperation(stripe, secret, payment, null, null)
+  })
+
+  afterAll(async () => {
+    await db?.$client.close()
   })
 
   async function deliver(type: string, session: { id: string, payment_status: string, metadata?: { payment_order_id: string } }) {

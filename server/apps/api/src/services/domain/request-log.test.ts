@@ -1,8 +1,7 @@
-import type { Database } from '../../libs/db'
 import type { HonoEnv } from '../../types/hono'
 
 import { Hono } from 'hono'
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { mockDB } from '../../libs/mock-db'
 import { createLlmRequestRoutes } from '../../routes/llm-requests'
@@ -13,7 +12,7 @@ import { captureRequestContent } from './request-content'
 import { createRequestLogService } from './request-log'
 
 describe('request log and billing ownership', () => {
-  let db: Database
+  let db: Awaited<ReturnType<typeof mockDB>>
   const observation = {
     userId: 'log-user',
     requestId: 'request-1',
@@ -33,11 +32,15 @@ describe('request log and billing ownership', () => {
   beforeAll(async () => {
     db = await mockDB({ userFlux, llmRequestLog, llmRequestAttempt })
   })
+
   beforeEach(async () => {
     await db.delete(llmRequestAttempt)
     await db.delete(llmRequestLog)
     await db.delete(userFlux)
     await db.insert(userFlux).values({ userId: observation.userId, flux: 100 })
+  })
+  afterAll(async () => {
+    await db?.$client.close()
   })
 
   it('keeps rows without request IDs append-only and accepts new gateway usage fields', async () => {

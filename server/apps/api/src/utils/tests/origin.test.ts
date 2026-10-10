@@ -70,17 +70,9 @@ describe('origin utils', () => {
     })
 
     // ROOT CAUSE:
-    //
-    // The packaged Electron renderer loads from file://, so its Stripe checkout
-    // request carries no Referer and an opaque/absent Origin. resolveTrustedRequestOrigin
-    // then returns undefined and the checkout route threw
-    // `createBadRequestError('Missing trusted request origin', 'INVALID_ORIGIN')`,
-    // blocking FLUX purchases on desktop (web/mobile were unaffected because they
-    // send a trusted web origin).
-    //
-    // Before patch: no trusted origin -> undefined -> route throws INVALID_ORIGIN.
-    // After patch: no trusted origin -> falls back to the configured web app URL,
-    // which Stripe accepts as a success_url/cancel_url base.
+    // Electron file:// requests lack trusted browser origins, so Stripe checkout rejected desktop users.
+    // Origin-less clients now use the configured web app URL for Stripe redirects.
+    // Web/mobile clients retain their trusted request origin.
     it('falls back to the web app URL when the request has no trusted origin (Electron file://)', () => {
       const request = new Request('http://localhost/api/v1/stripe/checkout', {
         method: 'POST',

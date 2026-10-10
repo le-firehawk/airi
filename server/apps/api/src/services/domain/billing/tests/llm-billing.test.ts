@@ -1,6 +1,4 @@
-import type { Database } from '../../../../libs/db'
-
-import { beforeAll, beforeEach, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest'
 
 import { mockDB } from '../../../../libs/mock-db'
 import { createTestRedis } from '../../../../libs/tests/redis'
@@ -9,7 +7,7 @@ import { createLlmBillingService } from '../llm-billing'
 
 import * as schema from '../../../../schemas'
 
-let db: Database
+let db: Awaited<ReturnType<typeof mockDB>>
 let billing: ReturnType<typeof createBillingService>
 let llm: ReturnType<typeof createLlmBillingService>
 const pricing = { fluxPerUsd: 1000, multiplier: 1 }
@@ -18,6 +16,7 @@ const input = (requestId: string, costUsd: number | undefined) => ({ userId: 'wa
 beforeAll(async () => {
   db = await mockDB(schema)
 })
+
 beforeEach(async () => {
   await db.delete(schema.fluxTransaction)
   await db.delete(schema.fluxUsage)
@@ -25,6 +24,9 @@ beforeEach(async () => {
   await db.insert(schema.userFlux).values({ userId: 'wallet', flux: 10 })
   billing = createBillingService(db, createTestRedis())
   llm = createLlmBillingService(billing)
+})
+afterAll(async () => {
+  await db?.$client.close()
 })
 
 it('posts nothing for an unknown cost or an explicit pending reason', async () => {

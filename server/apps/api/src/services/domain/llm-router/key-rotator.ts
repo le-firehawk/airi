@@ -72,13 +72,9 @@ export function createKeyRotator(
             provider,
             key_entry_id: entry.id,
           })
-          // NOTICE:
-          // Surfacing decrypt failure as CONFIG_NOT_SET (503) rather than
-          // letting the raw crypto error bubble. Silent skip would hide
-          // config poisoning / forged-blob attempts. Source: plan U3 test
-          // scenario (3) "Decrypt failure on one key … does NOT silently
-          // skip (security: silent skip would hide config-poisoning)".
-          // Removal condition: never — security-critical surfacing.
+          // Decryption failures must surface as CONFIG_NOT_SET 503 rather than skip keys.
+          // Silent fallback hides corrupt or forged configuration.
+          // This is permanent security policy. Source: plan U3, decryption-failure scenario 3.
           throw createServiceUnavailableError(
             `Failed to decrypt key ${entry.id} for model ${modelName}: ${errorMessageFrom(err) ?? 'unknown error'}`,
             'DECRYPT_FAILED',

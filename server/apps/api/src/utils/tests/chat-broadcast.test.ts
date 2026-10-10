@@ -82,20 +82,10 @@ describe('chat broadcast utils', () => {
       originInstanceId: 'instance-A',
     }))).toThrow('chat broadcast payload.messages must be an array')
 
-    // commit 88744602f — chat broadcast loopback echoes
-    //
+    // Commit 88744602f.
     // ROOT CAUSE:
-    //
-    // Earlier broadcast messages did not carry originInstanceId, so the
-    // sub callback could not distinguish "this came from another instance"
-    // from "this came from us via redis loopback". Without it the sender's
-    // own peers received every message twice (once from in-process fanout,
-    // once from the sub callback re-delivering the publish).
-    //
-    // We fixed this by requiring originInstanceId on every wire message and
-    // having the sub callback compare against its own instanceId before
-    // delivering. The parse step rejects messages missing it so a stale
-    // publisher cannot bypass the dedup.
+    // Redis loopback previously delivered local broadcasts twice.
+    // Every message now carries originInstanceId. Receivers ignore their own broadcasts, and parsing rejects messages without an origin so stale publishers cannot bypass deduplication.
     expect(() => parseChatBroadcastMessage(JSON.stringify({
       userId: 'user-1',
       payload: {

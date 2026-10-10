@@ -51,9 +51,9 @@ describe('getAdapter', () => {
       const adapter = getAdapter(id)
       expect(typeof adapter.send).toBe('function')
       expect(typeof adapter.getVoiceCatalog).toBe('function')
-      const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      const fetchImpl = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({
         voices: [{ id: 'v1', name: 'v1' }],
-      }), { status: 200 })) as unknown as typeof fetch
+      }), { status: 200 }))
 
       const voices = await adapter.getVoiceCatalog({
         adapterParams: {},
@@ -69,9 +69,9 @@ describe('getAdapter', () => {
 describe('dashscopeCosyvoiceAdapter.getVoiceCatalog', () => {
   it('calls unspeech with provider=alibaba + model (no Bearer)', async () => {
     const adapter = getAdapter('dashscope-cosyvoice')
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({
       voices: [{ id: 'longxiaochun_v2', name: 'Longxiaochun v2' }],
-    }), { status: 200 })) as unknown as typeof fetch
+    }), { status: 200 }))
 
     const voices = await adapter.getVoiceCatalog({
       adapterParams: { model: 'cosyvoice-v2' },
@@ -80,7 +80,7 @@ describe('dashscopeCosyvoiceAdapter.getVoiceCatalog', () => {
     })
 
     expect(voices).toEqual([{ id: 'longxiaochun_v2', name: 'Longxiaochun v2' }])
-    const [calledUrl, init] = (fetchImpl as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0]
+    const [calledUrl, init = {}] = fetchImpl.mock.calls[0]
     expect(calledUrl).toBe('http://unspeech.local/api/voices?provider=alibaba&model=cosyvoice-v2')
     const headers = (init.headers ?? {}) as Record<string, string>
     expect(headers.Authorization).toBeUndefined()
@@ -88,7 +88,7 @@ describe('dashscopeCosyvoiceAdapter.getVoiceCatalog', () => {
 
   it('throws 502 BAD_GATEWAY when unspeech non-2xx', async () => {
     const adapter = getAdapter('dashscope-cosyvoice')
-    const fetchImpl = vi.fn(async () => new Response('boom', { status: 502 })) as unknown as typeof fetch
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response('boom', { status: 502 }))
     await expect(adapter.getVoiceCatalog({
       adapterParams: {},
       unspeechBaseURL: 'http://unspeech.local',
@@ -100,9 +100,9 @@ describe('dashscopeCosyvoiceAdapter.getVoiceCatalog', () => {
 describe('volcengineAdapter.getVoiceCatalog', () => {
   it('calls unspeech with provider=volcengine and forwards adapterParams.model as ?model=', async () => {
     const adapter = getAdapter('volcengine')
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({
       voices: [{ id: 'zh_female_x', name: 'X' }],
-    }), { status: 200 })) as unknown as typeof fetch
+    }), { status: 200 }))
 
     const voices = await adapter.getVoiceCatalog({
       adapterParams: { model: 'seed-tts-2.0' },
@@ -111,19 +111,19 @@ describe('volcengineAdapter.getVoiceCatalog', () => {
     })
 
     expect(voices).toEqual([{ id: 'zh_female_x', name: 'X' }])
-    const [calledUrl] = (fetchImpl as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0]
+    const [calledUrl] = fetchImpl.mock.calls[0]
     expect(calledUrl).toBe('http://unspeech.local/api/voices?provider=volcengine&model=seed-tts-2.0')
   })
 
   it('omits ?model= when adapterParams.model is not set', async () => {
     const adapter = getAdapter('volcengine')
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ voices: [] }), { status: 200 })) as unknown as typeof fetch
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ voices: [] }), { status: 200 }))
     await adapter.getVoiceCatalog({
       adapterParams: {},
       unspeechBaseURL: 'http://unspeech.local',
       fetchImpl,
     })
-    const [calledUrl] = (fetchImpl as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0]
+    const [calledUrl] = fetchImpl.mock.calls[0]
     expect(calledUrl).toBe('http://unspeech.local/api/voices?provider=volcengine')
   })
 })
@@ -131,9 +131,9 @@ describe('volcengineAdapter.getVoiceCatalog', () => {
 describe('azureAdapter.getVoiceCatalog', () => {
   it('sends bearer + region to unspeech and returns voices on 200', async () => {
     const adapter = getAdapter('azure')
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({
       voices: [{ id: 'en-US-AvaMultilingualNeural', name: 'Ava' }],
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
 
     const voices = await adapter.getVoiceCatalog({
       keyPlaintext: Buffer.from('subscription-key-XYZ', 'utf8'),
@@ -145,7 +145,7 @@ describe('azureAdapter.getVoiceCatalog', () => {
 
     expect(voices).toEqual([{ id: 'en-US-AvaMultilingualNeural', name: 'Ava' }])
     expect(fetchImpl).toHaveBeenCalledTimes(1)
-    const [calledUrl, init] = (fetchImpl as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0]
+    const [calledUrl, init = {}] = fetchImpl.mock.calls[0]
     expect(calledUrl).toBe('http://unspeech.local:5933/api/voices?provider=microsoft&region=eastasia')
     const headers = init.headers as Record<string, string>
     expect(headers.Authorization).toBe('Bearer subscription-key-XYZ')
@@ -157,7 +157,7 @@ describe('azureAdapter.getVoiceCatalog', () => {
       keyPlaintext: Buffer.from('k', 'utf8'),
       adapterParams: {},
       unspeechBaseURL: 'http://unspeech.local',
-      fetchImpl: vi.fn() as unknown as typeof fetch,
+      fetchImpl: vi.fn<typeof fetch>(),
     })).rejects.toMatchObject({ statusCode: 503, errorCode: 'AZURE_TTS_NOT_CONFIGURED' })
   })
 
@@ -167,13 +167,13 @@ describe('azureAdapter.getVoiceCatalog', () => {
       region: 'eastasia',
       adapterParams: { region: 'eastasia' },
       unspeechBaseURL: 'http://unspeech.local',
-      fetchImpl: vi.fn() as unknown as typeof fetch,
+      fetchImpl: vi.fn<typeof fetch>(),
     })).rejects.toMatchObject({ statusCode: 503, errorCode: 'AZURE_TTS_NOT_CONFIGURED' })
   })
 
   it('throws 502 BAD_GATEWAY when unspeech responds non-2xx', async () => {
     const adapter = getAdapter('azure')
-    const fetchImpl = vi.fn(async () => new Response('upstream down', { status: 502 })) as unknown as typeof fetch
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response('upstream down', { status: 502 }))
     await expect(adapter.getVoiceCatalog({
       keyPlaintext: Buffer.from('k', 'utf8'),
       region: 'eastasia',
@@ -185,9 +185,9 @@ describe('azureAdapter.getVoiceCatalog', () => {
 
   it('throws 502 BAD_GATEWAY when unspeech fetch throws', async () => {
     const adapter = getAdapter('azure')
-    const fetchImpl = vi.fn(async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => {
       throw new Error('ECONNREFUSED')
-    }) as unknown as typeof fetch
+    })
     await expect(adapter.getVoiceCatalog({
       keyPlaintext: Buffer.from('k', 'utf8'),
       region: 'eastasia',
@@ -201,10 +201,10 @@ describe('azureAdapter.getVoiceCatalog', () => {
 describe('azureAdapter.send', () => {
   it('posts SSML to unspeech /v1/audio/speech with model=microsoft/v1 + region extra_body', async () => {
     const adapter = getAdapter('azure')
-    const fetchImpl = vi.fn(async () => new Response(new Uint8Array([1, 2, 3]), {
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response(new Uint8Array([1, 2, 3]), {
       status: 200,
       headers: { 'content-type': 'audio/mpeg' },
-    })) as unknown as typeof fetch
+    }))
 
     await adapter.send(
       {
@@ -225,7 +225,7 @@ describe('azureAdapter.send', () => {
       },
     )
 
-    const [calledURL, init] = (fetchImpl as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0]
+    const [calledURL, init = {}] = fetchImpl.mock.calls[0]
     expect(calledURL).toBe('http://unspeech.local:5933/v1/audio/speech')
     const body = JSON.parse(init.body as string) as Record<string, unknown>
     expect(body.model).toBe('microsoft/v1')
@@ -242,10 +242,10 @@ describe('azureAdapter.send', () => {
 
   it('uses adapterParams.defaultVoice when the request omits voice', async () => {
     const adapter = getAdapter('azure')
-    const fetchImpl = vi.fn(async () => new Response(new Uint8Array([1, 2, 3]), {
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response(new Uint8Array([1, 2, 3]), {
       status: 200,
       headers: { 'content-type': 'audio/mpeg' },
-    })) as unknown as typeof fetch
+    }))
 
     await adapter.send(
       { text: 'hi there' },
@@ -258,14 +258,14 @@ describe('azureAdapter.send', () => {
       },
     )
 
-    const [, init] = (fetchImpl as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0]
+    const [, init = {}] = fetchImpl.mock.calls[0]
     const body = JSON.parse(init.body as string) as Record<string, unknown>
     expect(body.voice).toBe('en-US-AvaMultilingualNeural')
   })
 
   it('rejects missing voice when adapterParams.defaultVoice is not configured', async () => {
     const adapter = getAdapter('azure')
-    const fetchImpl = vi.fn() as unknown as typeof fetch
+    const fetchImpl = vi.fn<typeof fetch>()
 
     await expect(adapter.send(
       { text: 'hi' },
@@ -283,7 +283,7 @@ describe('azureAdapter.send', () => {
 
   it('throws TtsUpstreamResponseError when unspeech returns non-2xx', async () => {
     const adapter = getAdapter('azure')
-    const fetchImpl = vi.fn(async () => new Response('upstream rejected', { status: 401 })) as unknown as typeof fetch
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response('upstream rejected', { status: 401 }))
 
     let caught: unknown
     try {
@@ -312,13 +312,13 @@ describe('azureAdapter.send', () => {
 describe('stepfunAdapter', () => {
   it('uses unspeech as the StepFun voice-catalog source', async () => {
     const adapter = getAdapter('stepfun')
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({
       voices: [{
         id: 'cixingnansheng',
         name: '磁性男声',
         compatible_models: ['stepaudio-2.5-tts', 'step-tts-2', 'step-tts-mini'],
       }],
-    }), { status: 200 })) as unknown as typeof fetch
+    }), { status: 200 }))
 
     const voices = await adapter.getVoiceCatalog({
       adapterParams: {},
@@ -336,16 +336,16 @@ describe('stepfunAdapter', () => {
       ]),
     )
     expect(fetchImpl).toHaveBeenCalledTimes(1)
-    const [calledUrl] = (fetchImpl as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0]
+    const [calledUrl] = fetchImpl.mock.calls[0]
     expect(calledUrl).toBe('http://unspeech.local/api/voices?provider=stepfun')
   })
 
   it('posts OpenAI-compatible speech JSON to unspeech with model=stepfun/<model>', async () => {
     const adapter = getAdapter('stepfun')
-    const fetchImpl = vi.fn(async () => new Response(new Uint8Array([1, 2, 3]), {
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response(new Uint8Array([1, 2, 3]), {
       status: 200,
       headers: { 'content-type': 'audio/mpeg' },
-    })) as unknown as typeof fetch
+    }))
 
     const result = await adapter.send(
       {
@@ -368,7 +368,7 @@ describe('stepfunAdapter', () => {
       },
     )
 
-    const [calledURL, init] = (fetchImpl as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0]
+    const [calledURL, init = {}] = fetchImpl.mock.calls[0]
     expect(calledURL).toBe('http://unspeech.local:5933/v1/audio/speech')
     expect(init.method).toBe('POST')
     expect(init.headers).toMatchObject({
@@ -394,10 +394,10 @@ describe('stepfunAdapter', () => {
 
   it('passes the Step Plan endpoint profile to unspeech', async () => {
     const adapter = getAdapter('stepfun')
-    const fetchImpl = vi.fn(async () => new Response(new Uint8Array([1, 2, 3]), {
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response(new Uint8Array([1, 2, 3]), {
       status: 200,
       headers: { 'content-type': 'audio/mpeg' },
-    })) as unknown as typeof fetch
+    }))
 
     const result = await adapter.send(
       {
@@ -421,7 +421,7 @@ describe('stepfunAdapter', () => {
       },
     )
 
-    const [calledURL, init] = (fetchImpl as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0]
+    const [calledURL, init = {}] = fetchImpl.mock.calls[0]
     expect(calledURL).toBe('http://unspeech.local:5933/v1/audio/speech')
     expect(init.method).toBe('POST')
     expect(init.headers).toMatchObject({
@@ -445,10 +445,10 @@ describe('stepfunAdapter', () => {
 
   it('passes voice_label through to unspeech for provider-level validation', async () => {
     const adapter = getAdapter('stepfun')
-    const fetchImpl = vi.fn(async () => new Response(new Uint8Array([1]), {
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response(new Uint8Array([1]), {
       status: 200,
       headers: { 'content-type': 'audio/mpeg' },
-    })) as unknown as typeof fetch
+    }))
 
     await adapter.send(
       {
@@ -466,14 +466,14 @@ describe('stepfunAdapter', () => {
       },
     )
 
-    const [, init] = (fetchImpl as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0]
+    const [, init = {}] = fetchImpl.mock.calls[0]
     const body = JSON.parse(init.body as string) as Record<string, { voice_label?: unknown }>
     expect(body.extra_body.voice_label).toEqual({ emotion: '高兴' })
   })
 
   it('throws TtsUpstreamResponseError when unspeech returns non-2xx', async () => {
     const adapter = getAdapter('stepfun')
-    const fetchImpl = vi.fn(async () => new Response('bad key', { status: 401 })) as unknown as typeof fetch
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response('bad key', { status: 401 }))
 
     let caught: unknown
     try {
@@ -503,9 +503,9 @@ describe('stepfunAdapter', () => {
     const abortController = new AbortController()
     const abortError = new Error('attempt-timeout')
     abortController.abort(abortError)
-    const fetchImpl = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+    const fetchImpl = vi.fn<typeof fetch>(async (_input: string | URL | Request, init?: RequestInit) => {
       throw init?.signal?.reason ?? new Error('aborted')
-    }) as unknown as typeof fetch
+    })
 
     await expect(adapter.send(
       { text: 'hi', voice: 'cixingnansheng' },
@@ -524,10 +524,10 @@ describe('stepfunAdapter', () => {
 describe('volcengineAdapter.send', () => {
   it('posts to unspeech with model=volcengine/<api_resource_id> and app/cluster in extra_body', async () => {
     const adapter = getAdapter('volcengine')
-    const fetchImpl = vi.fn(async () => new Response(new Uint8Array([0x49, 0x44, 0x33]), {
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response(new Uint8Array([0x49, 0x44, 0x33]), {
       status: 200,
       headers: { 'content-type': 'audio/mpeg' },
-    })) as unknown as typeof fetch
+    }))
 
     const result = await adapter.send(
       { text: 'hi', voice: 'BV001_streaming', responseFormat: 'mp3', speed: 1.0 },
@@ -540,7 +540,7 @@ describe('volcengineAdapter.send', () => {
       },
     )
 
-    const [calledURL, init] = (fetchImpl as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0]
+    const [calledURL, init = {}] = fetchImpl.mock.calls[0]
     expect(calledURL).toBe('http://unspeech.local:5933/v1/audio/speech')
     const body = JSON.parse(init.body as string) as Record<string, any>
     expect(body.model).toBe('volcengine/seed-tts-2.0')
@@ -565,7 +565,7 @@ describe('volcengineAdapter.send', () => {
    */
   it('fails fast when Voice Pack pitch or volume params reach Volcengine', async () => {
     const adapter = getAdapter('volcengine')
-    const fetchImpl = vi.fn(async () => new Response(new Uint8Array([0x49]))) as unknown as typeof fetch
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response(new Uint8Array([0x49])))
 
     await expect(adapter.send(
       {
@@ -589,7 +589,7 @@ describe('volcengineAdapter.send', () => {
 
   it('rejects when adapterParams.appid is missing', async () => {
     const adapter = getAdapter('volcengine')
-    const fetchImpl = vi.fn() as unknown as typeof fetch
+    const fetchImpl = vi.fn<typeof fetch>()
     await expect(adapter.send(
       { text: 'hi' },
       {

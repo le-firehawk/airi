@@ -40,16 +40,9 @@ export function createSpeechCatalogOperation(deps: V1RouteDeps): SpeechCatalogOp
   const logger = useLogger('v1-completions').useGlobalConfig()
 
   async function listVoices(input: ListVoicesInput) {
-    // Voice catalogs are per-model. Live providers (Azure) call upstream
-    // via unspeech; static providers (cosyvoice, volcengine) return their
-    // bundled JSON. The Redis cache + invalidation lives one layer down
-    // in the router so route-level changes don't leak into the cache
-    // contract. Recommended map stays in configKV so operators can edit it
-    // without a deploy.
-    //
-    // No implicit fallback: an empty `?model=` is a client bug (the UI is
-    // expected to pass either an explicit model id or the `auto` alias) and
-    // returns 400 instead of silently resolving to DEFAULT_TTS_MODEL.
+    // Catalogs are per-model. Azure loads through unspeech. Other adapters supply bundled voices.
+    // The router owns Redis caching and invalidation. ConfigKV owns editable recommendations.
+    // Require an explicit model or auto. Empty model input returns 400 without a default fallback.
     const requested = input.requestedModel
     if (requested === undefined || requested === '')
       throw createBadRequestError('audio voices: ?model= is required (use `auto` to defer to DEFAULT_TTS_MODEL)', 'MISSING_MODEL')
@@ -162,11 +155,8 @@ export function createSpeechCatalogOperation(deps: V1RouteDeps): SpeechCatalogOp
   async function listStreamingSpeechModels() {
     const unspeech = await deps.configKV.getOptional('UNSPEECH_UPSTREAM')
     const models = unspeech?.streaming?.models ?? []
-    // `available` is the operator-controlled visibility switch the client gates
-    // the streaming provider on. It tracks whether `UNSPEECH_UPSTREAM.streaming`
-    // is configured at all — not whether `models[]` happens to be empty — so an
-    // operator who has wired the upstream but not yet curated models still
-    // surfaces the provider rather than silently hiding it.
+    // Provider visibility follows UNSPEECH_UPSTREAM.streaming configuration, not catalog size.
+    // A configured provider remains visible before operators curate its model list.
     return Response.json({
       available: !!unspeech?.streaming?.baseURL,
       models: models.map(m => ({

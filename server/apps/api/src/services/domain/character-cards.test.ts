@@ -1,6 +1,4 @@
-import type { Database } from '../../libs/db'
-
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { mockDB } from '../../libs/mock-db'
 import { createCharacterCardService } from './character-cards'
@@ -8,10 +6,14 @@ import { createCharacterCardService } from './character-cards'
 import * as schema from '../../schemas'
 
 describe('characterCardService', () => {
-  let db: Database
+  let db: Awaited<ReturnType<typeof mockDB>>
 
   beforeEach(async () => {
     db = await mockDB(schema)
+  })
+
+  afterEach(async () => {
+    await db?.$client.close()
   })
 
   it('stores a card in the character card tables', async () => {

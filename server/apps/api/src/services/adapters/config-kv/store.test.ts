@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { mockDB } from '../../../libs/mock-db'
 import { createTestRedis } from '../../../libs/tests/redis'
@@ -10,6 +10,10 @@ describe('configKV store', () => {
 
   beforeEach(async () => {
     db = await mockDB({ configKV })
+  })
+
+  afterEach(async () => {
+    await db?.$client.close()
   })
 
   it('returns a Redis cache hit without reading PostgreSQL', async () => {

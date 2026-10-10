@@ -5,13 +5,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { registerWsOnlineUsersGauge } from './ws-online-users'
 
 function makeGauge() {
-  let callback: ((result: { observe: (value: number) => void }) => void | Promise<void>) | null = null
+  let callback: Parameters<EngagementMetrics['wsUsersOnline']['addCallback']>[0] | null = null
   const observe = vi.fn()
-  const gauge = {
+  const gauge: EngagementMetrics['wsUsersOnline'] = {
     addCallback: vi.fn((registeredCallback: typeof callback) => {
       callback = registeredCallback
     }),
-  } as unknown as EngagementMetrics['wsUsersOnline']
+    removeCallback: vi.fn(),
+  }
 
   return {
     gauge,
@@ -25,9 +26,9 @@ function makeGauge() {
 }
 
 function makeReadErrors() {
-  const add = vi.fn()
+  const add = vi.fn<ObservabilityMetrics['metricReadErrors']['add']>()
   return {
-    metricReadErrors: { add } as unknown as ObservabilityMetrics['metricReadErrors'],
+    metricReadErrors: { add },
     add,
   }
 }

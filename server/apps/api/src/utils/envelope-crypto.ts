@@ -133,13 +133,9 @@ export function createEnvelopeCrypto(options: CreateEnvelopeCryptoOptions) {
         if (previousAesKey == null)
           throw currentErr
 
-        // NOTICE:
-        // Rotation fallback. AES-GCM auth-tag failure is the expected signal
-        // that this ciphertext predates the current master key. We retry once
-        // with the previous AES key derived from `LLM_ROUTER_MASTER_KEY_PREVIOUS`.
-        // Both keys failing means the ciphertext is genuinely corrupt or
-        // forged — surface the original (current-key) error so observability
-        // attributes it to the active configuration, not the legacy one.
+        // AES-GCM authentication failure can identify ciphertext encrypted with the previous master key.
+        // Retry with LLM_ROUTER_MASTER_KEY_PREVIOUS once.
+        // If both fail, return the current-key error so diagnostics identify the active configuration rather than the rotation fallback.
         try {
           return decryptWith(previousAesKey, iv, ct, tag, aadBytes)
         }

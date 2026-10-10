@@ -5,13 +5,14 @@ import { describe, expect, it, vi } from 'vitest'
 import { registerDbPoolGauge } from './db-pool'
 
 function makeGauge() {
-  let callback: ((result: { observe: (value: number, attributes: Record<string, string>) => void }) => void) | null = null
+  let callback: Parameters<DatabaseMetrics['poolConnections']['addCallback']>[0] | null = null
   const observe = vi.fn()
-  const gauge = {
+  const gauge: DatabaseMetrics['poolConnections'] = {
     addCallback: vi.fn((registeredCallback: typeof callback) => {
       callback = registeredCallback
     }),
-  } as unknown as DatabaseMetrics['poolConnections']
+    removeCallback: vi.fn(),
+  }
 
   return {
     gauge,

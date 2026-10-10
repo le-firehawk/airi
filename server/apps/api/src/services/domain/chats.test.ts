@@ -1,7 +1,5 @@
-import type { Database } from '../../libs/db'
-
 import { eq } from 'drizzle-orm'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { mockDB } from '../../libs/mock-db'
 import { clampLimit, createChatService, resolveSenderId } from './chats'
@@ -38,10 +36,14 @@ describe('clampLimit', () => {
 })
 
 describe('pushMessages', () => {
-  let db: Database
+  let db: Awaited<ReturnType<typeof mockDB>>
 
   beforeEach(async () => {
     db = await mockDB(schema)
+  })
+
+  afterEach(async () => {
+    await db?.$client.close()
   })
 
   it('persists and returns a native reply relation', async () => {

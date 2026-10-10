@@ -21,13 +21,8 @@ function createPeer(sent: string[]): WSContext {
 describe('v1 chat WebSocket protocol', () => {
   // https://github.com/moeru-ai/airi/pull/2308
   // ROOT CAUSE:
-  //
-  // Eventa beta.14 changed the adapter envelope. The chat server then added a
-  // second Eventa package to parse beta.13 clients.
-  //
-  // Eventa beta.15 restores dual-shape transport support. This test sends an
-  // actual beta.13 envelope and checks that the server also writes its legacy
-  // fields. Therefore the server needs one Eventa package.
+  // Eventa beta.14 changed envelopes and caused a second parser dependency.
+  // Beta.15 supports both shapes. This test sends a beta.13 envelope and checks its response fields through one Eventa package.
   it('reads and writes beta.13 envelopes through the beta.15 adapter', async () => {
     const received: Array<{ value: string }> = []
     const sent: string[] = []

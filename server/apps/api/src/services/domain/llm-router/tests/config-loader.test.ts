@@ -1,9 +1,9 @@
-import type { ConfigKVService } from '../../../adapters/config-kv'
 import type { RouterConfig } from '../types'
 
 import { describe, expect, it, vi } from 'vitest'
 
 import { ApiError } from '../../../../utils/error'
+import { createConfigKVService } from '../../../adapters/config-kv'
 import { createConfigLoader } from '../config-loader'
 
 function makeConfig(): RouterConfig {
@@ -41,13 +41,16 @@ function makeConfig(): RouterConfig {
   } as RouterConfig
 }
 
-function makeMockConfigKV(value: RouterConfig | null): ConfigKVService {
-  return {
-    getOptional: vi.fn(async (key: string) => (key === 'LLM_ROUTER_CONFIG' ? value : null)),
-    getOrThrow: vi.fn(),
-    get: vi.fn(),
-    set: vi.fn(),
-  } as unknown as ConfigKVService
+function makeMockConfigKV(value: RouterConfig | null) {
+  const service = createConfigKVService({
+    getRaw: async key => key === 'UNSPEECH_UPSTREAM'
+      ? JSON.stringify({ restBaseURL: 'http://unspeech.local:5933' })
+      : value === null ? null : JSON.stringify(value),
+    getFreshRaw: async () => null,
+    invalidateCache: async () => {},
+  })
+  vi.spyOn(service, 'getOptional')
+  return service
 }
 
 describe('createConfigLoader', () => {
@@ -65,7 +68,7 @@ describe('createConfigLoader', () => {
     nowValue = 4999
     await loader.getModelConfig('llm', 'openai/gpt-5-mini')
 
-    expect((configKV.getOptional as ReturnType<typeof vi.fn>).mock.calls.length).toBe(1)
+    expect(vi.mocked(configKV.getOptional).mock.calls.length).toBe(1)
   })
 
   it('invalidate() clears cache; next call re-reads from configKV', async () => {
@@ -78,7 +81,7 @@ describe('createConfigLoader', () => {
     nowValue = 1001
     await loader.getModelConfig('llm', 'openai/gpt-5-mini')
 
-    expect((configKV.getOptional as ReturnType<typeof vi.fn>).mock.calls.length).toBe(2)
+    expect(vi.mocked(configKV.getOptional).mock.calls.length).toBe(2)
   })
 
   it('tTL expiry triggers fresh read on next call', async () => {
@@ -90,7 +93,7 @@ describe('createConfigLoader', () => {
     nowValue = 1000 + 5001
     await loader.getModelConfig('llm', 'openai/gpt-5-mini')
 
-    expect((configKV.getOptional as ReturnType<typeof vi.fn>).mock.calls.length).toBe(2)
+    expect(vi.mocked(configKV.getOptional).mock.calls.length).toBe(2)
   })
 
   it('missing LLM_ROUTER_CONFIG → throws CONFIG_NOT_SET (503)', async () => {

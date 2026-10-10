@@ -5,6 +5,8 @@ import { Buffer } from 'node:buffer'
 
 import { describe, expect, it, vi } from 'vitest'
 
+import { createTestDatabase } from '../../libs/tests/db-fixtures'
+import { createProviderCatalogService } from '../../services/domain/provider-catalog'
 import { createEnvelopeCrypto } from '../../utils/envelope-crypto'
 import { ApiError } from '../../utils/error'
 import { resolveOfficialAliyunNlsCredentials, resolveOfficialAliyunNlsCredentialsFromConfig } from './route'
@@ -22,33 +24,33 @@ function createRouterConfig(overrides?: Partial<RouterConfig>): RouterConfig {
   }
 }
 
-function createProviderCatalogService(routeModelId = 'auto'): ProviderCatalogService {
-  return {
-    syncAliasesFromRouterConfig: vi.fn(async () => []),
-    resolveEnabledAlias: vi.fn(async () => ({
-      id: 'alias-auto',
-      surface: 'asr',
-      aliasId: 'auto',
-      displayName: 'Auto',
+function createProviderCatalogFixture(routeModelId = 'auto'): ProviderCatalogService {
+  const service = createProviderCatalogService(createTestDatabase())
+  vi.spyOn(service, 'syncAliasesFromRouterConfig').mockResolvedValue([])
+  vi.spyOn(service, 'resolveEnabledAlias').mockResolvedValue({
+    id: 'alias-auto',
+    surface: 'asr',
+    aliasId: 'auto',
+    displayName: 'Auto',
+    enabled: true,
+    displayOrder: 0,
+    fallbackEnabled: true,
+    loadBalancingEnabled: false,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    routes: [{
+      id: 'route-1',
+      aliasId: 'alias-auto',
+      routerModelId: routeModelId,
+      pool: 'primary',
       enabled: true,
+      weight: 1,
       displayOrder: 0,
-      fallbackEnabled: true,
-      loadBalancingEnabled: false,
       createdAt: new Date(),
       updatedAt: new Date(),
-      routes: [{
-        id: 'route-1',
-        aliasId: 'alias-auto',
-        routerModelId: routeModelId,
-        pool: 'primary',
-        enabled: true,
-        weight: 1,
-        displayOrder: 0,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }],
-    })),
-  } as unknown as ProviderCatalogService
+    }],
+  })
+  return service
 }
 
 describe('resolveOfficialAliyunNlsCredentials', () => {
@@ -123,7 +125,7 @@ describe('resolveOfficialAliyunNlsCredentials', () => {
         },
       },
     })
-    const providerCatalogService = createProviderCatalogService('aliyun/asr-primary')
+    const providerCatalogService = createProviderCatalogFixture('aliyun/asr-primary')
 
     const credentials = await resolveOfficialAliyunNlsCredentialsFromConfig({
       configKV: { getOptional: vi.fn(async () => routerConfig) } as never,
@@ -142,7 +144,7 @@ describe('resolveOfficialAliyunNlsCredentials', () => {
 
   it('rejects disabled ASR capability aliases before credentials are used', async () => {
     const envelope = createEnvelopeCrypto({ masterKey: Buffer.alloc(32, 7) })
-    const providerCatalogService = createProviderCatalogService()
+    const providerCatalogService = createProviderCatalogFixture()
     vi.mocked(providerCatalogService.resolveEnabledAlias).mockRejectedValueOnce(
       new ApiError(400, 'CAPABILITY_ALIAS_DISABLED', 'Capability alias is disabled'),
     )

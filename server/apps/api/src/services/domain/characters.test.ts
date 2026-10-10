@@ -1,6 +1,4 @@
-import type { Database } from '../../libs/db'
-
-import { beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { mockDB } from '../../libs/mock-db'
 import { createCharacterService } from './characters'
@@ -8,7 +6,7 @@ import { createCharacterService } from './characters'
 import * as schema from '../../schemas'
 
 describe('characterService', () => {
-  let db: Database
+  let db: Awaited<ReturnType<typeof mockDB>>
   let service: ReturnType<typeof createCharacterService>
   let testUser: any
 
@@ -23,6 +21,10 @@ describe('characterService', () => {
       email: 'test@example.com',
     }).returning()
     testUser = user
+  })
+
+  afterAll(async () => {
+    await db?.$client.close()
   })
 
   it('create should handle full character creation', async () => {

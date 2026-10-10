@@ -1,8 +1,7 @@
-import type { Database } from '../../libs/db'
 import type { HonoEnv } from '../../types/hono'
 
 import { Hono } from 'hono'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { createCharacterCardRoutes } from '.'
 import { mockDB } from '../../libs/mock-db'
@@ -12,7 +11,7 @@ import { ApiError } from '../../utils/error'
 import * as schema from '../../schemas'
 
 describe('characterCardRoutes', () => {
-  let db: Database
+  let db: Awaited<ReturnType<typeof mockDB>>
   let app: Hono<HonoEnv>
 
   function requestAs(userId: string, path: string, init?: RequestInit) {
@@ -44,6 +43,10 @@ describe('characterCardRoutes', () => {
       await next()
     })
     app.route('/', createCharacterCardRoutes(createCharacterCardService(db)))
+  })
+
+  afterEach(async () => {
+    await db?.$client.close()
   })
 
   it('rejects a request without a user', async () => {

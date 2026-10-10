@@ -89,14 +89,10 @@ describe('parseEnv', () => {
   })
 
   // NOTICE:
-  // The "rejects wrong-length master key" behavior is enforced by the Valibot
-  // check() in `LLM_ROUTER_MASTER_KEY`. It cannot be cleanly asserted here
-  // because `parseEnv` calls `process.exit(1)` on validation failure (intended
-  // for boot failures, not test assertions). Testing through `parseEnv` would
-  // require mocking `process.exit`, which destabilizes the vitest worker on
-  // module-init paths (parsedEnv = injeca.provide('env', () => parseEnv(env))).
-  // The success-case tests above prove the validator chain runs; the failure
-  // mode is exercised via integration / manual deploy testing.
+  // Invalid master keys trigger process.exit(1) during environment parsing.
+  // These tests cover successful parsing. Rejection needs an isolated process to avoid terminating the Vitest worker.
+  // Source: parseEnv and LLM_ROUTER_MASTER_KEY's Valibot check.
+  // Replace this note after an isolated rejection test exists.
 
   it('lLM_ROUTER_MASTER_KEY_PREVIOUS decodes when set (rotation window)', () => {
     const current = Buffer.alloc(32, 0x01).toString('base64')

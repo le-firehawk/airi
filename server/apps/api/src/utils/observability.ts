@@ -101,28 +101,10 @@ export const METRIC_AIRI_RATE_LIMIT_BLOCKED = 'airi.rate_limit.blocked'
 export const METRIC_AIRI_GEN_AI_STREAM_INTERRUPTED = 'airi.gen_ai.stream.interrupted'
 export const METRIC_GEN_AI_CLIENT_FIRST_TOKEN_DURATION = 'gen_ai.client.first_token.duration'
 
-// AIRI router gateway — in-process LLM/TTS routing fallback / health signals.
-//
-// fallback_count    — each retry attempt (per failing key). Labels: provider,
-//                     from_key, reason. Dashboard sum gives 24h fallback volume.
-// upstream_errors   — upstream-side error responses. Labels: provider, status_code.
-// key_exhausted     — all keys in a single request failed. Labels: provider.
-//                     **Primary alert source for "user-facing degradation"**.
-// same_status_exhaustion
-//                  — all keys failed in one request *with the same status code*.
-//                     Strong signal of shared-backend (account-level) rate limit
-//                     that ordinary fallback can't help with. Drives D33's blind
-//                     spot detection per adversarial review.
-// config_reload    — local in-memory configKV cache reloaded. Labels: source
-//                     (`pubsub` | `ttl` | `manual`), service_instance_id.
-// decrypt_failures — envelope-crypto decryption auth-tag failures. Labels:
-//                     provider, key_entry_id. >0 = config corruption or rotation
-//                     misstep.
-// subscriber_state — Pub/Sub subscriber lifecycle transitions. Labels: state
-//                     (`subscribed` | `reconnecting` | `error` | `closed`).
-// config_invalid_hmac
-//                  — Pub/Sub invalidation messages dropped due to HMAC mismatch
-//                     (forged or replayed). >0 = investigate Redis access.
+// Gateway signals separate retries, upstream errors, exhausted keys, and shared-status exhaustion.
+// Key exhaustion alerts on user impact. Matching-status exhaustion identifies provider-wide limits.
+// Config reloads identify replicas. Decryption or HMAC failures require configuration/security investigation.
+// Subscriber state records Redis connection transitions.
 export const METRIC_AIRI_GEN_AI_GATEWAY_FALLBACK_COUNT = 'airi.gen_ai.gateway.fallback.count'
 export const METRIC_AIRI_GEN_AI_GATEWAY_UPSTREAM_ERRORS = 'airi.gen_ai.gateway.upstream.errors'
 export const METRIC_AIRI_GEN_AI_GATEWAY_KEY_EXHAUSTED_COUNT = 'airi.gen_ai.gateway.key.exhausted'
@@ -131,15 +113,8 @@ export const METRIC_AIRI_GEN_AI_GATEWAY_CONFIG_RELOAD = 'airi.gen_ai.gateway.con
 export const METRIC_AIRI_GEN_AI_GATEWAY_DECRYPT_FAILURES = 'airi.gen_ai.gateway.decrypt.failures'
 export const METRIC_AIRI_GEN_AI_GATEWAY_SUBSCRIBER_STATE = 'airi.gen_ai.gateway.subscriber_state'
 export const METRIC_AIRI_GEN_AI_GATEWAY_CONFIG_INVALID_HMAC = 'airi.gen_ai.gateway.config.invalid_hmac'
-// TTSpool (per app_id concurrency pool) load-balancer signals.
-// pool_slot_rejected — capacity-aware routing skipped a pool because its app_id
-//                      was already at the concurrency cap (labels: provider, app_id).
-// pool_saturation_marked
-//                    — a pool was circuit-broken after exhausting with a 429
-//                      (labels: provider, app_id).
-// pool_inflight      — cluster-wide gauge of current in-flight requests per pool,
-//                      sourced from Redis (label: app_id). Dashboard must avg(),
-//                      not sum() — every replica reports the same value.
+// Pool metrics record capacity rejection, 429-triggered cooldown, and Redis in-flight counts.
+// Average pool_inflight across replicas. Do not sum it, because each replica reports the same cluster-wide count.
 export const METRIC_AIRI_GEN_AI_GATEWAY_POOL_SLOT_REJECTED = 'airi.gen_ai.gateway.pool.slot_rejected'
 export const METRIC_AIRI_GEN_AI_GATEWAY_POOL_SATURATION_MARKED = 'airi.gen_ai.gateway.pool.saturation_marked'
 export const METRIC_AIRI_GEN_AI_GATEWAY_POOL_INFLIGHT = 'airi.gen_ai.gateway.pool.inflight'

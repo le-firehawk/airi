@@ -1,10 +1,11 @@
 import type { AddressInfo } from 'node:net'
 
-import type { WSContext, WSEvents } from 'hono/ws'
+import type { WSEvents } from 'hono/ws'
 
 import { Buffer } from 'node:buffer'
 import { createServer } from 'node:http'
 
+import { WSContext } from 'hono/ws'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { WebSocketServer } from 'ws'
 
@@ -131,11 +132,11 @@ function makeMockClientWs(): MockClientWs {
     closeCode: undefined as number | undefined,
     closeReason: undefined as string | undefined,
   }
-  const ctx = {
-    send: (data: string | ArrayBuffer | Buffer) => {
+  const ctx = new WSContext({
+    send: (data) => {
       sent.push({
         kind: typeof data === 'string' ? 'text' : 'binary',
-        data,
+        data: data instanceof Uint8Array ? Buffer.from(data) : data,
       })
     },
     close: (code?: number, reason?: string) => {
@@ -144,11 +145,10 @@ function makeMockClientWs(): MockClientWs {
       state.closeReason = reason
     },
     readyState: 1,
-    binaryType: 'arraybuffer',
-    raw: {} as any,
+    raw: {},
     protocol: '',
     url: null,
-  } as unknown as WSContext
+  })
 
   return {
     ctx,

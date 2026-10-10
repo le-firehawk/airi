@@ -1,9 +1,7 @@
-import type { Database } from '../../../../libs/db'
-
 import { Buffer } from 'node:buffer'
 
 import { eq } from 'drizzle-orm'
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { mockDB } from '../../../../libs/mock-db'
 import { createTestRedis } from '../../../../libs/tests/redis'
@@ -24,10 +22,14 @@ function fakeConfigKV() {
 }
 
 describe('fluxService.deleteAllForUser', () => {
-  let db: Database
+  let db: Awaited<ReturnType<typeof mockDB>>
 
   beforeAll(async () => {
     db = await mockDB(schema)
+  })
+
+  afterAll(async () => {
+    await db?.$client.close()
   })
 
   it('marks userFlux.deletedAt and invalidates Redis cache', async () => {
@@ -65,10 +67,14 @@ describe('fluxService.deleteAllForUser', () => {
 })
 
 describe('providerService.deleteAllForUser', () => {
-  let db: Database
+  let db: Awaited<ReturnType<typeof mockDB>>
 
   beforeAll(async () => {
     db = await mockDB(schema)
+  })
+
+  afterAll(async () => {
+    await db?.$client.close()
   })
 
   it('marks every userProviderConfigs row owned by the user', async () => {
@@ -99,10 +105,14 @@ describe('providerService.deleteAllForUser', () => {
 })
 
 describe('characterService.deleteAllForUser', () => {
-  let db: Database
+  let db: Awaited<ReturnType<typeof mockDB>>
 
   beforeAll(async () => {
     db = await mockDB(schema)
+  })
+
+  afterAll(async () => {
+    await db?.$client.close()
   })
 
   it('soft-deletes characters where the user is owner OR creator', async () => {
@@ -185,10 +195,14 @@ describe('characterService.deleteAllForUser', () => {
 })
 
 describe('chatService.deleteAllForUser', () => {
-  let db: Database
+  let db: Awaited<ReturnType<typeof mockDB>>
 
   beforeAll(async () => {
     db = await mockDB(schema)
+  })
+
+  afterAll(async () => {
+    await db?.$client.close()
   })
 
   it('soft-deletes chats the user is a member of', async () => {

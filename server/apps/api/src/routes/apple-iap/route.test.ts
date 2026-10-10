@@ -6,7 +6,7 @@ import type { Verifier } from './verifier'
 
 import { Environment } from '@apple/app-store-server-library'
 import { Hono } from 'hono'
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { mockDB } from '../../libs/mock-db'
 import { ApiError } from '../../utils/error'
@@ -133,7 +133,7 @@ async function post(
 }
 
 describe('apple-iap routes', () => {
-  let db: Database
+  let db: Awaited<ReturnType<typeof mockDB>>
   let payment: PaymentService
   let verifier: Verifier
 
@@ -145,6 +145,10 @@ describe('apple-iap routes', () => {
     payment = createMockPayment()
     verifier = createMockVerifier()
     await db.delete(schema.paymentCustomer)
+  })
+
+  afterAll(async () => {
+    await db?.$client.close()
   })
 
   async function seedAppleAccount(userId: string, token = storedToken) {

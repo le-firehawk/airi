@@ -1,7 +1,13 @@
-import type { BetterAuthPlugin } from 'better-auth'
+import type { AuthContext, BetterAuthPlugin, Session } from 'better-auth'
 
 import { isUserBannedNow } from '@proj-airi/auth-shared'
 import { APIError } from 'better-auth'
+
+interface BanGuardContext {
+  context: {
+    internalAdapter: Pick<AuthContext['internalAdapter'], 'findUserById'>
+  }
+}
 
 interface BanState {
   banned?: boolean | null
@@ -16,7 +22,7 @@ interface BanState {
  * does not clear expired bans because a concurrent management request can
  * renew a ban after the session hook reads it.
  */
-export function banGuard(): BetterAuthPlugin {
+export function banGuard() {
   return {
     id: 'ban-guard',
     schema: {
@@ -47,7 +53,7 @@ export function banGuard(): BetterAuthPlugin {
           databaseHooks: {
             session: {
               create: {
-                async before(session, context) {
+                async before(session: Session, context?: BanGuardContext | null) {
                   if (!context)
                     return
 
@@ -66,5 +72,5 @@ export function banGuard(): BetterAuthPlugin {
         },
       }
     },
-  }
+  } satisfies BetterAuthPlugin
 }

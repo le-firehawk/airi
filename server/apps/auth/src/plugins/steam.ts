@@ -30,13 +30,9 @@ const SteamPlayerSummariesSchema = object({
 const STEAM_CLAIMED_ID_PATTERN = /^https:\/\/steamcommunity\.com\/openid\/id\/(\d{17})$/
 
 // NOTICE:
-// Why Zod instead of the repo-default Valibot: better-auth's endpoint API and
-// OpenAPI generator are Zod-native. The generator introspects
-// `instanceof z.ZodObject` on `body`/`query` to emit request/query schemas
-// (node_modules/better-auth/dist/plugins/open-api/generator.mjs), so Valibot
-// schemas would validate at runtime (better-call uses Standard Schema) but
-// silently drop those OpenAPI fields. Keep these schemas in Zod until
-// better-auth's OpenAPI generation supports non-Zod schemas.
+// Better Auth's OpenAPI generator recognizes Zod objects. Valibot validates through Standard Schema but loses generated request fields here.
+// Source: better-auth/dist/plugins/open-api/generator.mjs.
+// Keep Zod at this external boundary until the generator supports other schema implementations.
 const SignInBodySchema = z.object({
   callbackURL: z.string().meta({ description: 'The URL to redirect to after sign in' }),
   errorCallbackURL: z.string().meta({ description: 'The URL to redirect to if an error occurs' }).optional(),

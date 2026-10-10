@@ -1,11 +1,6 @@
 import type { Counter, Histogram, ObservableGauge } from '@opentelemetry/api'
-// NOTICE:
-// HTTP server metrics (request duration, active requests) are emitted by
-// `@hono/otel`'s `httpInstrumentationMiddleware` registered in `app.ts`. It
-// records the standard semconv names with the matched Hono route pattern,
-// so we don't create those handles here. We keep the auto HttpInstrumentation
-// for OUTBOUND requests only (LLM gateway, Stripe, Resend) — see
-// `instrumentation.ts`.
+// Inbound HTTP metrics come from @hono/otel in app.ts with matched route labels.
+// Keep automatic HttpInstrumentation for outbound requests only. See instrumentation.ts.
 
 import type { Env } from '../libs/env'
 
@@ -472,14 +467,9 @@ export function initOtel(env: Env): OtelInstance | null {
   }
 
   // NOTICE:
-  // OTel SDK only emits a Counter time series after .add() runs the first time.
-  // Without this priming step, low-traffic counters (auth_failures_total,
-  // stripe_*_total, payment_failed, ...) never appear in Prometheus / Grafana
-  // until an event happens — making panels look broken on fresh deploys and
-  // making absence-based alerts impossible to author. add(0) registers the
-  // series with a baseline of 0 without distorting any rates.
-  // Removal condition: OTel SDK changes default to register Counters at create
-  // time (https://github.com/open-telemetry/opentelemetry-specification/issues/2298).
+  // OTel creates counter series only after the first add(). Prime zero values so fresh deployments support dashboards and absence alerts.
+  // Source: https://github.com/open-telemetry/opentelemetry-specification/issues/2298
+  // Remove this when counter creation registers series automatically.
   const counters = [
     auth.attempts,
     auth.failures,

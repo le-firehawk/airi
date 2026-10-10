@@ -43,13 +43,11 @@ import { BatchSpanProcessor, ParentBasedSampler, TraceIdRatioBasedSampler } from
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions'
 
 // NOTICE:
-// instrumentation-http >=0.215 defaults to OLD semconv (http.server.duration in
-// ms). Our Grafana dashboards / alerts only query the STABLE name
-// (http.server.request.duration in seconds). MUST be set BEFORE the
-// HttpInstrumentation constructor runs — that constructor reads the env var
-// once and caches the result.
-// Truthy check (not `??=`) so empty string from Railway / missing-var also
-// falls back to STABLE.
+// Set stable HTTP semantics before HttpInstrumentation reads the environment.
+// Grafana expects http.server.request.duration in seconds, not the old millisecond metric.
+// Empty Railway values also select stable semantics.
+// Source: instrumentation-http >=0.215 constructor.
+// Remove this override when stable semantics become its default.
 if (!env.OTEL_SEMCONV_STABILITY_OPT_IN)
   env.OTEL_SEMCONV_STABILITY_OPT_IN = 'http'
 
@@ -83,24 +81,10 @@ else {
     ? samplingRatioRaw
     : 1
 
-  // service.instance.id MUST be unique per replica. Without it, two replicas
-  // emit the same (service_name, deployment_environment) label tuple — when
-  // an OTel collector / Prometheus receives both, it can either drop one
-  // sample as a "duplicate timestamp" or collapse the series outright,
-  // making per-replica `sum()` aggregates undercount.
-  //
-  // Source preference, strongest → weakest:
-  //  1. RAILWAY_REPLICA_ID — Railway-managed, guaranteed unique per replica.
-  //  2. SERVER_INSTANCE_ID — operator-supplied override.
-  //  3. randomUUID() — per-process fallback. Logged as a warning so ops
-  //     know we're relying on a value that doesn't survive restarts (i.e.
-  //     metric series cardinality climbs every deploy until staleness
-  //     evicts old instance ids).
-  //
-  // HOSTNAME was previously used as a fallback but Railway's HOSTNAME
-  // semantics aren't documented as per-replica unique, so we no longer
-  // trust it. If you need to pin instance id to something stable across
-  // restarts, set SERVER_INSTANCE_ID explicitly.
+  // Each replica needs a unique service.instance.id to prevent dropped or merged Prometheus samples.
+  // Prefer RAILWAY_REPLICA_ID, then SERVER_INSTANCE_ID, then a per-process UUID.
+  // The UUID changes after restarts and increases temporary series cardinality.
+  // Railway does not document HOSTNAME as replica-unique. Set SERVER_INSTANCE_ID for restart stability.
   let instanceId = env.RAILWAY_REPLICA_ID || env.SERVER_INSTANCE_ID
   if (!instanceId) {
     instanceId = randomUUID()

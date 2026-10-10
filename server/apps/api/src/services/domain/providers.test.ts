@@ -1,9 +1,7 @@
-import type { Database } from '../../libs/db'
-
 import { Buffer } from 'node:buffer'
 
 import { eq } from 'drizzle-orm'
-import { beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { mockDB } from '../../libs/mock-db'
 import { createEnvelopeCrypto } from '../../utils/envelope-crypto'
@@ -12,7 +10,7 @@ import { createProviderService } from './providers'
 import * as schema from '../../schemas'
 
 describe('providerService', () => {
-  let db: Database
+  let db: Awaited<ReturnType<typeof mockDB>>
   let service: ReturnType<typeof createProviderService>
   let testUser: { id: string }
 
@@ -26,6 +24,10 @@ describe('providerService', () => {
       email: 'test@example.com',
     }).returning()
     testUser = user
+  })
+
+  afterAll(async () => {
+    await db?.$client.close()
   })
 
   // https://github.com/moeru-ai/airi/pull/2471#discussion_r3997091188

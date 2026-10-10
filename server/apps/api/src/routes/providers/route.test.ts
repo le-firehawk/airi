@@ -1,10 +1,9 @@
-import type { Database } from '../../libs/db'
 import type { HonoEnv } from '../../types/hono'
 
 import { Buffer } from 'node:buffer'
 
 import { Hono } from 'hono'
-import { beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { createProviderRoutes } from '.'
 import { mockDB } from '../../libs/mock-db'
@@ -15,7 +14,7 @@ import { ApiError } from '../../utils/error'
 import * as schema from '../../schemas'
 
 describe('providerRoutes', () => {
-  let db: Database
+  let db: Awaited<ReturnType<typeof mockDB>>
   let app: Hono<HonoEnv>
   let testUser: { id: string }
 
@@ -52,6 +51,10 @@ describe('providerRoutes', () => {
     })
 
     app.route('/', routes)
+  })
+
+  afterAll(async () => {
+    await db?.$client.close()
   })
 
   it('get / should return unauthorized if no user', async () => {

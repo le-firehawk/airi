@@ -31,15 +31,9 @@ export function createV1Routes(input: CreateV1RoutesDeps) {
     .useHono('openai', '/responses', configGuard(deps.configKV, ['LLM_MINIMUM_BALANCE'], 'Service is not available yet'))
     .useHono('audio', '/speech', configGuard(deps.configKV, ['FLUX_PER_1K_CHARS_TTS'], 'TTS service is not available yet'))
 
-  // OpenAI-compatible surface (mounted at /api/v1/openai). Only routes that
-  // mirror an actual OpenAI public endpoint belong here. Audio used to live
-  // under this prefix too, but the `/audio/voices` listing endpoint isn't a
-  // real OpenAI route and the streaming TTS protocol has nothing to do with
-  // OpenAI — keeping them here mislabelled the surface, so audio now mounts
-  // at /api/v1/audio (see `audioRoutes` below).
-
-  // Authentication runs before this shared HTTP limiter, so both generation
-  // protocols use one user bucket before either route parses its request body.
+  // Only public OpenAI-compatible endpoints belong under /api/v1/openai.
+  // The custom voice catalog and streaming TTS protocol use /api/v1/audio.
+  // Authentication precedes the shared limiter so both generation protocols use one user bucket before request parsing.
   const generationLimit = rateLimiter({ max: 60, windowSec: 60, metrics: deps.rateLimitMetrics, routeLabel: 'openai.completions' })
   const openai = gateway
     .useHono('openai', '/chat/*', generationLimit)

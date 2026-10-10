@@ -326,13 +326,9 @@ export function createLlmRouterService(options: CreateLlmRouterServiceOptions) {
         }
 
         // NOTICE:
-        // We compose two AbortSignals — per-attempt timeout and the caller's
-        // signal — by listening to both. `AbortSignal.any` exists in Node 20+
-        // but isn't yet in our project's TS lib target consistently, so we
-        // wire a tiny manual aggregator to stay portable.
-        // Source: MDN AbortSignal.any (Baseline 2024). Removal condition:
-        // once tsconfig lib bumps to ES2024 and Node 20 minimum, swap to
-        // `AbortSignal.any([attemptCtrl.signal, req.abortSignal])`.
+        // Compose attempt-timeout and caller cancellation signals explicitly for the supported TypeScript targets.
+        // Source: https://developer.mozilla.org/docs/Web/API/AbortSignal/any_static
+        // Replace this aggregator with AbortSignal.any when all supported Node runtimes and TypeScript libraries provide it.
         const attemptCtrl = new AbortController()
         const timeoutHandle = setTimeout(() => attemptCtrl.abort(new Error('attempt-timeout')), perAttemptTimeoutMs)
         const callerOnAbort = () => attemptCtrl.abort(req.abortSignal?.reason)
@@ -732,21 +728,10 @@ export function createLlmRouterService(options: CreateLlmRouterServiceOptions) {
           continue
         }
 
-        // Adapter contract (see `server/apps/api/src/services/tts-adapters/types.ts`
-        // and the three impls):
-        //
-        // - `ApiError` 4xx — adapter rejected the *request* before talking to
-        //   the upstream (e.g. azure invalid voice id, volcengine missing
-        //   `adapterParams.appid`). Every key on every upstream would reject
-        //   the same way, so propagate without fallback.
-        // - `ApiError` 5xx — adapter caught a network failure and wrapped it
-        //   in `createInternalError(...)`. Different keys / upstreams may
-        //   succeed, so fold into the same fallback path as a plain network
-        //   error.
-        // - `Error & { status: number }` — upstream answered non-2xx; we own
-        //   the fallback decision and consult `fallbackHttpCodes`.
-        // - plain `Error` — network failure or per-attempt timeout (our
-        //   AbortController fired); treat as `'timeout'` for KTD-1 mapping.
+        // Adapter ApiError 4xx rejects the request before upstream work, so propagate without fallback.
+        // ApiError 5xx and upstream status errors follow fallbackHttpCodes.
+        // Plain network errors and attempt aborts map to timeout.
+        // See services/adapters/tts/types.ts.
         if (err instanceof ApiError && err.statusCode < 500)
           throw err
 

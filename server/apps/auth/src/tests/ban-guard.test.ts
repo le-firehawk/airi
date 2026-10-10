@@ -1,16 +1,13 @@
-import type { BetterAuthOptions } from 'better-auth'
-
 import { describe, expect, it, vi } from 'vitest'
 
 import { banGuard } from '../plugins/ban-guard'
 
-type SessionCreateHook = NonNullable<NonNullable<NonNullable<BetterAuthOptions['databaseHooks']>['session']>['create']>['before']
-type BanSessionCreateHook = NonNullable<SessionCreateHook>
+type BanSessionCreateHook = ReturnType<ReturnType<typeof banGuard>['init']>['options']['databaseHooks']['session']['create']['before']
 type BanSession = Parameters<BanSessionCreateHook>[0]
 type BanContext = Parameters<BanSessionCreateHook>[1]
 
 async function getSessionCreateHook(): Promise<BanSessionCreateHook> {
-  const initialized = await banGuard().init?.({} as never)
+  const initialized = await banGuard().init()
   const before = initialized?.options?.databaseHooks?.session?.create?.before
   if (!before)
     throw new TypeError('Expected the ban guard to register a session-create hook')
@@ -24,11 +21,19 @@ function createContext(user: { banned: boolean, banExpires: Date | null }) {
     context: {
       context: {
         internalAdapter: {
-          findUserById: vi.fn(async () => user),
+          findUserById: vi.fn<NonNullable<BanContext>['context']['internalAdapter']['findUserById']>().mockResolvedValue({
+            id: 'user-1',
+            name: 'Test User',
+            email: 'user@example.com',
+            emailVerified: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            ...user,
+          }),
           updateUser,
         },
       },
-    } as unknown as BanContext,
+    },
   }
 }
 

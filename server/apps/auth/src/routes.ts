@@ -17,6 +17,17 @@ import { createBadRequestError, createForbiddenError } from './error'
 import { createOidcAccessTokenVerifier } from './oidc-access-token'
 import { rateLimiter } from './rate-limit'
 
+/** Callable Auth operations used by routes, without framework initialization state. */
+interface AuthRouteRuntime {
+  handler: (request: Request) => Promise<Response>
+  api: {
+    getSession: (input: { headers: Headers }) => Promise<AuthSession | null>
+    getJwks: Parameters<ReturnType<typeof createOidcAccessTokenVerifier>>[1]
+    getOAuthServerConfig: () => ReturnType<AuthInstance['api']['getOAuthServerConfig']>
+    getOpenIdConfig: () => ReturnType<AuthInstance['api']['getOpenIdConfig']>
+  }
+}
+
 export interface HonoEnv {
   Variables: {
     user: AuthSession['user'] | null
@@ -144,7 +155,7 @@ async function resolveJwtAccessToken(
 }
 
 async function resolveSessionIgnoringBan(
-  auth: AuthInstance,
+  auth: AuthRouteRuntime,
   db: AuthDatabase,
   verifyAccessToken: ReturnType<typeof createOidcAccessTokenVerifier>,
   headers: Headers,
@@ -169,7 +180,7 @@ async function resolveSessionIgnoringBan(
 }
 
 async function resolveAuthRequest(
-  auth: AuthInstance,
+  auth: AuthRouteRuntime,
   db: AuthDatabase,
   verifyAccessToken: ReturnType<typeof createOidcAccessTokenVerifier>,
   headers: Headers,
@@ -251,7 +262,7 @@ function createOIDCTokenAuthRoute(
 }
 
 export interface AuthRoutesDeps {
-  auth: AuthInstance
+  auth: AuthRouteRuntime
   db: AuthDatabase
   env: AuthEnv
   rateLimitMetrics?: RateLimitMetrics | null
@@ -299,16 +310,9 @@ export async function createAuthRoutes(deps: AuthRoutesDeps) {
       await ensureDynamicFirstPartyRedirectUri(deps.db, c.req.raw, deps.env.ADDITIONAL_TRUSTED_ORIGINS)
       await next()
     })
-    // NOTICE:
-    // `/api/auth/*` bypasses sessionMiddleware (and thus the ban gate in
-    // resolveRequestAuth), and oauthProvider's /oauth2/userinfo validates the
-    // bearer JWT by signature only — so a banned user's still-valid access
-    // token (<=1h TTL) could otherwise read its own profile claims after a ban.
-    // This guard re-applies the ban check on that one endpoint. We resolve the
-    // subject ignoring the ban, then 403 if banned, so an invalid/expired token
-    // still falls through to better-auth's own 401 rather than being masked.
-    // (/oauth2/introspect needs confidential client credentials, which no
-    // first-party AIRI client has, so it has no reachable banned-caller path.)
+    // Auth routes bypass the resource ban gate. Recheck bans for signature-only OIDC userinfo requests.
+    // Resolve identity first so invalid tokens retain Better Auth's 401 instead of becoming 403.
+    // Introspection requires confidential credentials unavailable to first-party clients.
     .use('/api/auth/oauth2/userinfo', async (c, next) => {
       const resolved = await resolveSessionIgnoringBan(deps.auth, deps.db, verifyAccessToken, c.req.raw.headers)
       if (resolved && isUserBannedNow(resolved.user))

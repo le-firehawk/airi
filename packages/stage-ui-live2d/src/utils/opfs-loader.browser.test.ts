@@ -4,74 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { OPFSCache } from './opfs-loader'
 
-class MemoryFileHandle {
-  kind = 'file' as const
-  private content: Blob = new Blob()
-
-  constructor(public readonly name: string) {}
-
-  async getFile(): Promise<File> {
-    return new File([this.content], this.name)
-  }
-
-  async createWritable(): Promise<{ write: (content: Blob | string) => Promise<void>, close: () => Promise<void> }> {
-    return {
-      write: async (content: Blob | string) => {
-        this.content = typeof content === 'string'
-          ? new Blob([content])
-          : content
-      },
-      close: async () => {},
-    }
-  }
-}
-
-type MemoryHandle = MemoryDirectoryHandle | MemoryFileHandle
-
-class MemoryDirectoryHandle {
-  kind = 'directory' as const
-  private entries = new Map<string, MemoryHandle>()
-
-  constructor(public readonly name: string) {}
-
-  async getDirectoryHandle(name: string, options: { create?: boolean } = {}): Promise<MemoryDirectoryHandle> {
-    const entry = this.entries.get(name)
-    if (entry instanceof MemoryDirectoryHandle)
-      return entry
-    if (entry)
-      throw new Error(`File exists at directory path: ${name}`)
-    if (!options.create)
-      throw new Error(`Directory not found: ${name}`)
-
-    const dir = new MemoryDirectoryHandle(name)
-    this.entries.set(name, dir)
-    return dir
-  }
-
-  async getFileHandle(name: string, options: { create?: boolean } = {}): Promise<MemoryFileHandle> {
-    const entry = this.entries.get(name)
-    if (entry instanceof MemoryFileHandle)
-      return entry
-    if (entry)
-      throw new Error(`Directory exists at file path: ${name}`)
-    if (!options.create)
-      throw new Error(`File not found: ${name}`)
-
-    const file = new MemoryFileHandle(name)
-    this.entries.set(name, file)
-    return file
-  }
-
-  async removeEntry(name: string): Promise<void> {
-    if (!this.entries.delete(name))
-      throw new Error(`Entry not found: ${name}`)
-  }
-
-  values(): IterableIterator<MemoryHandle> {
-    return this.entries.values()
-  }
-}
-
 function blobFromBytes(data: Uint8Array): Blob {
   const buffer = new ArrayBuffer(data.byteLength)
   new Uint8Array(buffer).set(data)
@@ -89,19 +21,10 @@ async function createZip(entries: Record<string, Blob | string | Uint8Array>): P
   return new Blob([await blobFromBytes(data).arrayBuffer()], { type: 'application/zip' })
 }
 
-function installMemoryOPFS(root = new MemoryDirectoryHandle('root')): MemoryDirectoryHandle {
-  vi.stubGlobal('navigator', {
-    storage: {
-      getDirectory: vi.fn(async () => root as unknown as FileSystemDirectoryHandle),
-    },
-  })
-  return root
-}
-
-async function writeLegacyCache(root: MemoryDirectoryHandle, key: string): Promise<void> {
+async function writeLegacyCache(root: FileSystemDirectoryHandle, key: string): Promise<void> {
   const dir = await root.getDirectoryHandle(key, { create: true })
   await OPFSCache.writeFile(
-    dir as unknown as FileSystemDirectoryHandle,
+    dir,
     'model.model3.json',
     JSON.stringify({ Version: 3 }),
   )
@@ -112,14 +35,16 @@ function filePaths(files: File[]): string[] {
 }
 
 describe('opfs cache full directory persistence', () => {
-  let root: MemoryDirectoryHandle
+  let root: FileSystemDirectoryHandle
 
-  beforeEach(() => {
-    root = installMemoryOPFS()
+  beforeEach(async () => {
+    root = await navigator.storage.getDirectory()
+    await OPFSCache.clearAll()
   })
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.unstubAllGlobals()
+    await OPFSCache.clearAll()
   })
 
   it('saves every zip entry and restores webkitRelativePath from the physical OPFS directory', async () => {
@@ -151,12 +76,12 @@ describe('opfs cache full directory persistence', () => {
   it('does not restore ignored archive metadata that already exists in OPFS', async () => {
     const dir = await root.getDirectoryHandle('metadata-model', { create: true })
     await OPFSCache.writeFile(
-      dir as unknown as FileSystemDirectoryHandle,
+      dir,
       '__MACOSX/._model.model3.json',
       new Blob([new Uint8Array([0, 5, 22, 7, 0, 2, 0, 0])]),
     )
     await OPFSCache.writeFile(
-      dir as unknown as FileSystemDirectoryHandle,
+      dir,
       'model.model3.json',
       JSON.stringify({
         Version: 3,
@@ -164,7 +89,7 @@ describe('opfs cache full directory persistence', () => {
       }),
     )
     await OPFSCache.writeFile(
-      dir as unknown as FileSystemDirectoryHandle,
+      dir,
       '__meta.json',
       JSON.stringify({ sourceUrl: 'blob:first', version: 3 }),
     )
@@ -205,7 +130,7 @@ describe('opfs cache full directory persistence', () => {
     const files = await OPFSCache.get('legacy-model', 'blob:current')
 
     expect(files).toBeNull()
-    await expect(root.getDirectoryHandle('legacy-model', { create: false })).rejects.toThrow('Directory not found')
+    await expect(root.getDirectoryHandle('legacy-model', { create: false })).rejects.toMatchObject({ name: 'NotFoundError' })
   })
 
   it('invalidates non-blob URL cache entries when the source URL changes', async () => {
@@ -223,7 +148,7 @@ describe('opfs cache full directory persistence', () => {
     const files = await OPFSCache.get('remote-model', 'https://example.test/b.zip')
 
     expect(files).toBeNull()
-    await expect(root.getDirectoryHandle('remote-model', { create: false })).rejects.toThrow('Directory not found')
+    await expect(root.getDirectoryHandle('remote-model', { create: false })).rejects.toMatchObject({ name: 'NotFoundError' })
   })
 
   it('does not invalidate blob URL cache entries when the stable model key matches', async () => {

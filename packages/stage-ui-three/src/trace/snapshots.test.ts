@@ -1,18 +1,18 @@
-import type { VRM } from '@pixiv/three-vrm'
 import type { WebGLRenderer } from 'three'
 
 import {
   Bone,
   BoxGeometry,
+  Group,
   Mesh,
   MeshStandardMaterial,
-  Scene,
   Skeleton,
   SkinnedMesh,
   Texture,
 } from 'three'
 import { describe, expect, it } from 'vitest'
 
+import { createTestVrm } from '../test-utils/vrm'
 import { createThreeRendererMemorySnapshot, createVrmSceneSummarySnapshot } from './snapshots'
 
 describe('stage three runtime snapshots', () => {
@@ -56,7 +56,7 @@ describe('stage three runtime snapshots', () => {
   })
 
   it('summarizes mesh, material, texture, and action counts from a vrm scene', () => {
-    const scene = new Scene()
+    const scene = new Group()
     const sharedTexture = new Texture()
     const material = new MeshStandardMaterial({ map: sharedTexture })
     const mesh = new Mesh(new BoxGeometry(1, 1, 1), material)
@@ -74,10 +74,10 @@ describe('stage three runtime snapshots', () => {
 
     const summary = createVrmSceneSummarySnapshot({
       mixer: { _actions: [1, 2, 3] } as any,
-      vrm: { scene } as unknown as VRM,
+      vrm: createTestVrm({ scene }),
     })
 
-    expect(summary.sceneChildCount).toBe(2)
+    expect(summary.sceneChildCount).toBe(4)
     expect(summary.meshCount).toBe(2)
     expect(summary.skinnedMeshCount).toBe(1)
     expect(summary.materialCount).toBe(2)

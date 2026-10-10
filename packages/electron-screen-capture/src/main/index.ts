@@ -207,11 +207,9 @@ export function initScreenCaptureForWindow(window: BrowserWindow, options?: Init
   defineInvokeHandler(context, screenCapture.requestMacOSPermission, async () => requestMacOSScreenCapturePermission())
 
   defineInvokeHandler(context, screenCapture.getSources, async (sourcesOptions) => {
-    // NOTICE(@nekomeowww): In probability of 9/10, the window thumbnail is purely empty or black, sources printed and
-    // nothing is returned from the desktopCapturer API.
-    // NOTICE(@sumimakito): Not only thumbnail is empty, the appIcon could be empty as well with nothing returned.
-    // REVIEW(@sumimakito): This has nothing to do with out side, probably related to Electron Bug, you can
-    // read more here https://github.com/electron/electron/issues/44504
+    // NOTICE:
+    // Electron can return empty or black thumbnails and empty app icons.
+    // Source: https://github.com/electron/electron/issues/44504
     const sources = await desktopCapturer.getSources(sourcesOptions)
     return sources.map(source => toSerializableDesktopCapturerSource(source))
   })

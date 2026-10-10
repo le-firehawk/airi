@@ -477,7 +477,7 @@ async function performModelLoad() {
       const selectedMotionIndex = localStorage.getItem('selected-runtime-motion-index')
 
       if (selectedMotionGroup !== null && selectedMotionIndex && live2dIdleAnimationEnabled.value) {
-        // Restart the selected runtime motion immediately for seamless looping
+        // Restart the selected runtime motion immediately to avoid a gap between loops.
         console.info('Motion finished, restarting runtime motion:', selectedMotionGroup, selectedMotionIndex)
         // Use requestAnimationFrame to restart on the next frame for smooth transition
         requestAnimationFrame(() => {

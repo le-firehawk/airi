@@ -225,7 +225,7 @@ export function createStreamingCategorizer(
   let tagState: TagState = 'outside'
   let tagStackDepth = 0
 
-  // Fallback for filterToSpeech - uses rehype for robust incomplete tag detection
+  // Fallback for filterToSpeech: rehype detects incomplete tags.
   function checkIncompleteTag(): boolean {
     try {
       const tree = unified().use(rehypeParse, { fragment: true }).parse(buffer) as Root

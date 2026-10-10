@@ -46,8 +46,8 @@ function blobFromBytes(data: Uint8Array): Blob {
   return new Blob([buffer])
 }
 
-export class OPFSCache {
-  static async clearAll(): Promise<void> {
+class ModelFileCache {
+  async clearAll(): Promise<void> {
     try {
       const root = await navigator.storage.getDirectory()
       for await (const entry of root.values()) {
@@ -59,7 +59,7 @@ export class OPFSCache {
     }
   }
 
-  static async readDirectoryRecursive(dir: FileSystemDirectoryHandle, pathPrefix: string): Promise<File[]> {
+  async readDirectoryRecursive(dir: FileSystemDirectoryHandle, pathPrefix: string): Promise<File[]> {
     const files: File[] = []
     for await (const entry of dir.values()) {
       if (entry.kind === 'file') {
@@ -76,14 +76,14 @@ export class OPFSCache {
       }
       else if (entry.kind === 'directory') {
         const newPrefix = `${pathPrefix + entry.name}/`
-        const subFiles = await OPFSCache.readDirectoryRecursive(entry as FileSystemDirectoryHandle, newPrefix)
+        const subFiles = await this.readDirectoryRecursive(entry as FileSystemDirectoryHandle, newPrefix)
         files.push(...subFiles)
       }
     }
     return files
   }
 
-  static async resolveDirectory(root: FileSystemDirectoryHandle, path: string): Promise<FileSystemDirectoryHandle> {
+  async resolveDirectory(root: FileSystemDirectoryHandle, path: string): Promise<FileSystemDirectoryHandle> {
     let currentDir = root
     if (!path || path === '.' || path === './')
       return currentDir
@@ -95,7 +95,7 @@ export class OPFSCache {
     return currentDir
   }
 
-  private static async clearDirectory(dirHandle: FileSystemDirectoryHandle): Promise<void> {
+  private async clearDirectory(dirHandle: FileSystemDirectoryHandle): Promise<void> {
     const entryNames: string[] = []
 
     // OPFS writes mirror the source zip exactly, so stale files from a previous
@@ -107,19 +107,19 @@ export class OPFSCache {
     await Promise.all(entryNames.map(name => dirHandle.removeEntry(name, { recursive: true })))
   }
 
-  static async writeFile(root: FileSystemDirectoryHandle, filePath: string, content: Blob | string): Promise<void> {
+  async writeFile(root: FileSystemDirectoryHandle, filePath: string, content: Blob | string): Promise<void> {
     const parts = filePath.split('/')
     const fileName = parts.pop()!
     const dirPath = parts.join('/')
 
-    const dirHandle = await OPFSCache.resolveDirectory(root, dirPath)
+    const dirHandle = await this.resolveDirectory(root, dirPath)
     const fileHandle = await dirHandle.getFileHandle(fileName, { create: true })
     const writable = await fileHandle.createWritable()
     await writable.write(content)
     await writable.close()
   }
 
-  static async readMeta(dirHandle: FileSystemDirectoryHandle) {
+  async readMeta(dirHandle: FileSystemDirectoryHandle) {
     try {
       const metaHandle = await dirHandle.getFileHandle('__meta.json', { create: false })
       const metaFile = await metaHandle.getFile()
@@ -131,14 +131,14 @@ export class OPFSCache {
     }
   }
 
-  static async get(key: string, sourceUrl: string): Promise<File[] | null> {
+  async get(key: string, sourceUrl: string): Promise<File[] | null> {
     try {
       const root = await navigator.storage.getDirectory()
       const dirHandle = await root.getDirectoryHandle(key, { create: false })
       // eslint-disable-next-line no-console
       console.debug(`[OPFS] Cache hit for ${key}`)
 
-      const meta = await OPFSCache.readMeta(dirHandle)
+      const meta = await this.readMeta(dirHandle)
       if (meta?.version !== live2DOpfsCacheVersion) {
         // NOTICE: Rebuild caches created before OPFS stored the full zip directory.
         // Older caches may contain a reconstructed model3.json instead of the
@@ -161,7 +161,7 @@ export class OPFSCache {
         return null
       }
 
-      const files = await OPFSCache.readDirectoryRecursive(dirHandle, '')
+      const files = await this.readDirectoryRecursive(dirHandle, '')
 
       if (files.length > 0) {
         return files
@@ -187,7 +187,7 @@ export class OPFSCache {
    * Returns:
    * - A completed OPFS directory write, or logs and returns on cache write failure
    */
-  static async save(key: string, zipBlob: Blob, sourceUrl?: string): Promise<void> {
+  async save(key: string, zipBlob: Blob, sourceUrl?: string): Promise<void> {
     try {
       const zip = await JSZip.loadAsync(await zipBlob.arrayBuffer(), { decodeFileName: decodeZipFileName })
       const fileEntries = Object.values(zip.files)
@@ -198,15 +198,15 @@ export class OPFSCache {
 
       const root = await navigator.storage.getDirectory()
       const dirHandle = await root.getDirectoryHandle(key, { create: true })
-      await OPFSCache.clearDirectory(dirHandle)
+      await this.clearDirectory(dirHandle)
 
       const writePromises = fileEntries.map(async (file) => {
         const data = await file.async('uint8array')
-        return OPFSCache.writeFile(dirHandle, file.name, blobFromBytes(data))
+        return this.writeFile(dirHandle, file.name, blobFromBytes(data))
       })
 
       await Promise.all(writePromises)
-      await OPFSCache.writeFile(dirHandle, '__meta.json', JSON.stringify({
+      await this.writeFile(dirHandle, '__meta.json', JSON.stringify({
         sourceUrl,
         version: live2DOpfsCacheVersion,
       }))
@@ -219,7 +219,7 @@ export class OPFSCache {
   }
 
   // Runs before ZipLoader to check if the file is already cached
-  static checkMiddleware: Middleware<OPFSContext> = async (context, next) => {
+  checkMiddleware: Middleware<OPFSContext> = async (context, next) => {
     const source = context.source
     let key: string | undefined
     let blobUrl: string | undefined
@@ -244,7 +244,7 @@ export class OPFSCache {
       return next()
     }
 
-    const files = await OPFSCache.get(key, blobUrl)
+    const files = await this.get(key, blobUrl)
 
     if (files) {
       // cache hit
@@ -276,13 +276,16 @@ export class OPFSCache {
   }
 
   // Runs after ZipLoader to cache the files
-  static saveMiddleware: Middleware<OPFSContext> = async (context, next) => {
+  saveMiddleware: Middleware<OPFSContext> = async (context, next) => {
     if (!context.opfsKey || !context.opfsZipBlob) {
       return next()
     }
 
-    await OPFSCache.save(context.opfsKey, context.opfsZipBlob, context.opfsUrl)
+    await this.save(context.opfsKey, context.opfsZipBlob, context.opfsUrl)
 
     return next()
   }
 }
+
+/** Shared cache for model assets stored in this origin. */
+export const OPFSCache = new ModelFileCache()

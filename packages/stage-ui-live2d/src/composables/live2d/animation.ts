@@ -1,4 +1,4 @@
-import type { InternalModel } from 'pixi-live2d-display/cubism4'
+import type { Cubism4InternalModel, InternalModel } from 'pixi-live2d-display/cubism4'
 
 import { MathUtils } from 'three'
 
@@ -15,7 +15,10 @@ export function useLive2DIdleEyeFocus() {
   let lastSaccadeAt = -1
 
   // Function to handle idle eye saccades and focus (head) movements
-  function update(model: InternalModel, now: number) {
+  function update(model: {
+    focusController: Pick<InternalModel['focusController'], 'focus' | 'update'>
+    coreModel: Pick<Cubism4InternalModel['coreModel'], 'getParameterValueById' | 'setParameterValueById'>
+  }, now: number) {
     if (now >= nextSaccadeAfter || now < lastSaccadeAt) {
       focusTarget = [MathUtils.randFloat(-1, 1), MathUtils.randFloat(-1, 0.7)]
       lastSaccadeAt = now
@@ -24,7 +27,7 @@ export function useLive2DIdleEyeFocus() {
     }
 
     model.focusController.update(now - lastSaccadeAt)
-    const coreModel = model.coreModel as any
+    const coreModel = model.coreModel
     // TODO: After emotion mapper, stage editor, eye related parameters should be take cared to be dynamical instead of hardcoding
     coreModel.setParameterValueById('ParamEyeBallX', MathUtils.lerp(coreModel.getParameterValueById('ParamEyeBallX'), focusTarget![0], 0.3))
     coreModel.setParameterValueById('ParamEyeBallY', MathUtils.lerp(coreModel.getParameterValueById('ParamEyeBallY'), focusTarget![1], 0.3))

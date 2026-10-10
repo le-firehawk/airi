@@ -257,11 +257,10 @@ async function handleSetAsBackground(entry: any) {
 
 function requestDeleteConfirmation(message: string): boolean {
   // NOTICE:
-  // Native confirm is the existing guard for this destructive gallery action.
-  // Root cause: `no-alert` rejects direct `confirm(...)` calls before this page
-  // has a shared confirmation-dialog primitive wired into the card settings flow.
-  // Source/context: this component already used native confirm for journal delete.
-  // Removal condition: replace with the shared modal confirmation component.
+  // Native confirm guards gallery deletion until a shared modal exists.
+  // Root cause: no-alert rejects direct confirm calls.
+  // Source: this component already used native confirmation for journal deletion.
+  // Remove this workaround when card settings use the shared modal.
   const confirmAction = globalThis.confirm.bind(globalThis)
   return confirmAction(message)
 }

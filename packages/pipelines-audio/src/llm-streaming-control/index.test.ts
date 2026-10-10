@@ -3,6 +3,29 @@ import { describe, expect, it, vi } from 'vitest'
 import { createStreamingControlParser } from '.'
 
 describe('createStreamingControlParser', () => {
+  it('keeps a signal handler snapshot across asynchronous subscription changes', async () => {
+    const control = createStreamingControlParser()
+    const calls: string[] = []
+    const late = () => {
+      calls.push('late')
+    }
+    let unsubscribe: () => void
+    control.onSignal(async () => {
+      calls.push('first')
+      await Promise.resolve()
+      unsubscribe()
+      control.onSignal(late)
+    })
+    unsubscribe = control.onSignal(() => {
+      calls.push('second')
+    })
+    await control.dispatchWith('<|DELAY 1.5|>')
+    expect(calls).toEqual(['first', 'second'])
+    calls.length = 0
+    await control.dispatchWith('<|DELAY 1.5|>')
+    expect(calls).toEqual(['first', 'late'])
+  })
+
   /**
    * @example
    * const control = createStreamingControlParser()

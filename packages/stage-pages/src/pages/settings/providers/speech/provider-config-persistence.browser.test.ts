@@ -50,12 +50,8 @@ describe('speech provider configuration persistence', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // The immediate model watcher creates an entry in the computed configs map.
-  // initializeProvider sees that entry and skips creation of the persisted provider.
-  // Input changes then mutate a plain object, so the playground keeps its cached
-  // missing-key state and localStorage stays empty. These tests fail if the page
-  // and initialization flow stop writing through the provider store.
+  // The immediate model watcher created a plain config entry, so initialization skipped persistence and inputs never reached localStorage.
+  // These tests require updates through the provider store.
   // https://github.com/moeru-ai/airi/issues/2449
   it('enables Test Voice after the user enters an API key (Issue #2449)', async () => {
     const screen = await renderPage()

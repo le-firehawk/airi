@@ -1,21 +1,18 @@
-import type { SkinnedMesh } from 'three'
-
+import { SkinnedMesh } from 'three'
 import { describe, expect, it } from 'vitest'
 
 import { createMorphController } from './morph'
 
-// Minimal SkinnedMesh double: createMorphController only reads
-// morphTargetDictionary and morphTargetInfluences.
+// A real mesh with named morph targets, without a renderer.
 function fakeMesh(names: string[]): SkinnedMesh {
   const dictionary: Record<string, number> = {}
   names.forEach((name, index) => {
     dictionary[name] = index
   })
-  const mesh = {
-    morphTargetDictionary: dictionary,
-    morphTargetInfluences: Array.from({ length: names.length }).fill(0),
-  }
-  return mesh as unknown as SkinnedMesh
+  const mesh = new SkinnedMesh()
+  mesh.morphTargetDictionary = dictionary
+  mesh.morphTargetInfluences = names.map(() => 0)
+  return mesh
 }
 
 describe('createMorphController', () => {

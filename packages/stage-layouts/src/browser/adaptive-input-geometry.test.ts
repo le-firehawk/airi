@@ -57,14 +57,8 @@ describe('adaptive input geometry', () => {
   // https://bugs.webkit.org/show_bug.cgi?id=265578
   it('keeps the chat bottom at the visual viewport bottom for WebKit bug 265578', () => {
     // ROOT CAUSE:
-    //
-    // Safari can increase pageTop before it reports the final keyboard height.
-    // A calculation that uses height alone places the chat layer above the visible bottom edge.
-    //
-    // Before the fix, the chat layer used visualViewport.height - keyboardShift as its bottom edge.
-    //
-    // We fixed this by using height + pageTop as the bottom edge in document coordinates.
-    // Only the chat layer uses this value.
+    // Safari can increase pageTop before the final keyboard height arrives. Height alone placed chat above the visible bottom.
+    // We fixed this by using height + pageTop for the chat layer in document coordinates.
     const layout = calculateVisualViewportLayout({
       height: 404,
       offsetTop: 310,
@@ -100,15 +94,8 @@ describe('adaptive input geometry', () => {
   // https://bugs.webkit.org/show_bug.cgi?id=265578
   it('restores the input layout while Safari finishes closing the keyboard', () => {
     // ROOT CAUSE:
-    //
-    // Safari keeps reporting the keyboard-sized Visual Viewport for part of its close animation.
-    // If AIRI uses that stale measurement after blur, the input region stays compressed and leaves
-    // a visible gap above the keyboard.
-    //
-    // Before the fix, blur disabled keyboardVisible but kept height and visibleBottom at 404px.
-    //
-    // We fixed this by restoring the stable layout height as soon as the owned input loses focus.
-    // Later Visual Viewport events cannot compress this input region again during keyboard close.
+    // Safari reports a stale keyboard-sized viewport during dismissal, which kept the input compressed after blur.
+    // We fixed this by restoring stable layout height when the owned input loses focus and ignoring later close-animation measurements.
     const layout = calculateVisualViewportLayout({
       height: 404,
       offsetTop: 0,

@@ -127,13 +127,7 @@ describe('adaptive input', () => {
 
   it('keeps the native touch activation while Safari closes the keyboard', () => {
     // ROOT CAUSE:
-    //
-    // Safari can finish a software keyboard dismissal after a second pointerdown focuses the input.
-    // Canceling that pointerdown leaves only programmatic focus, which cannot cancel the native
-    // dismissal and leaves the focused input without a keyboard.
-    //
-    // Before the fix, the cached pre-layout path canceled every matching pointerdown.
-    //
+    // Canceling pointerdown during keyboard dismissal left only programmatic focus, which cannot stop native dismissal.
     // We fixed this by preserving native activation until the closing viewport becomes stable.
     const viewport = document.createElement('div')
     const area = document.createElement('div')

@@ -19,7 +19,7 @@ export type OnVersionMismatchActions<T> = OnVersionMismatchKeep<T> | OnVersionMi
 export function useVersionedLocalStorage<T>(
   key: MaybeRefOrGetter<string>,
   initialValue: MaybeRefOrGetter<T>,
-  options?: UseStorageOptions<T> & UseVersionedStorageOptions<T>,
+  options?: UseStorageOptions<Versioned<T>> & UseVersionedStorageOptions<T>,
 ): Ref<T, T> {
   const defaultVersion = options?.defaultVersion || '1.0.0'
   const data = ref(toValue(initialValue)) as Ref<T, T>
@@ -27,7 +27,7 @@ export function useVersionedLocalStorage<T>(
     key,
     { version: defaultVersion, data: toValue(initialValue) },
     options?.storage ?? defaultWindow?.localStorage,
-    options as unknown as UseStorageOptions<Versioned<T>>,
+    options,
   )
 
   const syncDataToStorage = watch(data, (value) => {

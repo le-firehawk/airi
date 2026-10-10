@@ -28,13 +28,9 @@ export function createMMDLoaderContext(urlModifier?: UrlModifier): MMDLoaderCont
   if (urlModifier) {
     manager.setURLModifier((url) => {
       // NOTICE:
-      // MMDLoader resolves textures by prepending the model URL's base, so for
-      // ZIP imports the texture requests arrive blob-prefixed
-      // (e.g. "blob:http://host/uuid/tex/face.png"). We must still run those
-      // through the resolver — an earlier `blob:` short-circuit here silently
-      // broke all ZIP textures. Only data: URIs (embedded toon textures) are
-      // passed through untouched. The resolver falls back to the original URL
-      // for the model file and any unmatched path, so this is safe.
+      // MMDLoader prefixes texture paths with the model URL, including blob URLs for ZIP imports.
+      // A blob short-circuit previously broke ZIP textures. Only embedded data URIs bypass the resolver.
+      // Unmatched paths retain their original URL.
       if (url.startsWith('data:'))
         return url
       return urlModifier(url)

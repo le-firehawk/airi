@@ -21,6 +21,54 @@ function createPlaybackItem(id: string, priority: number, intentId: string, owne
 }
 
 describe('createPlaybackManager', () => {
+  it('keeps the current emission stable when listeners change subscriptions', () => {
+    const manager = createPlaybackManager({
+      maxVoices: 2,
+      play: (_item, signal) => new Promise<void>((resolve) => {
+        signal.addEventListener('abort', () => resolve(), { once: true })
+      }),
+    })
+    const calls: string[] = []
+    const late = () => {
+      calls.push('late')
+    }
+    let unsubscribe: () => void
+    manager.onStart(() => {
+      calls.push('first')
+      unsubscribe()
+      manager.onStart(late)
+    })
+    unsubscribe = manager.onStart(() => {
+      calls.push('second')
+    })
+    manager.schedule(createPlaybackItem('one', 1, 'intent-1'))
+    expect(calls).toEqual(['first', 'second'])
+    calls.length = 0
+    manager.schedule(createPlaybackItem('two', 1, 'intent-2'))
+    expect(calls).toEqual(['first', 'late'])
+    manager.stopAll()
+  })
+
+  it.each(['stopAll', 'stopByIntent', 'stopByOwner'] as const)('%s only stops playback present when called', (stop) => {
+    const manager = createPlaybackManager({
+      maxVoices: 1,
+      play: (_item, signal) => new Promise<void>((resolve) => {
+        signal.addEventListener('abort', () => resolve(), { once: true })
+      }),
+    })
+    const interrupted: string[] = []
+    const unsubscribe = manager.onInterrupt((event) => {
+      interrupted.push(event.item.id)
+      if (event.item.id === 'first')
+        manager.schedule(createPlaybackItem('replacement', 1, 'target', 'target'))
+    })
+    manager.schedule(createPlaybackItem('first', 1, 'target', 'target'))
+    manager[stop]('target')
+    expect(interrupted).toEqual(['first'])
+    unsubscribe()
+    manager.stopAll()
+  })
+
   it('does not start queued playback when stopping all playback', () => {
     const play = vi.fn((_item, signal) => new Promise<void>((resolve) => {
       signal.addEventListener('abort', () => resolve(), { once: true })

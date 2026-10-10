@@ -221,13 +221,8 @@ describe('terms.yaml', () => {
   it('holds no term that neither the interface nor the English documentation uses', async () => {
     const concepts = await loadConcepts()
 
-    // The glossary shares one Crowdin container with the documentation terminology, so a
-    // term may live in prose rather than in a string. `Project AIRI` appears six times in
-    // README.md and in no interface string, and `Neuro Sama` only under docs/content/en.
-    //
-    // The check still has teeth. A term that appears in none of these places can never match
-    // in the editor, so it cannot help a translator. `Ayaka Neko` was such a term, and it is
-    // the reason this check runs over the documentation rather than being deleted.
+    // The glossary shares its Crowdin container with documentation terms, including names absent from interface strings.
+    // Searching both sources rejects unused terms, such as the former Ayaka Neko entry, without excluding documentation-only names.
     const repository = join(here, '..', '..', '..')
     const prose = [await readFile(join(repository, 'README.md'), 'utf8')]
 
@@ -258,10 +253,8 @@ describe('terms.yaml', () => {
   it('gives every context the term it belongs to', async () => {
     const concepts = await loadConcepts()
 
-    // A context shows the term in use. Usually it is a real interface string, but for the
-    // two codenames it cannot be: every interface string containing them is one this
-    // glossary rules against. So the check is not "does the locale contain it" but "does it
-    // mention its own term", which catches a sentence pasted onto the wrong entry.
+    // Context must mention its term. Codename examples cannot come from interface strings because the glossary forbids those names there.
+    // This check catches context copied to the wrong entry.
     const unrelated = concepts.flatMap(c => c.terms
       .filter(t => t.context && !t.context.toLowerCase().includes(t.text.toLowerCase()))
       .map(t => `${c.id} / ${t.text}`))

@@ -22,15 +22,10 @@ export function useVRMEmote(vrm: VRMCore) {
   const visemeBlendDuration = ref(0.3)
   const currentExpressionValues = ref(new Map<string, number>())
   const targetExpressionValues = ref(new Map<string, number>())
-  const resetTimeout = ref<number>()
+  const resetTimeout = ref<ReturnType<typeof setTimeout>>()
   let wasSkippingVisemes = false
-  // Morph names captured while entering an emotion, kept until the neutral
-  // transition fully settles. ownedExpressionNames() only reflects emotion
-  // states registered *right now*, so if a caller calls removeEmotionState
-  // (or replaces a state) for the departing emotion before its scheduled
-  // reset fires, its morph would otherwise drop out of tracking and never
-  // get the terminal zero write — leaving the avatar stuck in that
-  // expression. This set survives such mutations across emotionStates.
+  // Retain morph names until the neutral transition completes.
+  // Removing or replacing an emotion state must not prevent its pending morphs from returning to zero.
   const trackedExpressionNames = new Set<string>()
 
   // Utility functions
@@ -153,16 +148,8 @@ export function useVRMEmote(vrm: VRMCore) {
     targetExpressionValues.value.clear()
 
     if (vrm.expressionManager) {
-      // Capture current values only for morphs the emote owns, so the lerp
-      // transition starts from the actual displayed values instead of
-      // snapping to 0 first (fixes #590). Unrelated expressions (blink,
-      // animation-driven morphs) are left to their own controllers.
-      //
-      // Union with trackedExpressionNames rather than using
-      // ownedExpressionNames() alone: a still-pending morph from an
-      // emotion state removed since it was entered must keep being driven
-      // toward 0, even though it is no longer "owned" by any registered
-      // state.
+      // Capture displayed values for owned morphs to avoid a jump to zero (#590). Other controllers retain unrelated expressions.
+      // Include tracked morphs from removed states so they still reach zero.
       const expressionNames = Object.keys(vrm.expressionManager.expressionMap)
       const namesToCapture = new Set([...ownedExpressionNames(expressionNames), ...trackedExpressionNames])
       for (const name of namesToCapture) {
@@ -201,15 +188,11 @@ export function useVRMEmote(vrm: VRMCore) {
     resetTimeout.value = setTimeout(() => {
       setEmotion('neutral')
       resetTimeout.value = undefined
-    }, ms) as unknown as number
+    }, ms)
   }
 
-  // isEmoteActive's only consumer (VRMModel.vue) uses it to suppress
-  // procedural blinking, which only matters for morphs that actually
-  // deform the eye region. Viseme mouth morphs (aa/ee/ih/oh/ou) never do,
-  // so an emotion state driving only visemes — e.g. a custom mouth-only
-  // state added via addEmotionState — must not suppress blinking just
-  // because those (mouth-only) targets are nonzero.
+  // VRMModel uses isEmoteActive to suppress blinking.
+  // Mouth-only visemes do not affect the eye region and must not suppress blinks.
   const hasNonzeroEyeAffectingTarget = (values: Map<string, number>): boolean =>
     Array.from(values.entries()).some(([name, val]) => val > 0.001 && !VISEME_NAMES.has(name.toLowerCase()))
 

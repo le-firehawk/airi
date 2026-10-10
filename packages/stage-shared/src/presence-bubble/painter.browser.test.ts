@@ -4,41 +4,6 @@ import { describe, expect, it } from 'vitest'
 
 import { PresenceBubblePainter } from './painter'
 
-/**
- * A canvas that records nothing and measures every string the same.
- *
- * The painter is asked here about when it redraws, not about what it draws, and
- * a real 2D context needs a browser.
- */
-function stubCanvas() {
-  const context = {
-    font: '',
-    fillStyle: '',
-    textAlign: '',
-    textBaseline: '',
-    globalAlpha: 1,
-    shadowColor: '',
-    shadowBlur: 0,
-    shadowOffsetY: 0,
-    measureText: (text: string) => ({ width: text.length * 7 }),
-    save: () => {},
-    restore: () => {},
-    translate: () => {},
-    scale: () => {},
-    clearRect: () => {},
-    beginPath: () => {},
-    closePath: () => {},
-    moveTo: () => {},
-    lineTo: () => {},
-    arcTo: () => {},
-    arc: () => {},
-    fill: () => {},
-    fillText: () => {},
-  }
-
-  return { width: 0, height: 0, getContext: () => context } as unknown as HTMLCanvasElement
-}
-
 const palette: PresenceBubblePalette = {
   panel: '#fafafa',
   shadow: '#171717',
@@ -48,7 +13,7 @@ const palette: PresenceBubblePalette = {
 }
 
 function painter() {
-  return new PresenceBubblePainter(() => stubCanvas())
+  return new PresenceBubblePainter()
 }
 
 const thinking = { kind: 'thinking', phase: 2, animated: true } as const

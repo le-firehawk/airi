@@ -191,13 +191,8 @@ function mergePermissionScopes<T extends PermissionScope>(
   const map = new Map<string, T>()
 
   for (const list of [current ?? [], incoming ?? []]) {
-    // We process the existing list first, then layer the incoming list on top.
-    // Example:
-    // - current  = [{ key: 'plugin.resource.settings', actions: ['read'] }]
-    // - incoming = [{ key: 'plugin.resource.settings', actions: ['write'] }]
-    //
-    // The first pass seeds the map with ['read']; the second pass extends it to
-    // ['read', 'write'] for the same key.
+    // Existing actions are merged first. Incoming actions extend each matching key.
+    // For example, read plus write becomes [read, write].
     for (const spec of list) {
       // `spec` is one concrete scope such as:
       // - { key: 'plugin.api.users', actions: ['invoke'] }

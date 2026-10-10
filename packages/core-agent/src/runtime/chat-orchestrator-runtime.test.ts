@@ -481,12 +481,8 @@ describe('createChatOrchestratorRuntime', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // xsAI kept the assistant tool call and tool result in its private message copy.
-  // AIRI stored only UI slices, then removed those slices from the next provider request.
-  //
-  // We fixed this by storing the provider generated turn on the finalized UI message.
-  // The next request expands that generated turn back into chronological provider messages.
+  // xsAI kept tool calls and results privately while AIRI discarded their UI slices from later requests.
+  // We fixed this by storing the generated provider turn on the finalized message and restoring its chronological messages.
   it('includes completed tool rounds in the next provider request', async () => {
     const harness = createHarness()
 
@@ -1062,13 +1058,8 @@ describe('createChatOrchestratorRuntime', () => {
 
   // https://github.com/moeru-ai/airi/pull/2489#discussion_r3967818108
   // ROOT CAUSE:
-  //
-  // A queued send kept the reply target captured by the composer. Deleting that
-  // target did not change the session generation, so the queued message stored a
-  // dangling relation and projected the missing id into the provider prompt.
-  //
-  // The send must revalidate the relation against current session history after
-  // asynchronous composition and immediately before append.
+  // Queued sends retained deleted reply targets because deletion did not change the session generation.
+  // We fixed this by checking the relation against current history after composition, immediately before append.
   it('drops a queued reply relation when its target is deleted before append', async () => {
     const harness = createHarness()
     let queuedSendContext: ChatHistoryItem | undefined

@@ -61,17 +61,9 @@ describe('presence bubble mode', () => {
 
   it('holds its side while the head sways across the boundary', () => {
     // ROOT CAUSE:
-    //
-    // This swayed the head where both sides had room to spare, so no sway could
-    // change the answer, and it compared the result against a fresh call on the
-    // resting box, which moved with it:
-    //
-    //   expect(mode).toBe(choosePresenceBubbleMode(atBoundary))
-    //
-    // Removing the band left both tests passing. The head now sways where the
-    // right has between `bubbleWidth - switchHysteresis` and `bubbleWidth` of
-    // room: enough to keep, not enough to take, and the left is roomier, so
-    // without the band every frame would hand it to the left.
+    // The previous fixtures left enough room on both sides, so removing hysteresis still passed.
+    // The head now moves where the current side has enough room to keep, but not acquire, the bubble.
+    // Without the band, the roomier opposite side wins every frame.
     const atBoundary = { ...roomyStage(), headY: 20, headX: 215 }
 
     let mode: PresenceBubblePlacementMode = 'right'

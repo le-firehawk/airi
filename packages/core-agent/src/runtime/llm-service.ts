@@ -338,17 +338,8 @@ export function isToolRelatedError(error: unknown): boolean {
   return TOOLS_RELATED_ERROR_PATTERNS.some(pattern => pattern.test(message))
 }
 
-// Runtime auto-degrade: patterns that indicate the provider rejected
-// content-part arrays and only accepts a plain string for `messages[].content`.
-//
-// The first pattern matches the Rust/serde wire-level error format used by
-// many strict OpenAI-compatible gateways (e.g. DeepSeek-style servers):
-//   "Failed to deserialize the JSON body into the target type:
-//    messages[7]: invalid type: sequence, expected a string at line 1 column …"
-// The second pattern covers Python/Pydantic-style errors like
-//   "messages.0.content: Input should be a valid string"
-// and other variants that surface the same root cause.
-//
+// These errors identify string-only providers that reject content arrays.
+// The patterns cover Rust/serde sequence errors and Python/Pydantic content errors.
 // See: https://github.com/moeru-ai/airi/issues/1500
 const CONTENT_ARRAY_RELATED_ERROR_PATTERNS: RegExp[] = [
   /messages\[\d+\][^"]*invalid type:\s*sequence,\s*expected\s+a\s+string/i,

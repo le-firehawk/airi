@@ -1,5 +1,3 @@
-import type { PixiLive2DInternalModel } from './motion-manager'
-
 import { createPinia, setActivePinia } from 'pinia'
 import { describe, expect, it } from 'vitest'
 import { shallowRef } from 'vue'
@@ -10,20 +8,16 @@ import { useExpressionController } from './expression-controller'
 describe('useExpressionController', () => {
   it('registers expressions with the identity of each loaded model', async () => {
     // ROOT CAUSE:
-    //
-    // Model.vue creates one expression controller, then reuses it when the
-    // component loads another model. The controller captured the first model
-    // ID at setup time, so model B expressions were registered as model A.
-    //
-    // We fixed this by passing the identity of each completed model load into
-    // the matching expression initialization.
+    // The controller captured the first model ID and registered later models under that identity.
+    // We fixed this by passing each completed model load identity to its expression initialization.
     setActivePinia(createPinia())
 
     const internalModel = shallowRef({
       coreModel: {
         getParameterDefaultValueById: () => 0,
+        getParameterValueById: () => 0,
       },
-    } as unknown as PixiLive2DInternalModel)
+    })
     const controller = useExpressionController({ internalModel })
     const expressionStore = useExpressionStore()
     const expressionRefs = [{ Name: 'Happy', File: 'happy.exp3.json' }]

@@ -70,7 +70,9 @@ export function createPlaybackManager<TAudio>(
   }
 
   function emit<T>(bucket: Set<Listener<T>>, event: T) {
-    for (const listener of [...bucket])
+    // Keep this emission stable when a listener subscribes or unsubscribes.
+    const scheduledListeners = [...bucket]
+    for (const listener of scheduledListeners)
       listener(event)
   }
 
@@ -377,7 +379,8 @@ export function createPlaybackManager<TAudio>(
         waiting.splice(i, 1)
     }
 
-    for (const entry of [...active.values()]) {
+    const scheduledPlayback = [...active.values()]
+    for (const entry of scheduledPlayback) {
       if (entry.item.intentId === intentId)
         interrupt(entry, reason, { allowStartWaiting: false })
     }
@@ -391,7 +394,8 @@ export function createPlaybackManager<TAudio>(
         waiting.splice(i, 1)
     }
 
-    for (const entry of [...active.values()]) {
+    const scheduledPlayback = [...active.values()]
+    for (const entry of scheduledPlayback) {
       if (entry.item.ownerId === ownerId)
         interrupt(entry, reason, { allowStartWaiting: false })
     }
@@ -404,7 +408,8 @@ export function createPlaybackManager<TAudio>(
     stopAll(reason = 'stop-all') {
       waiting.length = 0
 
-      for (const x of [...active.values()]) {
+      const scheduledPlayback = [...active.values()]
+      for (const x of scheduledPlayback) {
         interrupt(x, reason, { allowStartWaiting: false })
       }
     },

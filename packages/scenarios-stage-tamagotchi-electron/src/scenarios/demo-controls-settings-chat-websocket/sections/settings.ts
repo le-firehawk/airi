@@ -2,12 +2,9 @@ import type { ManualCaptureSection } from '../shared/types'
 
 const airiCardPattern = /sort|排序|upload|上传/i
 const providersPattern = /Chat|Speech|Transcription/i
-// NOTICE: Must stay unique to /settings/data. The prior alternates `chat` / `聊天`
-// also matched the providers page, which renders a `Chat` / `聊天` provider category
-// immediately before this step. That allowed the readiness check to pass against stale
-// providers DOM and silently produce a mislabeled screenshot. `打开` was also too
-// generic because it appears on multiple pages as button labels. `Open app data folder`
-// is the desktop-folder section title and is literal English across every locale file.
+// NOTICE: This readiness pattern must uniquely identify /settings/data.
+// Chat and generic Open labels also matched the preceding providers page.
+// Open app data folder is the desktop section title in every locale.
 const dataPattern = /Open app data folder/i
 const systemGeneralPattern = /theme|主题|language|语言/i
 const systemColorSchemePattern = /RGB|Primary Color|主题颜色|500\/50/i
@@ -15,15 +12,9 @@ const modelsPattern = /select model|confirm|缩放与位置|Zoom & Position/i
 const modulesPattern = /Consciousness|意识|Speech|发声|Hearing|听觉/i
 const hearingPattern = /Audio Input Device|音频输入设备|Start Monitoring|Transcription Result/i
 const developerPattern = /Open DevTools|打开|Markdown|Lag|Vision Capture|Screen Capture/i
-// NOTICE: Anchor on the consciousness page's always-rendered section description.
-// Previous alternates like `提供商` / `No Providers Configured` did not match zh-Hans,
-// and `当前模型` / `Current model` only appear when a model is already selected.
-// Fresh environments with no providers configured would hang without this pattern.
-//
-// Caveat: vision.vue reuses the same i18n key, so this also matches on
-// /settings/modules/vision. That remains safe because this step is reached from
-// developer, which does not render either phrase. If the step order changes,
-// pick a token unique to consciousness.vue instead.
+// NOTICE: This description exists before a model or provider is configured, including zh-Hans.
+// Vision shares the key, but the preceding developer page does not.
+// If the step order changes, use a token unique to consciousness.vue.
 const consciousnessPattern = /Select the suitable LLM|为意识选择合适/i
 const speechPattern = /Hello, my name is AI Assistant|Test voice|Voice|声音|Speech|选择语音合成服务来源/i
 const visionPattern = /Capture interval|context|ollama|提供商|Current model|Chat|Vision capture cadence/i

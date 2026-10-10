@@ -30,10 +30,6 @@ function toggleCapture() {
   else
     stressStore.startCapture()
 }
-
-function toggleMode() {
-  stressStore.toggleMockMode()
-}
 </script>
 
 <template>
@@ -83,7 +79,7 @@ function toggleMode() {
           class="w-full sm:w-auto"
           :icon="isMock ? 'i-solar:simplerockets-bold-duotone' : 'i-solar:cloud-bold-duotone'"
           :text="isMock ? 'Mode: Mock' : 'Mode: Live'"
-          @click="toggleMode"
+          @click="stressStore.toggleMockMode()"
         >
           {{ isMock ? 'Switch to live provider' : 'Switch to mock stream' }}
         </ButtonBar>

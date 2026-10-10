@@ -15,37 +15,8 @@ const palette: PresenceBubblePalette = {
   badgeInk: '#ffffff',
 }
 
-function stubCanvas() {
-  const context = {
-    font: '',
-    fillStyle: '',
-    textAlign: '',
-    textBaseline: '',
-    globalAlpha: 1,
-    shadowColor: '',
-    shadowBlur: 0,
-    shadowOffsetY: 0,
-    measureText: (text: string) => ({ width: text.length * 7 }),
-    save: () => {},
-    restore: () => {},
-    translate: () => {},
-    scale: () => {},
-    clearRect: () => {},
-    beginPath: () => {},
-    closePath: () => {},
-    moveTo: () => {},
-    lineTo: () => {},
-    arcTo: () => {},
-    arc: () => {},
-    fill: () => {},
-    fillText: () => {},
-  }
-
-  return { width: 0, height: 0, getContext: () => context } as unknown as HTMLCanvasElement
-}
-
 function createAdvancer() {
-  return new PresenceBubbleAdvancer(new PresenceBubblePainter(() => stubCanvas()))
+  return new PresenceBubbleAdvancer(new PresenceBubblePainter())
 }
 
 function advance(subject: PresenceBubbleAdvancer, head: { x: number, y: number, width: number, height: number } | undefined, deltaMs = 16) {
@@ -211,7 +182,7 @@ describe('presence bubble advancer', () => {
 
   it('aims the tail at the head from where the panel sits', () => {
     // The painter takes the head in the panel's own coordinates.
-    const painter = new PresenceBubblePainter(() => stubCanvas())
+    const painter = new PresenceBubblePainter()
     const paint = vi.spyOn(painter, 'paint')
     const subject = new PresenceBubbleAdvancer(painter)
     const head = { x: 60, y: 20, width: 80, height: 80 }

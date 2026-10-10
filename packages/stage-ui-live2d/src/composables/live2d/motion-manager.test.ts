@@ -1,5 +1,5 @@
 import type { Live2DBreathControlState } from '../../stores/motion-control'
-import type { MotionManagerPluginContext, PixiLive2DInternalModel } from './motion-manager'
+import type { MotionManagerPluginContext } from './motion-manager'
 
 import { describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
@@ -41,18 +41,19 @@ function createContext(overrides: Partial<MotionManagerPluginContext> = {}): Mot
     timeDelta: 16,
     internalModel: {
       eyeBlink: {
-        updateParameters: vi.fn((targetModel: typeof model) => {
-          targetModel.setParameterValueById('ParamEyeLOpen', 0.5)
-          targetModel.setParameterValueById('ParamEyeROpen', 0.25)
+        updateParameters: vi.fn(() => {
+          model.setParameterValueById('ParamEyeLOpen', 0.5)
+          model.setParameterValueById('ParamEyeROpen', 0.25)
         }),
       },
       coreModel: model,
-    } as unknown as PixiLive2DInternalModel,
+      focusController: { focus: vi.fn(), update: vi.fn() },
+    },
     motionManager: {
       stopAllMotions: vi.fn(),
       state: { currentGroup: undefined },
       groups: { idle: 'Idle' },
-    } as unknown as PixiLive2DInternalModel['motionManager'],
+    },
     modelParameters: ref({
       leftEyeOpen: 1,
       rightEyeOpen: 1,
@@ -70,7 +71,7 @@ function createContext(overrides: Partial<MotionManagerPluginContext> = {}): Mot
     }),
   }
 
-  return Object.assign(context, overrides) as unknown as MotionManagerPluginContext
+  return Object.assign(context, overrides)
 }
 
 describe('live2d motion manager plugins', () => {

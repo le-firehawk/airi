@@ -78,16 +78,9 @@ const target = computed(() => {
   return dragTarget.value ?? (open.value ? settledWidth.value : 0)
 })
 
-// This row owns transient input and animation, never the conversation store.
-// Pointer input pauses the spring at its visible position. Horizontal intent
-// takes ownership; vertical intent stays native until release. Wheel sequences
-// end after an idle interval because browsers expose no trackpad finger-up event.
-// An opted-in full swipe arms from actual travel, never projected velocity.
-// Arming hands the visible surface to the spring while raw input keeps tracking.
-// Reversal hands it back without jumping. Release locks this full-width phase;
-// only its completion emits the action, so list collapse cannot race the slide.
-// The completed surface stays visible briefly while its owner removes the row.
-// A retained row resets afterward, so an unsuccessful action cannot lock it.
+// This row owns input and animation state. Horizontal intent captures input, while vertical gestures remain native.
+// Wheel input ends after an idle interval. Full-swipe actions emit only after the slide completes, before row removal.
+// Retained rows reset so failed actions cannot lock them.
 let intent: 'pending' | 'horizontal' | 'vertical' = 'pending'
 let pointerActive = false
 let wheelActive = false

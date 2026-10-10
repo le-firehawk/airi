@@ -55,7 +55,7 @@ export interface CrossWsConnectorOptions {
 export function createCrossWsConnector(options: CrossWsConnectorOptions): ClientConnector<string> {
   return {
     connect(events) {
-      const WsConstructor = options.wsConstructor ?? (NativeWebSocket as unknown as CrossWsConstructor)
+      const WsConstructor = options.wsConstructor ?? NativeWebSocket
       const ws = new WsConstructor(options.url, options.protocols)
 
       return new Promise((resolve, reject) => {
@@ -67,12 +67,12 @@ export function createCrossWsConnector(options: CrossWsConnectorOptions): Client
           resolve({
             send: message => ws.send(message),
             close: (code, reason) => ws.close(code, reason),
-            ping: typeof ws.ping === 'function' ? () => ws.ping!() : undefined,
-            pong: typeof ws.pong === 'function' ? () => ws.pong!() : undefined,
+            ping: 'ping' in ws && typeof ws.ping === 'function' ? ws.ping.bind(ws) : undefined,
+            pong: 'pong' in ws && typeof ws.pong === 'function' ? ws.pong.bind(ws) : undefined,
           })
         }
 
-        ws.onmessage = (event) => {
+        ws.onmessage = (event: CrossWsMessageEvent) => {
           if (typeof event.data === 'string') {
             events.message(event.data)
             return
@@ -81,7 +81,7 @@ export function createCrossWsConnector(options: CrossWsConnectorOptions): Client
           events.error(new TypeError('The CrossWS connector only supports text messages.'))
         }
 
-        ws.onerror = (event) => {
+        ws.onerror = (event: unknown) => {
           const error = errorFromEvent(event)
           if (!opened) {
             failedBeforeOpen = true
@@ -92,7 +92,7 @@ export function createCrossWsConnector(options: CrossWsConnectorOptions): Client
           events.error(error)
         }
 
-        ws.onclose = (event) => {
+        ws.onclose = (event: CrossWsCloseEvent) => {
           if (failedBeforeOpen) {
             return
           }

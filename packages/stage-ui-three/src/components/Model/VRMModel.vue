@@ -97,18 +97,6 @@ import {
   takeManagedVrmInstance,
 } from './vrm-instance-cache'
 
-/*
-  * Props:
-  * - modelId: stable display model identity
-  * - modelSrc: model src string to load model asset
-  * - idleAnimation: animation src for model
-  * - loadAnimations: TBC
-  * - paused: if the animation is paused
-  * - nprIrrSH: Spherical Harmonics computed from the sky box, used for IBL
-  *
-  * - modelOffset: The placing offset of model (x, y, z)
-  * - modelRotationY: The rotation of the model (y-axis)
-*/
 const props = withDefaults(defineProps<{
   /** The context that owns `currentAudioSource`. */
   audioContext?: AudioContext
@@ -286,7 +274,7 @@ function disposeDetachedVrm(detachedVrm?: VRM, detachedGroup?: Group) {
   detachedGroup?.removeFromParent()
 
   if (detachedVrm)
-    VRMUtils.deepDispose(detachedVrm.scene as unknown as Object3D)
+    VRMUtils.deepDispose(detachedVrm.scene)
 }
 
 function detachVrmGroup(detachedGroup?: Group) {
@@ -509,11 +497,8 @@ function bindManagedVrmInstanceRenderLoop() {
     // utterance.
     const isLipSyncActive = vrmLipSync.isLipSyncActive?.value ?? false
     const emoteMs = measureFrameStep(tracingEnabled, () => {
-      // Runs after lip sync: while speech is active the emote yields viseme
-      // mouth morphs (skipVisemes), and once lip sync falls silent the emote
-      // re-asserts its mouth targets over lip sync's zeroed weights. The
-      // state machine keeps advancing either way, so emotion transitions and
-      // the reset timeout stay in sync during long utterances.
+      // Run after lip sync so speech owns visemes while active. After speech ends, the emote restores its mouth targets.
+      // The emote timer always advances to keep transitions and resets on schedule.
       vrmEmote.value?.update(delta, { skipVisemes: isLipSyncActive })
     })
     const expressionMs = measureFrameStep(tracingEnabled, () => {
@@ -1028,32 +1013,7 @@ onMounted(async () => {
     nprProgramVersion.value += 1
     const mode = normalizeEnvMode(envSelect.value)
 
-    // TODO: after bumping up to three 0.180.0 with @types/three 0.180.0,
-    //   Argument of type 'Group<Object3DEventMap>' is not assignable to parameter of type 'Object3D<Object3DEventMap>'.
-    //     Type 'Group<Object3DEventMap>' is missing the following properties from type 'Object3D<Object3DEventMap>': setPointerCapture, releasePointerCapture, hasPointerCapture
-    //
-    // Currently, AFAIK, https://github.com/pmndrs/xr/blob/456aa380206e93888cd3a5741a1534e672ae3106/packages/pointer-events/src/pointer.ts#L69-L100 declares
-    // declare module 'three' {
-    //   interface Object3D {
-    //     setPointerCapture(pointerId: number): void
-    //     releasePointerCapture(pointerId: number): void
-    //     hasPointerCapture(pointerId: number): boolean
-
-    //     intersectChildren?: boolean
-    //     interactableDescendants?: Array<Object3D>
-    //     /**
-    //      * @deprecated
-    //      */
-    //     ancestorsHaveListeners?: boolean
-    //     ancestorsHavePointerListeners?: boolean
-    //     ancestorsHaveWheelListeners?: boolean
-    //   }
-    // }
-    //
-    // And in @tresjs/core v5, it uses the @pmndrs/pointer-events internally.
-    // Somehow the Object3D from @types/three and the one augmented by @pmndrs/pointer-events are not compatible.
-    // This needs to be fixed later.
-    updateNprShaderSetting(vrm.value?.scene as unknown as Object3D, {
+    updateNprShaderSetting(vrm.value?.scene, {
       mode,
       intensity: skyBoxIntensity.value,
       sh: nprIrrSH.value ?? null,

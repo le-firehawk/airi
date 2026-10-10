@@ -17,6 +17,23 @@ import { SpineScene } from '@proj-airi/stage-ui-spine/components/scenes'
 import { useSpineStore } from '@proj-airi/stage-ui-spine/stores/spine'
 ```
 
+## Runtime ownership
+
+The loader selects a separate adapter for Spine 4.0, 4.1, or 4.2. Each adapter keeps its SDK objects together.
+The scene and ZIP preview use the same canvas lifecycle. AIRI owns asset readiness and the animation-frame loop.
+
+Disposal cancels pending frames and releases model assets, background textures, and renderer resources.
+A WebGL context-loss event stops the current canvas. A restored context cannot restart a disposed canvas.
+The ZIP preview releases its canvas after capture, an error, or its four-second timeout.
+
+Run the browser regressions with Chromium installed:
+
+```sh
+pnpm exec vitest run --config packages/stage-ui-spine/vitest.config.ts --project stage-ui-spine:browser
+```
+
+These tests cover all three versions, including their different blending and world-transform APIs.
+
 ## License
 
 - **Original code** (components, stores, composables, utilities): MIT License

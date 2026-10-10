@@ -187,8 +187,9 @@ export function createStreamingControlParser(
         createdAt: Date.now(),
       }
 
-      // snapshot prevents mutation during iteration
-      for (const handler of [...signalHandlers]) {
+      // Subscription changes apply to the next signal, including across awaits.
+      const scheduledHandlers = [...signalHandlers]
+      for (const handler of scheduledHandlers) {
         try {
           await handler(parsed, signalContext)
         }

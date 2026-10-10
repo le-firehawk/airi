@@ -44,10 +44,6 @@ function parseViteConfigLoader(value: string | undefined): 'bundle' | 'native' |
   return undefined
 }
 
-function resolveConfigPath(cwd: string, value: string): string {
-  return resolve(cwd, value)
-}
-
 function readRequiredOptionValue(viteArgs: string[], index: number, optionName: string): string {
   const value = viteArgs[index + 1]
   if (!value) {
@@ -64,7 +60,7 @@ function parseConfigArg(viteArgs: string[], index: number, cwd: string): ParsedV
   // for its wrapper config, then loads the user config from inside the wrapper.
   if (arg === '--config' || arg === '-c') {
     return {
-      baseConfigFile: resolveConfigPath(cwd, readRequiredOptionValue(viteArgs, index, '--config')),
+      baseConfigFile: resolve(cwd, readRequiredOptionValue(viteArgs, index, '--config')),
       consumedArgs: 2,
       forwardedArgs: [],
     }
@@ -72,7 +68,7 @@ function parseConfigArg(viteArgs: string[], index: number, cwd: string): ParsedV
 
   if (arg.startsWith('--config=')) {
     return {
-      baseConfigFile: resolveConfigPath(cwd, arg.slice('--config='.length)),
+      baseConfigFile: resolve(cwd, arg.slice('--config='.length)),
       consumedArgs: 1,
       forwardedArgs: [],
     }

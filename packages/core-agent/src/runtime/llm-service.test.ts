@@ -594,20 +594,8 @@ describe('chat protocol compatibility', () => {
   })
 
   // ROOT CAUSE:
-  //
-  // Some Rust/serde-based OpenAI-compatible gateways only deserialize
-  // `messages[].content` as a plain string and reject content-part arrays
-  // with HTTP 400 "Failed to deserialize the JSON body into the target type:
-  // messages[N]: invalid type: sequence, expected a string". Before the fix,
-  // historical messages that contained an `image_url` part (uploaded image,
-  // vision capture, restored session) bypassed the existing flatten branch
-  // and stayed as arrays, so every subsequent send re-tripped the 400.
-  //
-  // We fixed this by adding a `supportsContentArray` flag — when the runtime
-  // auto-degrade has flipped it to `false`, we force-flatten arrays to a
-  // text-only string and drop non-text parts so the request shape matches
-  // what a string-only provider can deserialize.
-  //
+  // String-only gateways rejected historical image content arrays on every subsequent send.
+  // We fixed this by flattening text and dropping non-text parts when supportsContentArray becomes false.
   // See: https://github.com/moeru-ai/airi/issues/1500
   it('issue #1500: drops image_url parts and flattens to string when supportsContentArray=false', () => {
     /**

@@ -55,11 +55,10 @@ function setAsBackground(id: string) {
 
 function requestDeleteConfirmation(message: string): boolean {
   // NOTICE:
-  // Native confirm is the existing guard for this destructive scene action.
-  // Root cause: `no-alert` rejects direct `confirm(...)` calls before this page
-  // has a shared confirmation-dialog primitive wired into the scene gallery flow.
-  // Source/context: this component already used native confirm for scene delete.
-  // Removal condition: replace with the shared modal confirmation component.
+  // Native confirm guards scene deletion until a shared modal exists.
+  // Root cause: no-alert rejects direct confirm calls.
+  // Source: this component already used native confirmation for scene deletion.
+  // Remove this workaround when scene settings use the shared modal.
   const confirmAction = globalThis.confirm.bind(globalThis)
   return confirmAction(message)
 }

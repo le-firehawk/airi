@@ -38,7 +38,9 @@ export interface ExpressionControllerOptions {
    * The loaded Live2D internal model reference (reactive so it can be null
    * while a model is being swapped).
    */
-  internalModel: Ref<PixiLive2DInternalModel | undefined>
+  internalModel: Ref<{
+    coreModel: Pick<PixiLive2DInternalModel['coreModel'], 'getParameterValueById'>
+  } | undefined>
 }
 
 /**
@@ -148,7 +150,7 @@ export function useExpressionController(options: ExpressionControllerOptions) {
    *
    * @param coreModel - The Cubism core model (coreModel from internalModel).
    */
-  function applyExpressions(coreModel: PixiLive2DInternalModel['coreModel']) {
+  function applyExpressions(coreModel: Pick<PixiLive2DInternalModel['coreModel'], 'getParameterValueById' | 'setParameterValueById'>) {
     const activeThisFrame = new Set<string>()
 
     for (const entry of store.expressions.values()) {
@@ -203,7 +205,7 @@ export function useExpressionController(options: ExpressionControllerOptions) {
    *   always write a fresh value before the expression plugin runs.
    * - **Overwrite**: direct replacement.
    */
-  function computeTargetValue(entry: ExpressionEntry, coreModel: PixiLive2DInternalModel['coreModel']): number {
+  function computeTargetValue(entry: ExpressionEntry, coreModel: Pick<PixiLive2DInternalModel['coreModel'], 'getParameterValueById' | 'setParameterValueById'>): number {
     switch (entry.blend) {
       case 'Add':
         return entry.modelDefault + entry.currentValue
@@ -256,11 +258,10 @@ export function useExpressionController(options: ExpressionControllerOptions) {
 
     try {
       // Prefer the dedicated default-value API when available (Cubism 4+).
-      const defaultApi = (im.coreModel as any).getParameterDefaultValueById
-      if (typeof defaultApi === 'function') {
-        const val = defaultApi.call(im.coreModel, parameterId)
-        if (val != null)
-          return val as number
+      if ('getParameterDefaultValueById' in im.coreModel && typeof im.coreModel.getParameterDefaultValueById === 'function') {
+        const value: unknown = im.coreModel.getParameterDefaultValueById(parameterId)
+        if (typeof value === 'number')
+          return value
       }
       // Fall back to the current value which, right after model load, IS
       // the default.

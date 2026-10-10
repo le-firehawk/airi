@@ -19,8 +19,8 @@ const sourceFileName = '__source.bin'
  * id is the intended key). Blob URLs are deliberately not compared because
  * they are recreated for the same IndexedDB-backed file on every session.
  */
-export class OPFSCache {
-  static async clearAll(): Promise<void> {
+class ModelFileCache {
+  async clearAll(): Promise<void> {
     try {
       const root = await navigator.storage.getDirectory()
       const entryNames: string[] = []
@@ -34,7 +34,7 @@ export class OPFSCache {
     }
   }
 
-  private static async writeFile(
+  private async writeFile(
     root: FileSystemDirectoryHandle,
     fileName: string,
     content: Blob | string,
@@ -45,7 +45,7 @@ export class OPFSCache {
     await writable.close()
   }
 
-  private static async readMeta(dirHandle: FileSystemDirectoryHandle): Promise<OPFSCacheMeta | null> {
+  private async readMeta(dirHandle: FileSystemDirectoryHandle): Promise<OPFSCacheMeta | null> {
     try {
       const metaHandle = await dirHandle.getFileHandle('__meta.json', { create: false })
       const metaFile = await metaHandle.getFile()
@@ -60,11 +60,11 @@ export class OPFSCache {
    * Returns the cached source for a model, or `null` when the cache is absent
    * or no longer matches the requested remote URL.
    */
-  static async get(key: string, sourceUrl: string): Promise<Blob | null> {
+  async get(key: string, sourceUrl: string): Promise<Blob | null> {
     try {
       const root = await navigator.storage.getDirectory()
       const dirHandle = await root.getDirectoryHandle(key, { create: false })
-      const meta = await OPFSCache.readMeta(dirHandle)
+      const meta = await this.readMeta(dirHandle)
 
       if (meta?.version !== mmdOpfsCacheVersion) {
         // NOTICE:
@@ -99,12 +99,12 @@ export class OPFSCache {
    * Cache failures are intentionally swallowed so model loading remains usable
    * in browsers where OPFS is unavailable or storage is full.
    */
-  static async save(key: string, source: Blob, sourceUrl?: string): Promise<void> {
+  async save(key: string, source: Blob, sourceUrl?: string): Promise<void> {
     try {
       const root = await navigator.storage.getDirectory()
       const dirHandle = await root.getDirectoryHandle(key, { create: true })
-      await OPFSCache.writeFile(dirHandle, sourceFileName, source)
-      await OPFSCache.writeFile(dirHandle, '__meta.json', JSON.stringify({
+      await this.writeFile(dirHandle, sourceFileName, source)
+      await this.writeFile(dirHandle, '__meta.json', JSON.stringify({
         sourceUrl,
         version: mmdOpfsCacheVersion,
       }))
@@ -114,3 +114,6 @@ export class OPFSCache {
     }
   }
 }
+
+/** Shared cache for model assets stored in this origin. */
+export const OPFSCache = new ModelFileCache()

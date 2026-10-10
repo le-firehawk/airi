@@ -9,7 +9,7 @@ import { z } from 'zod'
 import { providerAivisSpeech, providerVoicevox } from '.'
 import { getProviderValidationIntervalMs } from '../../../validators/run'
 
-const translate = ((key: string) => key) as unknown as ProviderTranslator
+const translate: ProviderTranslator = key => key
 
 interface EngineCall {
   init: RequestInit

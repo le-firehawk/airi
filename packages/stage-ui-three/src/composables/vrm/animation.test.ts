@@ -1,9 +1,8 @@
-import type { VRMCore } from '@pixiv/three-vrm-core'
-
-import { VRMCore as Core, VRMHumanoid } from '@pixiv/three-vrm-core'
+import { VRMCore as Core, VRMExpression, VRMExpressionManager, VRMHumanoid } from '@pixiv/three-vrm-core'
 import { AnimationClip, AnimationMixer, Group, Object3D, QuaternionKeyframeTrack, VectorKeyframeTrack } from 'three'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { createTestVrm } from '../../test-utils/vrm'
 import { reAnchorRootPositionTrack, useBlink } from './animation'
 
 /** Creates a real normalized rig without a model file or a renderer. */
@@ -134,14 +133,13 @@ describe('reAnchorRootPositionTrack', () => {
 })
 
 function createMockVRMCore() {
-  return {
-    expressionManager: {
-      setValue: vi.fn(),
-    },
-  } as unknown as VRMCore
+  const expressionManager = new VRMExpressionManager()
+  expressionManager.registerExpression(new VRMExpression('blink'))
+  vi.spyOn(expressionManager, 'setValue')
+  return createTestVrm({ expressionManager })
 }
 
-function lastBlinkValue(vrm: VRMCore) {
+function lastBlinkValue(vrm: Core) {
   const calls = vi.mocked(vrm.expressionManager!.setValue).mock.calls
   return calls.length ? calls[calls.length - 1][1] : undefined
 }
@@ -153,15 +151,8 @@ describe('useBlink', () => {
 
   it('holds the lid at 0 and still completes the blink cycle while suppressed mid-blink', () => {
     // ROOT CAUSE:
-    //
-    // Previously the render loop simply stopped calling blink.update while an
-    // emote was active. Since update is the only place that advances
-    // blinkProgress and resets the morph to 0, an emote starting mid-blink
-    // froze the sine cycle and left the eyelid stuck closed until the emote
-    // reset.
-    //
-    // We fixed this by always advancing the controller and holding the blink
-    // morph at 0 while suppressed.
+    // Pausing blink updates during an emote froze any active blink and left the eyelid closed.
+    // We fixed this by advancing the cycle while holding its morph at zero during suppression.
     vi.spyOn(Math, 'random').mockReturnValue(0) // nextBlinkTime = MIN_BLINK_INTERVAL (1s)
 
     const vrm = createMockVRMCore()

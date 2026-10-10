@@ -1,5 +1,4 @@
-import type { Hooks } from 'crossws'
-
+import { plugin as crossWsPlugin } from 'crossws/server'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('h3', () => ({
@@ -36,17 +35,11 @@ describe('better-ws H3 adapter', () => {
     }
 
     const plugin = createH3CrossWsPlugin(app)
-    // NOTICE:
-    // `createH3CrossWsPlugin` deliberately returns the public Srvx plugin
-    // type, while this mock exposes its resolver for assertion. The cast stays
-    // inside the test so production code does not depend on mock-only shape.
-    // Remove this if Srvx/CrossWS exposes an inspectable plugin test helper.
-    const mockedPlugin = plugin as unknown as {
-      options: {
-        resolve: (request: Request) => Promise<Partial<Hooks> | undefined>
-      }
+    const options = vi.mocked(crossWsPlugin).mock.lastCall?.[0]
+    if (!options?.resolve) {
+      throw new Error('Expected a CrossWS plugin resolver.')
     }
-    const resolved = await mockedPlugin.options.resolve(new Request('http://localhost/ws'))
+    const resolved = await options.resolve(new Request('http://localhost/ws'))
 
     expect(plugin).toMatchObject({ kind: 'crossws-plugin' })
     expect(app.fetch).toHaveBeenCalledOnce()

@@ -50,11 +50,8 @@ export function heartbeatFrameFrom(text: string): MessageHeartbeatKind | undefin
 /** Parses one AIRI websocket protocol event from SuperJSON or plain JSON text. */
 export function parseEvent(text: string): WebSocketEvent {
   // NOTICE:
-  // SDK clients send events using superjson.stringify, so websocket runtime code must
-  // use superjson.parse instead of message.json() or plain JSON.parse first.
-  // JSON.parse on a superjson-encoded string returns the wrapper object
-  // `{ json: {...}, meta: {...} }` with no protocol `type`, which breaks routing.
-  // Keep this until all AIRI websocket clients share one non-wrapper wire format.
+  // SDK clients encode events with superjson.stringify. Plain JSON parsing leaves the wrapper without a protocol type and breaks routing.
+  // Use superjson.parse until every AIRI websocket client shares a non-wrapper wire format.
   let parsed: WebSocketEvent | undefined
   try {
     parsed = parse<WebSocketEvent>(text)

@@ -26,6 +26,7 @@ import { DropdownMenuContent, DropdownMenuItem, DropdownMenuPortal, DropdownMenu
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
+import { ZodObject } from 'zod'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -116,13 +117,8 @@ const safeOllamaConnectivityTroubleshootingHtml = computed(() => {
 })
 
 function getSchemaShape(schema: $ZodType): Record<string, ZodType> {
-  const anySchema = schema as unknown as { shape?: Record<string, ZodType> | (() => Record<string, ZodType>), _def?: { shape?: Record<string, ZodType> | (() => Record<string, ZodType>) } }
-  if (anySchema.shape) {
-    return typeof anySchema.shape === 'function' ? anySchema.shape() : anySchema.shape
-  }
-  if (anySchema._def?.shape) {
-    return typeof anySchema._def.shape === 'function' ? anySchema._def.shape() : anySchema._def.shape
-  }
+  if (schema instanceof ZodObject)
+    return schema.shape
 
   return {}
 }

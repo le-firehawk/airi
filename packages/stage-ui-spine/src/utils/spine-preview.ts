@@ -1,3 +1,6 @@
+import type { SpineCanvas, SpineCanvasApp, SpineModel } from './spine-canvas'
+
+import { getSpineDownloader } from './spine-downloader'
 import { loadSpineRuntime } from './spine-runtime'
 import { detectSpineVersionFromBinary, detectSpineVersionFromJson } from './spine-version'
 import { loadSpineZip } from './spine-zip-loader'
@@ -19,6 +22,8 @@ import { loadSpineZip } from './spine-zip-loader'
 export async function loadSpineModelPreview(file: File): Promise<string | undefined> {
   let assets: Awaited<ReturnType<typeof loadSpineZip>> | undefined
   let canvas: HTMLCanvasElement | undefined
+  let spineCanvas: SpineCanvas | undefined
+  let timeout: ReturnType<typeof setTimeout> | undefined
   try {
     assets = await loadSpineZip(file)
 
@@ -35,6 +40,8 @@ export async function loadSpineModelPreview(file: File): Promise<string | undefi
     canvas = document.createElement('canvas')
     canvas.width = previewWidth
     canvas.height = previewHeight
+    canvas.style.width = `${previewWidth}px`
+    canvas.style.height = `${previewHeight}px`
     canvas.style.position = 'absolute'
     canvas.style.left = '-99999px'
     canvas.style.top = '0'
@@ -57,8 +64,10 @@ export async function loadSpineModelPreview(file: File): Promise<string | undefi
       }
 
       try {
-        const app: import('@esotericsoftware/spine-webgl').SpineCanvasApp = {
-          loadAssets: (canvasApp: import('@esotericsoftware/spine-webgl').SpineCanvas) => {
+        let previewSkeleton: SpineModel | undefined
+        const app: SpineCanvasApp = {
+          dispose: () => finish(undefined),
+          loadAssets: (canvasApp: SpineCanvas) => {
             // NOTICE:
             // Patch BEFORE any load calls. SpineCanvas calls loadAssets
             // synchronously in its constructor, and load methods immediately
@@ -66,7 +75,7 @@ export async function loadSpineModelPreview(file: File): Promise<string | undefi
             // Source/context: spine-core/AssetManagerBase.js Downloader class.
             // Removal condition: Spine ships a Blob/buffer-aware loader.
             const am = canvasApp.assetManager
-            patchAssetManagerForZipAssets(am, blobUrls, rawData, layout.texturePaths)
+            patchAssetManagerForZipAssets(am.source, blobUrls, rawData, layout.texturePaths)
 
             if (layout.skeletonFormat === 'binary')
               am.loadBinary(skeletonAssetPath)
@@ -78,76 +87,49 @@ export async function loadSpineModelPreview(file: File): Promise<string | undefi
             // to be requested again individually.
             am.loadTextureAtlas(atlasAssetPath)
           },
-          initialize: (canvasApp: import('@esotericsoftware/spine-webgl').SpineCanvas) => {
-            const am = canvasApp.assetManager
-
-            const atlas = am.require(atlasAssetPath) as import('@esotericsoftware/spine-webgl').TextureAtlas
-            const skeletonData = layout.skeletonFormat === 'binary'
-              ? new spine.SkeletonBinary(new spine.AtlasAttachmentLoader(atlas))
-                  .readSkeletonData(am.require(skeletonAssetPath) as Uint8Array)
-              : new spine.SkeletonJson(new spine.AtlasAttachmentLoader(atlas))
-                  .readSkeletonData(am.require(skeletonAssetPath) as string)
-
-            const skeleton = new spine.Skeleton(skeletonData)
-            skeleton.setToSetupPose()
-            // Some rigs ship without a default skin; their slot attachments
-            // only resolve once a skin is active, so setup pose renders empty.
-            // Fall back to the first skin so the preview isn't blank.
-            if (!skeletonData.defaultSkin && skeletonData.skins.length > 0) {
-              skeleton.setSkinByName(skeletonData.skins[0].name)
+          initialize: (canvasApp: SpineCanvas) => {
+            const skeleton = canvasApp.createModel(skeletonAssetPath, atlasAssetPath, layout.skeletonFormat)
+            // Some rigs need their first skin because they have no default skin.
+            if (!skeleton.defaultSkinName && skeleton.skins.length > 0) {
+              skeleton.setSkinByName(skeleton.skins[0].name)
               skeleton.setSlotsToSetupPose()
             }
-            ;(canvasApp as unknown as { __previewSkeleton: import('@esotericsoftware/spine-webgl').Skeleton }).__previewSkeleton = skeleton
+            previewSkeleton = skeleton
           },
-          update: (canvasApp: import('@esotericsoftware/spine-webgl').SpineCanvas, _delta: number) => {
-            const skeleton = (canvasApp as unknown as { __previewSkeleton?: import('@esotericsoftware/spine-webgl').Skeleton }).__previewSkeleton
-            if (skeleton) {
-              if (spine.Physics)
-                skeleton.updateWorldTransform(spine.Physics.update)
-              else
-                (skeleton as any).updateWorldTransform()
-            }
+          update: (_canvasApp: SpineCanvas, _delta: number) => {
+            const skeleton = previewSkeleton
+            skeleton?.updateWorldTransform()
           },
-          render: (canvasApp: import('@esotericsoftware/spine-webgl').SpineCanvas) => {
-            const skeleton = (canvasApp as unknown as { __previewSkeleton?: import('@esotericsoftware/spine-webgl').Skeleton }).__previewSkeleton
+          error: () => finish(undefined),
+          render: (canvasApp: SpineCanvas) => {
+            const skeleton = previewSkeleton
             if (!skeleton)
               return
 
-            const renderer = canvasApp.renderer
-            // Expand keeps world units == canvas pixels at zoom 1, giving a
-            // predictable basis for the bounds-fit math below.
-            renderer.resize(spine.ResizeMode.Expand)
-
-            // Frame the camera to the skeleton's world-space bounding box.
-            // Most rigs anchor the root at the feet, so the model occupies
-            // roughly y: 0..height around x: 0. The renderer's default camera
-            // sits at the origin and would crop everything above the ankles —
-            // this is the actual cause of the cropped preview. getBounds gives
-            // the AABB of the currently posed attachments; we centre on it and
-            // zoom so the whole box fits with a small margin.
-            const offset = new spine.Vector2()
-            const size = new spine.Vector2()
-            skeleton.getBounds(offset, size, [])
-
-            const camera = renderer.camera
-            if (size.x > 0 && size.y > 0) {
+            // Frame the camera around the posed skeleton bounds.
+            // Most rigs anchor their feet at the origin, so the default camera crops their upper body.
+            // Centering the bounds and adding a margin keeps the complete model visible.
+            const bounds = skeleton.getBounds()
+            const camera = canvasApp.camera
+            if (bounds.width > 0 && bounds.height > 0) {
               const padding = 1.1
-              camera.position.x = offset.x + size.x / 2
-              camera.position.y = offset.y + size.y / 2
-              camera.zoom = Math.max(size.x / camera.viewportWidth, size.y / camera.viewportHeight) * padding
+              camera.position.x = bounds.x + bounds.width / 2
+              camera.position.y = bounds.y + bounds.height / 2
+              camera.zoom = Math.max(bounds.width / camera.viewportWidth, bounds.height / camera.viewportHeight) * padding
               camera.update()
             }
-
-            canvasApp.gl.clearColor(0, 0, 0, 0)
-            canvasApp.gl.clear(canvasApp.gl.COLOR_BUFFER_BIT)
-            renderer.begin()
-            renderer.drawSkeleton(skeleton, true)
-            renderer.end()
+            canvasApp.begin()
+            try {
+              skeleton.draw(true)
+            }
+            finally {
+              canvasApp.end()
+            }
 
             // Wait for a valid bounding box before capturing. A degenerate box
             // (empty setup pose, attachments not yet resolved) would produce a
             // blank or mis-framed thumbnail, so retry on the next frame instead.
-            if (size.x <= 0 || size.y <= 0)
+            if (bounds.width <= 0 || bounds.height <= 0)
               return
 
             try {
@@ -163,17 +145,11 @@ export async function loadSpineModelPreview(file: File): Promise<string | undefi
 
         // Use a custom path handler so AssetManager fetches go through our
         // blob URLs instead of trying the resolved path on the network.
-        const SpineCanvasCtor = spine.SpineCanvas as unknown as new (
-          canvas: HTMLCanvasElement,
-          config: { app: import('@esotericsoftware/spine-webgl').SpineCanvasApp, pathPrefix?: string, webglConfig?: WebGLContextAttributes },
-        ) => import('@esotericsoftware/spine-webgl').SpineCanvas
-
-        const spineCanvas = new SpineCanvasCtor(canvas!, {
+        spineCanvas = spine.createCanvas(canvas!, {
           app,
           pathPrefix: '',
           webglConfig: { alpha: true, premultipliedAlpha: false, preserveDrawingBuffer: true },
         })
-        void spineCanvas
       }
       catch (err) {
         console.error('[Spine] Preview generation failed:', err)
@@ -181,7 +157,7 @@ export async function loadSpineModelPreview(file: File): Promise<string | undefi
       }
 
       // Hard timeout so a stuck load can't block the import flow.
-      setTimeout(finish, 4000, undefined)
+      timeout = setTimeout(finish, 4000, undefined)
     })
   }
   catch (err) {
@@ -189,9 +165,16 @@ export async function loadSpineModelPreview(file: File): Promise<string | undefi
     return undefined
   }
   finally {
-    if (canvas?.isConnected)
-      canvas.remove()
-    assets?.dispose()
+    if (timeout !== undefined)
+      clearTimeout(timeout)
+    try {
+      spineCanvas?.dispose()
+    }
+    finally {
+      if (canvas?.isConnected)
+        canvas.remove()
+      assets?.dispose()
+    }
   }
 }
 
@@ -208,18 +191,12 @@ export async function loadSpineModelPreview(file: File): Promise<string | undefi
  * Removal condition: Spine ships a Blob/ArrayBuffer-aware asset loader.
  */
 function patchAssetManagerForZipAssets(
-  assetManager: import('@esotericsoftware/spine-webgl').AssetManager,
+  assetManager: object,
   blobUrls: Record<string, string>,
   rawData: Record<string, Uint8Array | string>,
   texturePaths: string[],
 ) {
-  const downloader = (assetManager as unknown as {
-    downloader?: {
-      rawDataUris: Record<string, string>
-      downloadText: (url: string, success: (data: string) => void, error: (status: number, responseText: string) => void) => void
-      downloadBinary: (url: string, success: (data: Uint8Array) => void, error: (status: number, response: unknown) => void) => void
-    }
-  }).downloader
+  const downloader = getSpineDownloader(assetManager)
   if (!downloader)
     return
 

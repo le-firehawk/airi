@@ -61,10 +61,6 @@ const TEXT_ENTRY_SELECTOR = [
   '[contenteditable]:not([contenteditable="false"])',
 ].join(',')
 
-function readLayoutHeight(targetWindow: Window): number {
-  return targetWindow.document.documentElement.clientHeight
-}
-
 function isTextEntry(element: Element): boolean {
   return element.matches(TEXT_ENTRY_SELECTOR)
     && !element.matches(':disabled, [readonly]')
@@ -179,7 +175,7 @@ export class AdaptiveInput extends EventTarget {
   private readonly measure = () => {
     this.animationFrame = undefined
 
-    const currentLayoutHeight = readLayoutHeight(this.targetWindow)
+    const currentLayoutHeight = this.targetWindow.document.documentElement.clientHeight
     if (this.focusPhase === 'idle' && !this.pendingWindowScrollRepair)
       this.referenceLayoutHeight = currentLayoutHeight
 
@@ -267,7 +263,7 @@ export class AdaptiveInput extends EventTarget {
       return
 
     this.focusPhase = 'focused'
-    this.referenceLayoutHeight = readLayoutHeight(this.targetWindow)
+    this.referenceLayoutHeight = this.targetWindow.document.documentElement.clientHeight
     this.requestMeasurement()
   }
 
@@ -285,7 +281,7 @@ export class AdaptiveInput extends EventTarget {
     // Root cause: Safari keeps the keyboard-sized Visual Viewport until its close animation ends.
     // Source: https://bugs.webkit.org/show_bug.cgi?id=265578
     // Removal condition: Safari reports each intermediate keyboard close frame through a keyboard API.
-    const normalHeight = this.referenceLayoutHeight || readLayoutHeight(this.targetWindow)
+    const normalHeight = this.referenceLayoutHeight || this.targetWindow.document.documentElement.clientHeight
     this.layoutValue = {
       keyboardVisible: false,
       stableViewportHeight: normalHeight,

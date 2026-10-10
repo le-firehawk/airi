@@ -1,8 +1,27 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 
 import { createEventWaitFor } from './event-wait-for'
 
 describe('createEventWaitFor', () => {
+  it('preserves the event and its type without a selector', async () => {
+    const event = { value: 2 }
+    const wait = createEventWaitFor<typeof event>()
+
+    wait.emit(event)
+
+    expectTypeOf(wait.promise).toEqualTypeOf<Promise<typeof event>>()
+    await expect(wait.promise).resolves.toBe(event)
+  })
+
+  it('preserves undefined as a valid event without a selector', async () => {
+    const wait = createEventWaitFor<undefined>()
+
+    wait.emit(undefined)
+
+    expectTypeOf(wait.promise).toEqualTypeOf<Promise<undefined>>()
+    await expect(wait.promise).resolves.toBeUndefined()
+  })
+
   it('resolves with the selected value when a future event matches', async () => {
     const wait = createEventWaitFor<{ type: string, value: number }, number>({
       match: event => event.type === 'ready',
@@ -12,6 +31,7 @@ describe('createEventWaitFor', () => {
     wait.emit({ type: 'ignore', value: 1 })
     wait.emit({ type: 'ready', value: 2 })
 
+    expectTypeOf(wait.promise).toEqualTypeOf<Promise<number>>()
     await expect(wait.promise).resolves.toBe(2)
   })
 

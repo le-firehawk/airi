@@ -383,11 +383,10 @@ function patchBuiltInOutlineMaterial(material: MToonMaterial) {
       : AIRI_OUTLINE_SHADER_PATCH_CACHE_KEY
   }
 
-  // NOTICE: @pixiv/three-vrm-materials-mtoon@3.5.1 hardcodes the MToon shader strings in
-  // `lib/three-vrm-materials-mtoon.module.js`. The current patch depends on three stable anchors:
-  // `#include <common>`, `#include <beginnormal_vertex>`, and the built-in outline block body.
-  // We keep the original `onBeforeCompile` untouched so three-vrm can continue prepending its
-  // define set; this patch only rewrites the stored vertex shader string and program cache key.
+  // NOTICE:
+  // MToon 3.5.1 embeds shader strings in lib/three-vrm-materials-mtoon.module.js.
+  // This patch relies on the common include, beginnormal_vertex include, and outline body.
+  // Preserving onBeforeCompile retains the upstream defines.
   material.vertexShader = patchedVertexShader
   material.needsUpdate = true
   markOutlineMaterialPatched(material)
@@ -432,17 +431,6 @@ function resolveBuiltInOutlineMeshTarget(mesh: Mesh): VrmOutlineMeshTarget | und
 }
 
 // Runtime target scan
-function getVrmOutlineRuntimeState(vrm: VRM) {
-  return vrmOutlineRuntimeRegistry.get(vrm)
-}
-
-function setVrmOutlineRuntimeState(vrm: VRM, state: VrmOutlineRuntimeState) {
-  vrmOutlineRuntimeRegistry.set(vrm, state)
-}
-
-function clearVrmOutlineRuntime(vrm: VRM) {
-  vrmOutlineRuntimeRegistry.delete(vrm)
-}
 
 function findVrmOutlineMeshTarget({
   material,
@@ -450,7 +438,7 @@ function findVrmOutlineMeshTarget({
   mesh,
   vrm,
 }: Pick<VrmMaterialHookContext, 'material' | 'materialIndex' | 'mesh' | 'vrm'>) {
-  const runtimeState = getVrmOutlineRuntimeState(vrm)
+  const runtimeState = vrmOutlineRuntimeRegistry.get(vrm)
   if (!runtimeState)
     return undefined
 
@@ -478,14 +466,14 @@ export function prepareVrmOutlineRuntime(vrm: VRM) {
     meshTargets.push(meshTarget)
   })
 
-  setVrmOutlineRuntimeState(vrm, { meshes: meshTargets })
+  vrmOutlineRuntimeRegistry.set(vrm, { meshes: meshTargets })
 }
 
 export function disposeVrmOutlineRuntime(vrm?: VRM) {
   if (!vrm)
     return
 
-  clearVrmOutlineRuntime(vrm)
+  vrmOutlineRuntimeRegistry.delete(vrm)
 }
 
 export function createVrmOutlineHook(): VrmHook {

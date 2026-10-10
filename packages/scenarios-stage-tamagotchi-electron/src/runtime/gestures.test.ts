@@ -1,35 +1,32 @@
-import type { BrowserContext, CDPSession, Locator, Page } from 'playwright'
+import type { Browser } from 'playwright'
 
 import { chromium } from 'playwright'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { swipe } from './gestures'
 
-function createGestureTarget() {
-  const send = vi.fn().mockResolvedValue({})
-  const detach = vi.fn().mockResolvedValue(undefined)
-  const cdpSession = {
-    detach,
-    send,
-  } as unknown as CDPSession
-  const newCDPSession = vi.fn().mockResolvedValue(cdpSession)
-  const context = {
-    newCDPSession,
-  } as unknown as BrowserContext
-  const mouse = {
-    move: vi.fn().mockResolvedValue(undefined),
-    wheel: vi.fn().mockResolvedValue(undefined),
-  }
-  const page = {
-    context: () => context,
-    mouse,
-    waitForTimeout: vi.fn().mockResolvedValue(undefined),
-  } as unknown as Page
-  const target = {
-    boundingBox: vi.fn().mockResolvedValue({ x: 20, y: 40, width: 200, height: 80 }),
-    page: () => page,
-  } as unknown as Locator
+const browsers: Browser[] = []
 
+afterEach(async () => {
+  await Promise.all(browsers.splice(0).map(browser => browser.close()))
+})
+
+async function createGestureTarget() {
+  const browser = await chromium.launch({ headless: true })
+  browsers.push(browser)
+  const page = await browser.newPage()
+  await page.setContent('<div id="target" style="position:absolute;left:20px;top:40px;width:200px;height:80px"></div>')
+  const target = page.locator('#target')
+  vi.spyOn(target, 'boundingBox')
+  vi.spyOn(page, 'waitForTimeout').mockResolvedValue(undefined)
+  const cdpSession = await page.context().newCDPSession(page)
+  const send = vi.spyOn(cdpSession, 'send').mockResolvedValue({})
+  const detach = vi.spyOn(cdpSession, 'detach')
+  const newCDPSession = vi.spyOn(page.context(), 'newCDPSession').mockResolvedValue(cdpSession)
+  const mouse = {
+    move: vi.spyOn(page.mouse, 'move').mockResolvedValue(undefined),
+    wheel: vi.spyOn(page.mouse, 'wheel').mockResolvedValue(undefined),
+  }
   return { detach, mouse, newCDPSession, page, send, target }
 }
 
@@ -42,7 +39,7 @@ describe('swipe', () => {
   //
   // The helper now sends a trusted touch stream through Chromium CDP.
   it('sends a trusted touch sequence through Chromium CDP', async () => {
-    const { detach, newCDPSession, page, send, target } = createGestureTarget()
+    const { detach, newCDPSession, page, send, target } = await createGestureTarget()
 
     await swipe(target, {
       direction: 'left',
@@ -72,7 +69,7 @@ describe('swipe', () => {
   })
 
   it('cancels an active touch before detaching after an input failure', async () => {
-    const { detach, send, target } = createGestureTarget()
+    const { detach, send, target } = await createGestureTarget()
     send
       .mockResolvedValueOnce({})
       .mockRejectedValueOnce(new Error('Touch move failed.'))
@@ -187,7 +184,7 @@ describe('swipe', () => {
   })
 
   it('sends a left two-finger pan as positive horizontal wheel movement', async () => {
-    const { mouse, page, target } = createGestureTarget()
+    const { mouse, page, target } = await createGestureTarget()
 
     await swipe(target, {
       direction: 'left',
@@ -204,7 +201,7 @@ describe('swipe', () => {
   })
 
   it('rejects a gesture when the target is not visible', async () => {
-    const { target } = createGestureTarget()
+    const { target } = await createGestureTarget()
     vi.mocked(target.boundingBox).mockResolvedValue(null)
 
     await expect(swipe(target, {

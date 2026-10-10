@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import type { AnimationState, AssetManager, GLTexture, Skeleton, SpineCanvas, SpineCanvasApp } from '@esotericsoftware/spine-webgl'
-
 import type { SpineAnimationManager } from '../../../composables/spine'
 import type { Emotion } from '../../../constants/emotions'
+import type { SpineAnimationState, SpineCanvas, SpineCanvasApp, SpineModel, SpineTexture } from '../../../utils/spine-canvas'
 import type { SpineModelVariant } from '../../../utils/spine-zip-loader'
 
 import { coverRect } from '@proj-airi/stage-shared'
@@ -13,6 +12,7 @@ import { nextTick, onMounted, onUnmounted, ref, toRef, watch } from 'vue'
 import { useSpineAnimationManager } from '../../../composables/spine'
 import { EMOTION_SpineAnimationName_value, SPINE_IDLE_TRACK, SpineAnimationName } from '../../../constants/emotions'
 import { useSpine } from '../../../stores/spine'
+import { getSpineDownloader } from '../../../utils/spine-downloader'
 import { loadSpineRuntime } from '../../../utils/spine-runtime'
 import { detectSpineVersionFromBinary, detectSpineVersionFromJson } from '../../../utils/spine-version'
 import { loadSpineZip } from '../../../utils/spine-zip-loader'
@@ -71,9 +71,7 @@ const modelLoading = ref(false)
 
 // Live runtime objects.
 let spineCanvas: SpineCanvas | undefined
-let backgroundTexture: GLTexture | undefined
-/** The runtime is version-detected per model load; the scene needs it to make a texture. */
-let spineRuntime: Awaited<ReturnType<typeof loadSpineRuntime>> | undefined
+let backgroundTexture: SpineTexture | undefined
 
 async function syncBackground() {
   const canvas = spineCanvas
@@ -85,7 +83,7 @@ async function syncBackground() {
     return
   }
 
-  if (!canvas || !spineRuntime)
+  if (!canvas || canvas.isDisposed)
     return
 
   // A scene that cannot decode leaves the stage as it is, rather than throwing where
@@ -105,19 +103,19 @@ async function syncBackground() {
 
   // A later scene wins, and so does a later canvas: both can be replaced while the
   // image loads.
-  if (props.backgroundUrl !== url || spineCanvas !== canvas)
+  if (props.backgroundUrl !== url || spineCanvas !== canvas || canvas.isDisposed)
     return
 
   // Replace only once the new one is ready, so a scene change never shows a gap.
   backgroundTexture?.dispose()
-  backgroundTexture = new spineRuntime.GLTexture(canvas.context, image)
+  backgroundTexture = canvas.createTexture(image)
 }
 
 watch(() => props.backgroundUrl, () => void syncBackground())
 let assetCleanup: (() => void) | undefined
 let animationManager: SpineAnimationManager | undefined
-let skeleton: Skeleton | undefined
-let animationState: AnimationState | undefined
+let skeleton: SpineModel | undefined
+let animationState: SpineAnimationState | undefined
 let loadedVariants: SpineModelVariant[] = []
 
 // Intrinsic model bounds at scale 1 with the root at the origin, captured on
@@ -236,7 +234,6 @@ async function loadModel() {
     if (!detectedVersion)
       detectedVersion = '4.2'
     const spine = await loadSpineRuntime(detectedVersion)
-    spineRuntime = spine
     console.info(`[Spine] Detected skeleton version: ${detectedVersion}`)
 
     if (isUnmounted) {
@@ -248,6 +245,7 @@ async function loadModel() {
 
     await new Promise<void>((resolve, reject) => {
       const app: SpineCanvasApp = {
+        dispose: () => resolve(),
         loadAssets: (sc) => {
           const am = sc.assetManager
           // NOTICE:
@@ -257,7 +255,7 @@ async function loadModel() {
           // checks rawDataUris at dispatch time — if we patch after the
           // constructor returns, requests already hit the dev server.
           if (blobUrls)
-            patchAssetManagerForZipAssets(am, blobUrls, rawData!, assetPaths.texturePaths)
+            patchAssetManagerForZipAssets(am.source, blobUrls, rawData!, assetPaths.texturePaths)
 
           if (assetPaths.skeletonFormat === 'binary')
             am.loadBinary(assetPaths.skeletonPath)
@@ -268,25 +266,14 @@ async function loadModel() {
         },
         initialize: (sc) => {
           try {
-            const am = sc.assetManager
-            const atlas = am.require(assetPaths.atlasPath) as import('@esotericsoftware/spine-webgl').TextureAtlas
-            const attachmentLoader = new spine.AtlasAttachmentLoader(atlas)
-            const skeletonData = assetPaths.skeletonFormat === 'binary'
-              ? new spine.SkeletonBinary(attachmentLoader).readSkeletonData(am.require(assetPaths.skeletonPath) as Uint8Array)
-              : new spine.SkeletonJson(attachmentLoader).readSkeletonData(am.require(assetPaths.skeletonPath) as string)
-
-            skeleton = new spine.Skeleton(skeletonData)
-            skeleton.setToSetupPose()
-
-            const stateData = new spine.AnimationStateData(skeletonData)
-            stateData.defaultMix = props.defaultMixDuration
-            animationState = new spine.AnimationState(stateData)
+            skeleton = sc.createModel(assetPaths.skeletonPath, assetPaths.atlasPath, assetPaths.skeletonFormat, props.defaultMixDuration)
+            animationState = skeleton.animationState
 
             animationManager = useSpineAnimationManager(animationState, skeleton, animationDefaults)
 
             // Inventory animations and skins, populate the store.
-            const animations = skeletonData.animations.map(animation => ({ name: animation.name, duration: animation.duration }))
-            const skins = skeletonData.skins.map(s => ({ name: s.name }))
+            const animations = skeleton.animations
+            const skins = skeleton.skins
             availableAnimations.value = animations
             availableSkins.value = skins
             emits('animationsDiscovered', { animations, skins })
@@ -302,16 +289,9 @@ async function loadModel() {
             skeleton.scaleY = 1
             skeleton.x = 0
             skeleton.y = 0
-            if (spine.Physics)
-              skeleton.updateWorldTransform(spine.Physics.update)
-            else
-              (skeleton as any).updateWorldTransform()
-            const boundsOffset = new spine.Vector2()
-            const boundsSize = new spine.Vector2()
-            skeleton.getBounds(boundsOffset, boundsSize, [])
-            modelIntrinsicBounds = boundsSize.x > 0 && boundsSize.y > 0
-              ? { x: boundsOffset.x, y: boundsOffset.y, width: boundsSize.x, height: boundsSize.y }
-              : undefined
+            skeleton.updateWorldTransform()
+            const bounds = skeleton.getBounds()
+            modelIntrinsicBounds = bounds.width > 0 && bounds.height > 0 ? bounds : undefined
 
             applyTransformFromStore()
 
@@ -325,6 +305,7 @@ async function loadModel() {
           catch (err) {
             const error = err instanceof Error ? err : new Error(String(err))
             reject(error)
+            sc.dispose()
           }
         },
         update: (_sc, delta) => {
@@ -333,13 +314,7 @@ async function loadModel() {
           if (paused.value) {
             return
           }
-          animationState.update(delta * animationSpeed.value)
-          animationState.apply(skeleton)
-          // Physics was added in Spine 4.2; older runtimes take no argument.
-          if (spine.Physics)
-            skeleton.updateWorldTransform(spine.Physics.update)
-          else
-            (skeleton as any).updateWorldTransform()
+          skeleton.update(delta * animationSpeed.value)
         },
         render: (sc) => {
           if (!skeleton)
@@ -353,36 +328,19 @@ async function loadModel() {
               return
             lastRenderTime = now
           }
-          const renderer = sc.renderer
-          renderer.resize(spine.ResizeMode.Expand)
-          sc.gl.clearColor(0, 0, 0, 0)
-          sc.gl.clear(sc.gl.COLOR_BUFFER_BIT)
-          renderer.begin()
+          sc.begin()
           if (backgroundTexture) {
-            // The batcher keeps the blend the previous frame's last slot left, so the
-            // scene sets its own. drawSkeleton then sets one per slot.
-            const batcher = renderer.batcher
-            // NOTICE: spine 4.0 takes raw GL factors; 4.1+ takes a BlendMode. The
-            // loader types every runtime as 4.2. Both branches set the same blend.
-            // Removal condition: when 4.0 support is dropped.
-            if (batcher.setBlendMode.length === 3) {
-              const setGLBlend = batcher.setBlendMode as unknown as (src: number, srcAlpha: number, dst: number) => void
-              setGLBlend.call(batcher, sc.gl.SRC_ALPHA, sc.gl.ONE, sc.gl.ONE_MINUS_SRC_ALPHA)
-            }
-            else {
-              batcher.setBlendMode(spine.BlendMode.Normal, false)
-            }
             // The camera sits at world origin, so a centred `cover` rectangle is just
             // half its own size either side of it.
-            const camera = renderer.camera
+            const camera = sc.camera
             const rect = coverRect(
               { width: camera.viewportWidth, height: camera.viewportHeight },
-              { width: backgroundTexture.getImage().width, height: backgroundTexture.getImage().height },
+              { width: backgroundTexture.width, height: backgroundTexture.height },
             )
-            renderer.drawTexture(backgroundTexture, -rect.width / 2, -rect.height / 2, rect.width, rect.height)
+            backgroundTexture.draw(-rect.width / 2, -rect.height / 2, rect.width, rect.height)
           }
-          renderer.drawSkeleton(skeleton, props.premultipliedAlpha)
-          renderer.end()
+          skeleton.draw(props.premultipliedAlpha)
+          sc.end()
         },
         error: (_sc, errors: Record<string, string>) => {
           const message = Object.values(errors).join('; ')
@@ -391,7 +349,7 @@ async function loadModel() {
         },
       }
 
-      spineCanvas = new spine.SpineCanvas(canvas.value!, {
+      spineCanvas = spine.createCanvas(canvas.value!, {
         app,
         pathPrefix,
         webglConfig: { alpha: true, premultipliedAlpha: false, preserveDrawingBuffer: true },
@@ -403,6 +361,7 @@ async function loadModel() {
     componentState.value = 'mounted'
   }
   catch (err) {
+    disposeSpine()
     console.error('[Spine] Failed to load model:', err)
     emits('error', err instanceof Error ? err : new Error(String(err)))
   }
@@ -428,18 +387,12 @@ async function loadModel() {
  * Removal condition: Spine ships a Blob/ArrayBuffer-aware asset loader.
  */
 function patchAssetManagerForZipAssets(
-  assetManager: AssetManager,
+  assetManager: object,
   blobUrls: Record<string, string>,
   rawData: Record<string, Uint8Array | string>,
   texturePaths: string[],
 ) {
-  const downloader = (assetManager as unknown as {
-    downloader?: {
-      rawDataUris: Record<string, string>
-      downloadText: (url: string, success: (data: string) => void, error: (status: number, responseText: string) => void) => void
-      downloadBinary: (url: string, success: (data: Uint8Array) => void, error: (status: number, response: unknown) => void) => void
-    }
-  }).downloader
+  const downloader = getSpineDownloader(assetManager)
   if (!downloader)
     return
 
@@ -542,14 +495,13 @@ function applySkin(skinName: string) {
     return
 
   if (!skinName) {
-    skeleton.setSkinByName(skeleton.data.defaultSkin?.name ?? skeleton.data.skins[0]?.name ?? 'default')
+    skeleton.setSkinByName(skeleton.defaultSkinName ?? skeleton.skins[0]?.name ?? 'default')
     skeleton.setSlotsToSetupPose()
     return
   }
 
-  const skin = skeleton.data.findSkin(skinName)
-  if (skin) {
-    skeleton.setSkin(skin)
+  if (skeleton.hasSkin(skinName)) {
+    skeleton.setSkinByName(skinName)
     skeleton.setSlotsToSetupPose()
   }
 }

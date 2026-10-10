@@ -11,14 +11,8 @@ afterEach(() => {
 
 describe('useLocalStorageManualReset', () => {
   // ROOT CAUSE:
-  //
-  // A synchronized store replaced a Map with a structured clone. Persistence
-  // serialized that value, then the storage ref reflected another Map clone
-  // into the store. Pinia saw the reflection as a new direct mutation and
-  // published another domain snapshot.
-  //
-  // We fixed this by making `listenToStorageChanges: false` one-way: state is
-  // still persisted, but the storage ref cannot write back into live state.
+  // Persistence reflected a cloned Map into the synchronized store, which published another snapshot.
+  // We fixed this by making listenToStorageChanges: false one-way. State still persists, but storage cannot update live state.
   it('does not reflect persisted values when storage listening is disabled', async () => {
     const state = useLocalStorageManualReset('cards', new Map<string, string>(), {
       listenToStorageChanges: false,

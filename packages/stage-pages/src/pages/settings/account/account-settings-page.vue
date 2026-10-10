@@ -56,13 +56,8 @@ const gravatarProfileUrl = computed(() => {
 // formatter.
 const formattedCredits = computed(() => credits.value.toLocaleString())
 
-// Profile form. Initialized from store and re-synced when user changes (e.g.
-// after a successful save we mutate the store).
-// NOTICE:
-// Avatar editing is intentionally absent here pending the avatar-upload
-// feature (R2/MinIO presigned PUT pipeline). The previous URL-pasting input
-// was a placeholder UX and has been removed; the existing user.image is
-// still rendered as the avatar circle above, just not editable for now.
+// The profile form follows store changes after saves.
+// Avatar editing awaits the upload feature. The current image remains visible without the former URL-pasting input.
 const profileForm = reactive({ name: '' })
 
 watch(
@@ -126,14 +121,8 @@ function scrollToSection(id: SectionId) {
   targets[id]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-// Connected accounts: state + handlers come from the shared composable
-// in stage-ui so this page and apps/ui-server-auth's profile page stay
-// in lockstep. The composable handles list/unlink/link, the last-sign-in-
-// method guard, and the auto-refresh on auth state change.
-//
-// We destructure at top level so the refs auto-unwrap inside the template
-// — Vue's auto-unwrap only fires on top-level setup bindings, not on
-// `obj.someRef` field access.
+// The shared connected-accounts composable also serves ui-server-auth, including last-sign-in protection and auth-change refresh.
+// Top-level destructuring lets Vue unwrap these refs in the template.
 const {
   loading: linkedAccountsLoading,
   loaded: linkedAccountsLoaded,
@@ -301,18 +290,9 @@ async function handleSendSetPasswordLink() {
 
   try {
     // NOTICE:
-    // `redirectTo` MUST live on the API server origin, not on the current
-    // browser origin. This page is shared with apps/stage-tamagotchi,
-    // whose Electron renderer loads from `file://` — `window.location.origin`
-    // would put a `file://` URL into the reset email and break the flow
-    // for any user who clicks from their inbox. The auth UI is hosted at
-    // `${SERVER_URL}/auth/reset-password` and reachable from the public
-    // internet.
-    // Source: PR #1753 review (chatgpt-codex-connector P1).
-    //
-    // The reset-password endpoint also covers the initial-set case — it
-    // creates a credential row when none exists, see
-    // node_modules/better-auth/dist/api/routes/password.mjs L152-158.
+    // The reset link uses the API origin because Electron renders this page from file://.
+    // Source: PR #1753 review. The reset endpoint also creates missing credentials, as documented in better-auth/dist/api/routes/password.mjs.
+    // This applies to both password resets and initial password setup.
     const redirectTo = new URL('/auth/reset-password', SERVER_URL).toString()
     const { error } = await authClient.requestPasswordReset({ email, redirectTo })
     if (error)
@@ -328,21 +308,9 @@ async function handleSendSetPasswordLink() {
   }
 }
 
-// ---- Delete account ----
-//
-// Two-step flow:
-// (1) Click "Delete account" -> open a reka-ui Dialog with a focus-trap and
-//     overlay so the destructive action is unambiguously modal. Inside the
-//     dialog the user retypes their email; we only enable the submit button
-//     when the entered value matches `userEmail` exactly. This is the same
-//     irreversible-action pattern GitHub / Linear use.
-// (2) On confirm, call `authClient.deleteUser({ callbackURL })`. better-auth
-//     emails a single-use link; clicking it runs the soft-delete handlers
-//     server-side, hard-deletes the auth tables, then redirects the browser
-//     to `callbackURL`. We point the callback at ui-server-auth's success
-//     page on the API server origin — stage-web and stage-tamagotchi do not
-//     own a dedicated post-delete route, and ui-server-auth is reachable
-//     from every embedding app.
+// Account deletion requires an exact email match inside the confirmation dialog.
+// Better Auth then emails a single-use link that runs deletion handlers and removes auth records.
+// The callback uses the shared API-hosted success page, which every embedding app can open.
 const deleteDialogOpen = ref(false)
 const deleteSent = shallowRef(false)
 const deleteForm = reactive({ confirmEmail: '' })
@@ -380,12 +348,8 @@ async function handleConfirmDelete(event: Event) {
   deleteLoading.value = true
 
   try {
-    // The success page lives on the API-server origin (shared
-    // ui-server-auth bundle). It tells the user the deletion completed
-    // and asks them to close the tab — there is no "back to home"
-    // because the API server has no reliable way to know which calling
-    // app origin (stage-web / stage-tamagotchi / stage-pocket) the
-    // request came from.
+    // The API-hosted success page asks the user to close the tab.
+    // It cannot reliably identify the calling app origin for a home link.
     const callbackURL = new URL('/auth/delete-account', SERVER_URL).toString()
     const { error } = await authClient.deleteUser({ callbackURL })
     if (error)

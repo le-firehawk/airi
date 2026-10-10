@@ -108,13 +108,9 @@ export const useSpine = defineStore('spine', () => {
   const animationSpeed = useLocalStorageManualReset<number>('settings/spine/animation-speed', 1)
 
   // NOTICE:
-  // Premultiplied-alpha, default-mix, idle-enabled, and max-fps live in
-  // `useSettingsSpine` (packages/stage-ui/src/stores/settings/spine.ts) and
-  // are bound to the same `settings/spine/*` keys. They used to be declared
-  // here too, which created two refs per key and two competing sources of
-  // truth. Stage, the preview, and the settings panel all read the
-  // `useSettingsSpine` copies, so the duplicates were removed from this store.
-  // Removal condition: keep these settings owned by a single store.
+  // useSettingsSpine owns alpha mode, mix duration, idle state, and frame rate.
+  // Duplicate refs previously competed for the same settings/spine keys.
+  // Source: packages/stage-ui/src/stores/settings/spine.ts. Keep each setting in one store.
 
   /**
    * Whether a Spine skeleton is currently mounted in a live scene.

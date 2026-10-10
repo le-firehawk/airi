@@ -135,13 +135,13 @@ export function createPolicyMiddleware(policy: RoutingPolicy): RouteMiddleware {
  * - `undefined` when no destination override was provided
  */
 export function collectDestinations(
-  event: WebSocketEvent | (Omit<WebSocketEvent, 'metadata'> & Partial<Pick<WebSocketEvent, 'metadata'>>),
+  event: Pick<WebSocketEvent, 'route'> & { data: unknown },
 ): DestinationList | undefined {
   if (event.route && 'destinations' in event.route) {
     return event.route.destinations
   }
 
-  const data = event.data as unknown
+  const data = event.data
   if (typeof data === 'object' && data !== null && 'destinations' in data && Array.isArray(data.destinations)) {
     return data.destinations
   }

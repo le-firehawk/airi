@@ -1,35 +1,16 @@
-import type { VRMCore } from '@pixiv/three-vrm-core'
-
+import { VRMExpression, VRMExpressionManager } from '@pixiv/three-vrm-core'
 import { describe, expect, it, vi } from 'vitest'
 
+import { createTestVrm } from '../../test-utils/vrm'
 import { useVRMEmote } from './expression'
 
 function createMockVRMCore() {
-  const values = new Map<string, number>()
-  return {
-    expressionManager: {
-      expressionMap: {
-        happy: {},
-        aa: {},
-        ee: {},
-        ih: {},
-        oh: {},
-        ou: {},
-        sad: {},
-        angry: {},
-        surprised: {},
-        neutral: {},
-        think: {},
-        relaxed: {},
-        // Not owned by any emotion state; driven by the blink controller.
-        blink: {},
-      },
-      getValue: vi.fn((name: string) => values.get(name) ?? 0),
-      setValue: vi.fn((name: string, val: number) => {
-        values.set(name, val)
-      }),
-    },
-  } as unknown as VRMCore
+  const expressionManager = new VRMExpressionManager()
+  for (const name of ['happy', 'aa', 'ee', 'ih', 'oh', 'ou', 'sad', 'angry', 'surprised', 'neutral', 'think', 'relaxed', 'blink'])
+    expressionManager.registerExpression(new VRMExpression(name))
+  vi.spyOn(expressionManager, 'getValue')
+  vi.spyOn(expressionManager, 'setValue')
+  return createTestVrm({ expressionManager })
 }
 
 describe('useVRMEmote', () => {
@@ -73,16 +54,8 @@ describe('useVRMEmote', () => {
 
   it('does not mark the emote active for a mouth-only (viseme-only) custom state', () => {
     // ROOT CAUSE:
-    //
-    // isEmoteActive treated any nonzero target as an eye conflict, so
-    // VRMModel suppressed procedural blinking for the entire hold period
-    // of *any* emotion — including a custom state added via
-    // addEmotionState whose targets are only viseme mouth morphs and
-    // never touch the eye region. That left the model unable to blink
-    // naturally while such a state was held, despite no real conflict.
-    //
-    // We fixed this by only counting non-viseme target names as
-    // eye-affecting for isEmoteActive.
+    // Any nonzero emotion target previously suppressed blinking, even mouth-only visemes.
+    // We fixed this by counting only non-viseme targets as eye conflicts.
     const vrm = createMockVRMCore()
     const emote = useVRMEmote(vrm)
 
@@ -100,18 +73,8 @@ describe('useVRMEmote', () => {
 
   it('still zeroes a morph after its emotion state is removed before the reset settles', () => {
     // ROOT CAUSE:
-    //
-    // The neutral transition captured which morphs to zero via
-    // ownedExpressionNames(), recomputed from the *current* emotionStates
-    // map every time setEmotion() ran. If a caller removed (or replaced)
-    // the departing emotion's state — e.g. removeEmotionState('happy') —
-    // before the scheduled reset fired, that morph silently dropped out of
-    // ownership and the neutral transition never wrote it back to 0,
-    // leaving the avatar stuck showing the removed expression forever.
-    //
-    // We fixed this by tracking active morph names in a set that survives
-    // emotionStates mutations, cleared only once the neutral transition
-    // fully settles.
+    // Removing an emotion state before reset erased its morph ownership and left the expression visible.
+    // We fixed this by retaining active morph names until the neutral transition completes.
     const vrm = createMockVRMCore()
     const emote = useVRMEmote(vrm)
 

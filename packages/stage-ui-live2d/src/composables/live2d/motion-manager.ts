@@ -21,7 +21,7 @@ export type PixiLive2DInternalModel = InternalModel & {
 }
 
 export interface MotionManagerUpdateContext {
-  model: CubismModel
+  model: Pick<CubismModel, 'getParameterValueById' | 'setParameterValueById'>
   // in seconds
   now: number
   // in seconds
@@ -30,8 +30,11 @@ export interface MotionManagerUpdateContext {
 }
 
 export type MotionManagerPluginContext = MotionManagerUpdateContext & {
-  internalModel: PixiLive2DInternalModel
-  motionManager: PixiLive2DInternalModel['motionManager']
+  internalModel: Parameters<ReturnType<typeof useLive2DIdleEyeFocus>['update']>[0] & {
+    /** Runs the SDK blink controller against the loaded core model. */
+    eyeBlink?: { updateParameters: (deltaSeconds: number) => void }
+  }
+  motionManager: Pick<PixiLive2DInternalModel['motionManager'], 'stopAllMotions'>
   modelParameters: Ref<any>
   live2dEyeTrackingEnabled: Ref<boolean>
   live2dEyeFocusSourceActive: Ref<boolean>
@@ -143,7 +146,13 @@ export function useLive2DMotionManagerUpdate(options: UseLive2DMotionManagerUpda
       now,
       timeDelta,
       hookedUpdate,
-      internalModel,
+      internalModel: {
+        coreModel: internalModel.coreModel,
+        focusController: internalModel.focusController,
+        eyeBlink: internalModel.eyeBlink
+          ? { updateParameters: deltaSeconds => internalModel.eyeBlink?.updateParameters(model, deltaSeconds) }
+          : undefined,
+      },
       motionManager,
       modelParameters,
       live2dEyeTrackingEnabled,
@@ -264,7 +273,7 @@ export function useMotionUpdatePluginIdleDisable(idleEyeFocus = useLive2DIdleEye
       if (ctx.live2dForceIdleEyeAnimation.value && (!ctx.live2dEyeTrackingEnabled.value || !ctx.live2dEyeFocusSourceActive.value))
         idleEyeFocus.update(ctx.internalModel, ctx.now)
       if (ctx.internalModel.eyeBlink != null) {
-        ctx.internalModel.eyeBlink.updateParameters(ctx.model, ctx.timeDelta / 1000)
+        ctx.internalModel.eyeBlink.updateParameters(ctx.timeDelta / 1000)
       }
 
       // Apply manual eye parameters after auto eye blink
@@ -403,7 +412,7 @@ export function useMotionUpdatePluginAutoEyeBlink(
       }
 
       // SDK eyeBlink path: explicit call → read back → multiply by base → markHandled.
-      ctx.internalModel.eyeBlink!.updateParameters(ctx.model, ctx.timeDelta / 1000)
+      ctx.internalModel.eyeBlink!.updateParameters(ctx.timeDelta / 1000)
       const blinkLeft = ctx.model.getParameterValueById('ParamEyeLOpen') as number
       const blinkRight = ctx.model.getParameterValueById('ParamEyeROpen') as number
       ctx.model.setParameterValueById('ParamEyeLOpen', clamp01(blinkLeft * baseLeft))

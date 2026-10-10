@@ -192,7 +192,7 @@ describe('route middleware', () => {
         event: { id: 'evt-primitive' },
       },
       route: undefined,
-    } as unknown as WebSocketBaseEvent<'spark:notify', WebSocketEvents['spark:notify'], any>
+    }
 
     expect(collectDestinations(event)).toBeUndefined()
   })

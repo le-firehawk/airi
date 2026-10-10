@@ -99,9 +99,7 @@ const eventEntries = computed(() => {
   }))
 })
 
-function copyValue(value: string) {
-  navigator.clipboard.writeText(value)
-}
+const clipboard = computed(() => navigator.clipboard)
 </script>
 
 <template>
@@ -206,7 +204,7 @@ function copyValue(value: string) {
               'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300',
             ]"
             title="Copy text"
-            @click="copyValue(props.span.meta.text)"
+            @click="clipboard.writeText(props.span.meta.text)"
           >
             <div class="i-solar:copy-bold-duotone h-3 w-3" />
           </button>
@@ -274,7 +272,7 @@ function copyValue(value: string) {
                   'text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300',
                 ]"
                 title="Copy value"
-                @click="copyValue(entry.value)"
+                @click="clipboard.writeText(entry.value)"
               >
                 <div class="i-solar:copy-bold-duotone h-2.5 w-2.5" />
               </button>

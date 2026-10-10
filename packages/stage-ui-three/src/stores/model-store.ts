@@ -193,18 +193,10 @@ export const useModelStore = defineStore('modelStore', () => {
   const directionalLightPosition = useLocalStorage('settings/stage-ui-three/scenes/scene/directional-light/position', { x: 0, y: 0, z: -1 })
   const directionalLightTarget = useLocalStorage('settings/stage-ui-three/scenes/scene/directional-light/target', { x: 0, y: 0, z: 0 })
   const directionalLightRotation = useLocalStorage('settings/stage-ui-three/scenes/scene/directional-light/rotation', { x: 0, y: 0, z: 0 })
-  // TODO: Manual directional light intensity will not work for other
-  //       scenes with different lighting setups. But since the model
-  //       is possible to have MeshToonMaterial, and MeshBasicMaterial
-  //       without envMap to be able to inherit lighting from HDRI map,
-  //       we will have to figure out a way to make this work to apply
-  //       different directional light and other lighting setups
-  //       for different environments.
-  // WORKAROUND: To achieve the rendering style of Warudo for anime style
-  //             Genshin Impact, or so called Cartoon style rendering with
-  //             harsh shadows and bright highlights.
-  // REVIEW: This is a temporary solution, and will be replaced with
-  //         a more flexible lighting system in the future.
+  // NOTICE:
+  // The current intensity gives toon materials strong shadows and highlights because they cannot inherit HDRI lighting.
+  // Source: this scene lighting store.
+  // Replace this fixed default when lighting can adapt to each environment.
   const directionalLightIntensity = useLocalStorage('settings/stage-ui-three/scenes/scene/directional-light/intensity', 2.02)
   // TODO: color are the same
   const directionalLightColor = useLocalStorage('settings/stage-ui-three/scenes/scene/directional-light/color', '#fffbf5')

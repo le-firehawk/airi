@@ -44,13 +44,8 @@ describe('presence bubble follower', () => {
 
   it('treats a long stall as a pause rather than simulating it', () => {
     // ROOT CAUSE:
-    //
-    // This asserted only `afterStall.x < 200`. The spring converges over four
-    // seconds rather than overshooting, so it landed on 200 with the cap
-    // removed and the assertion still held by a rounding error.
-    //
-    // The cap is what stops one frame costing a step per 8ms of the gap. A
-    // stall now has to land exactly where the longest allowed frame lands.
+    // The previous comparison passed through rounding error even without the frame cap.
+    // A stall must now match the longest allowed frame exactly. This guards the cap that bounds simulation work.
     const stalled = new PresenceBubbleFollower()
     stalled.update(0, 0, 16)
 

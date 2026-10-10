@@ -1,7 +1,7 @@
 import type { ManualResetRefReturn, UseStorageOptions } from '@vueuse/core'
 import type { MaybeRefOrGetter } from 'vue'
 
-import type { UseVersionedStorageOptions } from '../use-versioned-local-storage'
+import type { UseVersionedStorageOptions, Versioned } from '../use-versioned-local-storage'
 
 import { refManualReset } from '@vueuse/core'
 import { unref, watch } from 'vue'
@@ -11,7 +11,7 @@ import { useVersionedLocalStorage } from '../use-versioned-local-storage'
 export function useVersionedLocalStorageManualReset<T>(
   key: MaybeRefOrGetter<string>,
   initialValue: MaybeRefOrGetter<T>,
-  options?: UseStorageOptions<T> & UseVersionedStorageOptions<T>,
+  options?: UseStorageOptions<Versioned<T>> & UseVersionedStorageOptions<T>,
 ): ManualResetRefReturn<T> {
   const value = unref(initialValue)
   const localStorageState = useVersionedLocalStorage<T>(key, value, options)

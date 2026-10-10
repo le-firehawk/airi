@@ -48,6 +48,7 @@ function createWaitError(message: string, reason?: unknown) {
 
 /**
  * Creates a promise plus emit pair for waiting on callback-driven events.
+ * A different result type requires a selector. Without one, the promise resolves with the original event.
  *
  * Use when:
  * - An event source pushes values through callbacks, sets, or Eventa handlers
@@ -60,12 +61,18 @@ function createWaitError(message: string, reason?: unknown) {
  * Returns:
  * - A one-shot wait controller that settles once and ignores later events
  */
-export function createEventWaitFor<TEvent, TResult = TEvent>(
+export function createEventWaitFor<TEvent>(
+  options?: EventWaitForOptions<TEvent>,
+): EventWaitFor<TEvent>
+export function createEventWaitFor<TEvent, TResult>(
+  options: EventWaitForOptions<TEvent, TResult> & { select: (event: TEvent) => TResult },
+): EventWaitFor<TEvent, TResult>
+export function createEventWaitFor<TEvent, TResult>(
   options: EventWaitForOptions<TEvent, TResult> = {},
-): EventWaitFor<TEvent, TResult> {
+): EventWaitFor<TEvent, TEvent | TResult> {
   const {
     match = () => true,
-    select = (event: TEvent) => event as unknown as TResult,
+    select = (event: TEvent) => event,
     abortMessage = 'Wait aborted.',
     timeoutMessage = 'Timed out waiting for event.',
     signals = [],
@@ -81,9 +88,9 @@ export function createEventWaitFor<TEvent, TResult = TEvent>(
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined
   let unsubscribe = () => {}
 
-  let resolvePromise!: (value: TResult) => void
+  let resolvePromise!: (value: TEvent | TResult) => void
   let rejectPromise!: (error: unknown) => void
-  const promise = new Promise<TResult>((resolve, reject) => {
+  const promise = new Promise<TEvent | TResult>((resolve, reject) => {
     resolvePromise = resolve
     rejectPromise = reject
   })

@@ -29,10 +29,8 @@ export function getCapViteCliUsage(): string {
   return usage
 }
 
-// TODO: CLI and `cap run` argument handling are hand-rolled (see also `resolveCapRunArgs` /
-// `hasCapacitorTargetArg` in native.ts). If parsing rules keep growing, adopt a dedicated argv
-// library (cac is already a dependency—consider subcommands or a small wrapper) so flags like
-// `--target` / `--target=`, env-based defaults, and validation stay in one maintainable layer.
+// TODO: If CLI parsing grows, consolidate it with cac, which is already a dependency.
+// Include resolveCapRunArgs and hasCapacitorTargetArg from native.ts, target flags, environment defaults, and validation.
 
 export function parseCapViteCliArgs(argv: string[]): ParsedCapViteCliArgs | null {
   if (argv.length === 1 && (argv[0] === '--help' || argv[0] === '-h')) {

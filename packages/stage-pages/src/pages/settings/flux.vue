@@ -78,10 +78,6 @@ interface AuditRecord {
   createdAt: string
 }
 
-function formatNumber(num: number): string {
-  return new Intl.NumberFormat().format(num)
-}
-
 /**
  * Buckets Flux balances so monetization analytics never expose exact balances.
  */
@@ -102,7 +98,7 @@ function fluxBalanceBucket(balance: number | undefined): FluxBalanceBucket {
 /** Display amount with sign: debit is negative, credit/initial are positive */
 function displayAmount(record: AuditRecord): string {
   const signed = record.type === 'debit' ? -record.amount : record.amount
-  const formatted = formatNumber(Math.abs(signed))
+  const formatted = new Intl.NumberFormat().format(Math.abs(signed))
   return signed >= 0 ? `+${formatted}` : `-${formatted}`
 }
 
@@ -410,7 +406,7 @@ async function handleBuy(stripePriceId: string) {
         <div i-solar:battery-charge-bold-duotone size-12 shrink-0 text-primary-500 sm:mx-auto sm:size-14 />
         <div flex="~ col gap-1">
           <h2 text-3xl font-bold tracking-tight sm:text-4xl>
-            {{ formatNumber(credits) }}
+            {{ new Intl.NumberFormat().format(credits) }}
           </h2>
           <p text="sm neutral-500">
             {{ t(fluxPurchaseDisabled ? 'settings.pages.account.fluxBalance' : 'settings.pages.flux.description') }}

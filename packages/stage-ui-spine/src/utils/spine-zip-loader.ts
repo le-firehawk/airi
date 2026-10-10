@@ -249,15 +249,10 @@ export async function loadSpineZip(file: File | Blob | ArrayBuffer): Promise<Spi
     throw new Error('Spine ZIP must contain at least one skeleton+atlas pair')
   const layout = variants[0].layout
 
-  // Pass 2: materialize assets for ALL variants.
   // NOTICE:
-  // Spine's Downloader has a heuristic for rawDataUris: if the value doesn't
-  // contain ".", it treats it as a data: URI and calls atob(). In Electron,
-  // blob URLs are `blob:null/<uuid>` (no dots), so the Downloader fails.
-  // Even with data: URIs, Spine's atob-based decode can corrupt binary data.
-  // We store raw decoded data (Uint8Array / string) alongside blob URLs and
-  // monkey-patch the Downloader's download methods to serve from memory.
-  // Removal condition: Spine ships a Blob-aware or buffer-aware loader.
+  // Spine treats dotless Electron blob URLs as base64 data URIs. Its decoder can also corrupt binary data.
+  // Download methods therefore serve decoded buffers from memory.
+  // Remove this workaround when Spine supports blob URLs or buffers directly.
   const rawData: Record<string, Uint8Array | string> = {}
 
   // Collect all unique paths across all variants.

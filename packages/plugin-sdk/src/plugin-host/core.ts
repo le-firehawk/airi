@@ -156,10 +156,6 @@ function cloneHostDataValue<T extends HostDataValue>(value: T): T {
   return value
 }
 
-function cloneHostDataRecord<T extends HostDataRecord>(record: T): T {
-  return cloneHostDataValue(record)
-}
-
 function cloneKitCapabilities(capabilities: KitCapabilityDescriptor[]): KitCapabilityDescriptor[] {
   return capabilities.map(capability => ({
     key: capability.key,
@@ -178,7 +174,7 @@ function cloneKitDescriptor<TKit extends KitDescriptor>(kit: TKit): TKit {
 function cloneBindingRecord<C extends HostDataRecord>(module: BindingRecord<C>): BindingRecord<C> {
   return {
     ...module,
-    config: cloneHostDataRecord(module.config),
+    config: cloneHostDataValue(module.config),
   }
 }
 

@@ -49,6 +49,37 @@ function buildBlockMap(entries: Array<[number, number, number, string]>): Map<st
 
 describe('map-renderer', () => {
   describe('renderMap top-down', () => {
+    it('keeps terrain and elevation in their own rows', () => {
+      const blocks = buildBlockMap([
+        [-2, 66, -2, 'water'],
+        [0, 64, 0, 'grass_block'],
+        [2, 61, 2, 'stone'],
+      ])
+      const bot = createBotStub({ blocks })
+      const result = renderMap(bot, { radius: 2, showEntities: false, showElevation: true })
+      const rows = result.map.split('\n').filter(line => /^ {2}\|.{5}\|(?: dy:.*)?$/.test(line))
+
+      expect(rows).toEqual([
+        '  |~    | dy:+2..+2',
+        '  |     |',
+        '  |  .  |',
+        '  |     |',
+        '  |    #| dy:-3..-3',
+      ])
+    })
+
+    it('places each entity on exactly one row', () => {
+      const bot = createBotStub({
+        entities: {
+          1: { id: 1, name: 'player', type: 'player', username: 'Alex', position: new Vec3(-1, 64, -1) },
+        },
+      })
+      const result = renderMap(bot, { radius: 1, showElevation: false })
+      const rows = result.map.split('\n').filter(line => /^ {2}\|.{3}\|$/.test(line))
+
+      expect(rows).toEqual(['  |P  |', '  | @ |', '  |   |'])
+    })
+
     it('calls blockAt with Vec3-compatible positions', () => {
       const pos = new Vec3(0, 64, 0)
       const bot = {
@@ -182,6 +213,19 @@ describe('map-renderer', () => {
   })
 
   describe('renderMap cross-section', () => {
+    it('keeps terrain and the bot marker on their own height rows', () => {
+      const blocks = buildBlockMap([
+        [-1, 65, 0, 'water'],
+        [-1, 64, 0, 'grass_block'],
+        [-1, 63, 0, 'stone'],
+      ])
+      const bot = createBotStub({ blocks })
+      const result = renderMap(bot, { radius: 1, view: 'cross-section' })
+      const rows = result.map.split('\n').filter(line => /^.{4}\|.{3}\|$/.test(line))
+
+      expect(rows).toEqual(['  65|~  |', '    |.@ |', '    |#  |'])
+    })
+
     it('renders a cross-section at the bot Y level', () => {
       const blocks = buildBlockMap([
         [0, 63, 0, 'stone'],

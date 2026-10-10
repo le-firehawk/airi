@@ -1,30 +1,20 @@
+import type { WebSocketEvents } from '@proj-airi/server-sdk'
+
 import { Client } from '@proj-airi/server-sdk'
 import { describe, expect, it, vi } from 'vitest'
 
 import { AiriBridge } from './airi-bridge'
 
-interface TestCommandEvent {
-  data: {
-    commandId: string
-    intent: 'plan' | 'proposal' | 'action' | 'pause' | 'resume' | 'reroute' | 'context'
-    interrupt: 'force' | 'soft' | false
-    priority: 'critical' | 'high' | 'normal' | 'low'
-    guidance?: {
-      options?: Array<{ label: string, steps: string[] }>
-    }
-  }
-}
-
 function createBridgeHarness(options: { commandAvailable?: boolean } = {}) {
   const client = new Client({ name: 'bridge-test', autoConnect: false, heartbeat: false })
-  vi.spyOn(client, 'send').mockImplementation(() => {})
+  vi.spyOn(client, 'send').mockReturnValue(true)
   const subscriptions = vi.spyOn(client, 'onEvent')
   const handlers = {
     get(type: string) {
       const subscription = subscriptions.mock.calls.find(([event]) => event === type)
       if (!subscription)
         return undefined
-      return (event: TestCommandEvent) => subscription[1]({
+      return (event: { data: WebSocketEvents['spark:command'] }) => subscription[1]({
         type: 'spark:command',
         data: event.data,
         metadata: { source: { id: 'bridge-test' }, event: { id: event.data.commandId } },
@@ -58,11 +48,13 @@ describe('airiBridge spark command routing', () => {
 
     commandHandler?.({
       data: {
+        id: 'event-1',
         commandId: 'spark-1',
         intent: 'action',
         interrupt: false,
         priority: 'normal',
         guidance: {
+          type: 'instruction',
           options: [
             {
               label: 'collect wood',
@@ -103,11 +95,13 @@ describe('airiBridge spark command routing', () => {
 
     commandHandler?.({
       data: {
+        id: 'event-offline',
         commandId: 'spark-offline',
         intent: 'action',
         interrupt: false,
         priority: 'normal',
         guidance: {
+          type: 'instruction',
           options: [
             {
               label: 'collect wood',

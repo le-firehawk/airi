@@ -226,6 +226,13 @@ export class RuleEngine {
     if (this.detectorDecisions.length > MAX_DETECTOR_DECISIONS) {
       this.detectorDecisions.splice(0, this.detectorDecisions.length - MAX_DETECTOR_DECISIONS)
     }
+
+    if (snapshot.decision === 'ignored_out_of_order') {
+      this.deps.logger.withFields({ ...snapshot }).warn('RuleEngine: ignored out-of-order event')
+    }
+    else if (snapshot.decision === 'fired') {
+      this.deps.logger.withFields({ ...snapshot }).log('RuleEngine: detector fired')
+    }
   }
 
   /**

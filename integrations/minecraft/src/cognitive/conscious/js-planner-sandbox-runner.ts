@@ -5,6 +5,8 @@ import type {
   WorkerToParentMessage,
 } from './js-planner-sandbox-protocol'
 
+import process from 'node:process'
+
 import { fork } from 'node:child_process'
 import { realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -31,6 +33,28 @@ function ancestorPath(path: string, levels: number): string {
 }
 
 const PNPM_MODULE_STORE_PATH = realpathSync(ancestorPath(ISOLATED_VM_ENTRY_PATH, 4))
+
+function sandboxEnvironment(): NodeJS.ProcessEnv {
+  if (process.platform !== 'linux')
+    return {}
+
+  const report = process.report.getReport()
+  if ('header' in report && typeof report.header === 'object' && report.header !== null) {
+    const header = report.header
+    if ('glibcVersionRuntime' in header && typeof header.glibcVersionRuntime === 'string' && header.glibcVersionRuntime.length > 0)
+      return { LIBC: 'glibc' }
+  }
+
+  if ('sharedObjects' in report && Array.isArray(report.sharedObjects)) {
+    const usesMusl = report.sharedObjects.some((path: unknown) =>
+      typeof path === 'string' && /(?:^|\/)(?:ld-musl-|libc\.musl-)/.test(path),
+    )
+    if (usesMusl)
+      return { LIBC: 'musl' }
+  }
+
+  throw new Error('Cannot identify the sandbox worker C library')
+}
 
 function cloneStructured<T>(value: T): T {
   if (typeof value === 'undefined')
@@ -64,7 +88,9 @@ export async function executeSandboxWorker(
 
     const child = fork(SANDBOX_WORKER_ENTRY_PATH, [ISOLATED_VM_ENTRY_PATH], {
       cwd: SANDBOX_SOURCE_DIRECTORY,
-      env: {},
+      // node-gyp-build accepts LIBC, so native loading needs no access to OS release files.
+      // Pass only detected runtime metadata. Parent environment variables remain private.
+      env: sandboxEnvironment(),
       execArgv: [
         '--permission',
         '--allow-addons',
@@ -72,7 +98,8 @@ export async function executeSandboxWorker(
         `--allow-fs-read=${PNPM_MODULE_STORE_PATH}`,
         '--disable-proto=throw',
         '--frozen-intrinsics',
-        '--experimental-transform-types',
+        // isolated-vm requires this flag, and the child does not inherit NODE_OPTIONS.
+        '--no-node-snapshot',
         '--no-warnings',
       ],
       serialization: 'advanced',

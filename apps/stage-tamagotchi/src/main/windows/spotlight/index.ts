@@ -190,7 +190,13 @@ export function setupSpotlightWindowManager(params: {
 
   if (!shortcutResult.ok) {
     log.warn(`Failed to register Spotlight shortcut: ${shortcutResult.reason}`)
-    showNotification(params.i18n.t('tamagotchi.spotlight.errors.shortcutRegistrationFailed'))
+    params.desktopCompanion.publish({
+      id: randomUUID(),
+      source: 'spotlight',
+      body: params.i18n.t('tamagotchi.spotlight.errors.shortcutRegistrationFailed'),
+      priority: 'normal',
+      coalesceKey: 'spotlight-shortcut-error',
+    }, () => void openChatWindowFromNotification())
   }
 
   return {

@@ -4,6 +4,14 @@ name: 'Copilot Setup Steps'
 on:
   workflow_dispatch:
   push:
+    # Preserve existing tag-push behavior when adding a branch filter.
+    tags:
+      - '**'
+    # These refs use the final candidate gate; do not start unrelated setup jobs.
+    branches-ignore:
+      - le-firehawk/feat/vrm-motion-library
+      - le-firehawk/candidate/vrm-motion-*
+      - le-firehawk/release/vrm-motion-v*
     paths:
       - .github/workflows/copilot-setup-steps.yml
 

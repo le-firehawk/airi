@@ -16,43 +16,45 @@ import { useLogg } from '@guiiai/logg'
 import { generateText } from '@xsai/generate-text'
 import { message } from '@xsai/utils-chat'
 
-import { findStickerDescription, recordSticker } from '../models'
+import { resolveMessageSender } from '../models/common'
+import { findStickerDescription, recordSticker } from '../models/stickers'
 import { div, span, ul } from '../prompts/utils'
 import { toPngBase64FromFile } from './image'
 
-// Set path to FFmpeg binaries
 ffmpeg.setFfmpegPath(ffmpegInstaller.path)
 
-async function extractFrames(inputFilePath, outputDir, frameRate = 5) {
+async function extractFrames(inputFilePath: string, outputDir: string, frameRate = 5) {
   await fs.mkdir(outputDir, { recursive: true })
   const outputPattern = path.join(outputDir, 'frame-%03d.png')
 
-  return new Promise<string[]>((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     ffmpeg(inputFilePath)
       .outputOptions(`-vf fps=${frameRate}`)
       .output(outputPattern)
-      .on('end', async () => {
-        const files = await fs.readdir(outputDir)
-        const sortedFiles = files
-          .filter(file => file.match(/frame-\d+\.png/))
-          .sort((a, b) => {
-            const numA = Number.parseInt(a.match(/frame-(\d+)\.png/)[1])
-            const numB = Number.parseInt(b.match(/frame-(\d+)\.png/)[1])
-            return numA - numB
-          })
-        resolve(sortedFiles.map(file => path.join(outputDir, file)))
-      })
+      .on('end', () => resolve())
       .on('error', err => reject(err))
       .run()
   })
+
+  const files = await fs.readdir(outputDir)
+  return files
+    .flatMap((file) => {
+      const frameNumber = /^frame-(\d+)\.png$/.exec(file)?.[1]
+      return frameNumber ? [{ file, frameNumber: Number.parseInt(frameNumber, 10) }] : []
+    })
+    .sort((a, b) => a.frameNumber - b.frameNumber)
+    .map(({ file }) => path.join(outputDir, file))
 }
 
+/** Extracts sticker frames and stores their nonempty consolidated description. */
 export async function interpretAnimatedSticker(bot: Bot, msg: Message, sticker: Sticker) {
   const logger = useLogg('interpretAnimatedSticker')
     .useGlobalConfig()
     .withField('sticker_id', sticker.file_id)
     .withField('sticker_emoji', sticker.emoji)
     .withField('sticker_set', sticker.set_name)
+
+  let tempDir: string | undefined
 
   try {
     if (await findStickerDescription(sticker.file_id)) {
@@ -61,17 +63,18 @@ export async function interpretAnimatedSticker(bot: Bot, msg: Message, sticker: 
     }
 
     const file = await bot.api.getFile(sticker.file_id)
-    const stickerRes = await fetch(`https://api.telegram.org/file/bot${bot.api.token}/${file.file_path}`)
+    const filePath = file.file_path
+    if (!filePath) {
+      throw new Error(`Telegram returned no file path for sticker ${sticker.file_id}`)
+    }
+
+    const stickerRes = await fetch(`https://api.telegram.org/file/bot${bot.api.token}/${filePath}`)
     const buffer = await stickerRes.arrayBuffer()
 
-    // Create temp directory for sticker and frames
-    const tempDir = path.join(os.tmpdir(), `sticker-${sticker.file_id}`)
+    // Each interpretation owns its temporary files, including concurrent calls for the same sticker.
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'sticker-'))
     const framesDir = path.join(tempDir, 'frames')
-    await fs.mkdir(tempDir, { recursive: true })
-    await fs.mkdir(framesDir, { recursive: true })
-
-    // Save sticker to temp file
-    const stickerPath = path.join(tempDir, path.basename(file.file_path))
+    const stickerPath = path.join(tempDir, path.basename(filePath))
     await fs.writeFile(stickerPath, Buffer.from(buffer))
 
     logger.withField('sticker_path', stickerPath).log('Sticker saved to temp file')
@@ -87,14 +90,17 @@ export async function interpretAnimatedSticker(bot: Bot, msg: Message, sticker: 
     }
     logger.withField('sampled', sampled).log('Sampled frames')
 
-    // Process frames with Sharp
     const frames = await Promise.all(sampled.map(async (framePath, index) => ({
       index,
       base64: await toPngBase64FromFile(framePath),
     })))
     logger.withField('sampled_frames', sampled).log('Normalized the frames')
 
-    // STAGE 1: Process each frame individually
+    const stickerContext = div(
+      sticker.emoji ? span(`The sticker represents ${sticker.emoji}. Consider its expression and emotion, but treat the emoji as an imperfect clue.`) : undefined,
+      span(`This is a sticker sent by ${resolveMessageSender(msg).displayName} on Telegram.`),
+      sticker.set_name ? span(`The sticker belongs to the ${sticker.set_name} sticker set.`) : undefined,
+    )
     const frameDescriptions = []
     for (const frame of frames) {
       try {
@@ -115,29 +121,20 @@ export async function interpretAnimatedSticker(bot: Bot, msg: Message, sticker: 
               `),
               span(`This is frame ${frame.index + 1} in the sequence.`),
               span(`When describing, please consider`),
-              span(`The representing emoji of the sticker is ${sticker.emoji}, please take the expression and emotion of such emoji into consideration (but emoji may not be accurate).`),
-              span(`
-                This is a sticker with the emoji ${sticker.emoji} sent by user ${msg.from.first_name}
-                ${msg.from.last_name} on Telegram, which is one of the sticker from ${sticker.set_name}
-                sticker set.
-              `),
+              stickerContext,
             )),
             message.user([message.imagePart(`data:image/png;base64,${frame.base64}`)]),
           ),
         } satisfies GenerateTextOptions
-        if (env.LLM_OLLAMA_DISABLE_THINK) {
-          (req as Record<string, unknown>).think = false
-        }
-
-        const res = await generateText(req)
-        res.text = res.text.replace(/<think>[\s\S]*?<\/think>/, '').trim()
-        if (!res.text) {
+        const res = await generateText(env.LLM_OLLAMA_DISABLE_THINK ? { ...req, think: false } : req)
+        const description = res.text?.replace(/<think>[\s\S]*?<\/think>/, '').trim()
+        if (!description) {
           throw new Error('No response text')
         }
 
         frameDescriptions.push({
           frameNumber: frame.index + 1,
-          description: res.text,
+          description,
         })
       }
       catch (err) {
@@ -148,8 +145,8 @@ export async function interpretAnimatedSticker(bot: Bot, msg: Message, sticker: 
 
     logger.withField('frames', frameDescriptions.length).log('Processed all frames')
 
-    // Only proceed to consolidation if we have at least some frames
-    if (frameDescriptions.length === 0) {
+    const thumbnail = frames[0]
+    if (!thumbnail || frameDescriptions.length === 0) {
       throw new Error('Failed to process any frames from the animated sticker')
     }
 
@@ -163,19 +160,12 @@ export async function interpretAnimatedSticker(bot: Bot, msg: Message, sticker: 
       messages: message.messages(
         message.system(
           div(
-            ul(
-              span(`The representing emoji of the sticker is ${sticker.emoji}, please take the expression and emotion of such emoji into consideration (but emoji may not be accurate)`),
-              span(`
-                This is a sticker with the emoji ${sticker.emoji} sent by user ${msg.from.first_name}
-                ${msg.from.last_name} on Telegram, which is one of the sticker from ${sticker.set_name}
-                sticker set.
-              `),
-            ),
+            stickerContext,
             div(
               span(`You are analyzing an animated sticker from Telegram.`),
               span(`Below are descriptions of ${frameDescriptions.length} sequential frames from this animated sticker:`),
               div(
-                ...frameDescriptions.map(fd => `FRAME ${fd.frameNumber}:\n${fd.description}\n`).join('\n'),
+                frameDescriptions.map(fd => `FRAME ${fd.frameNumber}:\n${fd.description}\n`).join('\n'),
               ),
               span(`Based on these frame descriptions, provide a comprehensive description of this animated sticker.`),
               span(`Focus on:`),
@@ -184,7 +174,7 @@ export async function interpretAnimatedSticker(bot: Bot, msg: Message, sticker: 
                 '2. How the animation progresses (the movement/action)',
                 '3. The emotion or message the sticker is conveying',
                 '4. The visual style and notable characteristics',
-                '5. How this relates to the emoji ${sticker.emoji',
+                sticker.emoji ? `5. How this relates to the emoji ${sticker.emoji}` : '5. The contextual meaning of the animation',
               ),
               span(`Your task is to synthesize these individual frame descriptions into a cohesive understanding of the complete animated sticker.`),
             ),
@@ -192,24 +182,32 @@ export async function interpretAnimatedSticker(bot: Bot, msg: Message, sticker: 
         ),
       ),
     } satisfies GenerateTextOptions
-    if (env.LLM_OLLAMA_DISABLE_THINK) {
-      (req as Record<string, unknown>).think = false
+    const consolidatedResult = await generateText(env.LLM_OLLAMA_DISABLE_THINK ? { ...req, think: false } : req)
+    const description = consolidatedResult.text?.replace(/<think>[\s\S]*?<\/think>/, '').trim()
+    if (!description) {
+      throw new Error('No response text for animated sticker consolidation')
     }
 
-    const consolidatedResult = await generateText(req)
+    logger.withField('consolidated_result', description).log('Animated sticker interpreted')
 
-    // Clean up temp files
-    await fs.rm(tempDir, { recursive: true, force: true })
+    // The sticker schema stores missing optional metadata as empty strings.
+    const setName = sticker.set_name ?? ''
+    await recordSticker(thumbnail.base64, sticker.file_id, filePath, description, setName, sticker.emoji ?? '', setName)
+    logger.withField('sticker', description).log('Interpreted animated sticker')
 
-    logger.withField('consolidated_result', consolidatedResult.text).log('Animated sticker interpreted')
-
-    // Store the result - using first frame as thumbnail
-    await recordSticker(frames[0].base64, sticker.file_id, file.file_path, consolidatedResult.text, sticker.set_name, sticker.emoji, sticker.set_name)
-    logger.withField('sticker', consolidatedResult.text).log('Interpreted animated sticker')
-
-    return consolidatedResult.text
+    return description
   }
   catch (err) {
     logger.withError(err).log('Error interpreting animated sticker')
+  }
+  finally {
+    if (tempDir) {
+      try {
+        await fs.rm(tempDir, { recursive: true, force: true })
+      }
+      catch (err) {
+        logger.withError(err).log('Failed to remove temporary sticker files')
+      }
+    }
   }
 }

@@ -1,3 +1,6 @@
+import type { AnyPgColumn } from 'drizzle-orm/pg-core'
+
+import { sql } from 'drizzle-orm'
 import { bigint, boolean, index, integer, jsonb, pgTable, text, uniqueIndex, uuid, vector } from 'drizzle-orm/pg-core'
 
 export const chatMessagesTable = pgTable('chat_messages', {
@@ -168,9 +171,9 @@ export const memoryLongTermGoalsTable = pgTable('memory_long_term_goals', {
   description: text().notNull(),
   priority: integer().notNull().default(5), // 1-10 scale
   progress: integer().notNull().default(0), // 0-100 percentage
-  deadline: bigint({ mode: 'number' }).default(null),
+  deadline: bigint({ mode: 'number' }).default(sql`null`),
   status: text().notNull().default('planned'), // 'planned', 'in_progress', 'completed', 'abandoned'
-  parent_goal_id: uuid().references(() => memoryLongTermGoalsTable.id),
+  parent_goal_id: uuid().references((): AnyPgColumn => memoryLongTermGoalsTable.id),
   category: text().notNull().default('personal'),
   created_at: bigint({ mode: 'number' }).notNull().default(0).$defaultFn(() => Date.now()),
   updated_at: bigint({ mode: 'number' }).notNull().default(0).$defaultFn(() => Date.now()),
@@ -187,7 +190,7 @@ export const memoryShortTermIdeas = pgTable('memory_short_term_ideas', {
   id: uuid().primaryKey().defaultRandom(),
   content: text().notNull(),
   source_type: text().notNull().default('dream'), // 'dream', 'conversation', 'reflection'
-  source_id: text().default(null), // ID of source (dream ID, conversation ID, etc.)
+  source_id: text().default(sql`null`), // ID of source (dream ID, conversation ID, etc.)
   status: text().notNull().default('new'), // 'new', 'developing', 'implemented', 'abandoned'
   excitement: integer().notNull().default(5), // 1-10 scale
   created_at: bigint({ mode: 'number' }).notNull().default(0).$defaultFn(() => Date.now()),

@@ -1,4 +1,3 @@
-import type { EmbedResult } from '@xsai/embed'
 import type { SQL } from 'drizzle-orm'
 import type { Message, UserFromGetMe } from 'grammy/types'
 
@@ -10,15 +9,17 @@ import { and, cosineDistance, desc, eq, gt, inArray, lt, ne, notInArray, sql } f
 
 import { useDrizzle } from '../db'
 import { chatMessagesTable } from '../db/schema'
-import { chatMessageToOneLine } from './common'
+import { chatMessageToOneLine, resolveMessageSender } from './common'
 import { findPhotoDescription } from './photos'
 import { findStickerDescription } from './stickers'
 
 export async function recordMessage(botInfo: UserFromGetMe, message: Message) {
-  const replyToName = message.reply_to_message?.from.first_name || ''
+  const sender = resolveMessageSender(message)
+  const replySender = message.reply_to_message ? resolveMessageSender(message.reply_to_message) : undefined
+  const replyToName = replySender?.kind === 'user' && replySender.id === botInfo.id.toString() ? 'Yourself' : replySender?.name
 
-  let embedding: EmbedResult
-  let text: string
+  // Captions carry the text for other media. Service messages have no content to embed.
+  let text = message.text || message.caption || ''
 
   if (message.sticker != null) {
     text = `A sticker sent by user ${await findStickerDescription(message.sticker.file_id)}, sticker set named ${message.sticker.set_name}`
@@ -26,31 +27,28 @@ export async function recordMessage(botInfo: UserFromGetMe, message: Message) {
   else if (message.photo != null) {
     text = `A set of photo, descriptions are: ${(await Promise.all(message.photo.map(photo => findPhotoDescription(photo.file_id)))).join('\n')}`
   }
-  else if (message.text) {
-    text = message.text || message.caption || ''
-  }
 
   if (text === '') {
     return
   }
-  else {
-    embedding = await embed({
-      baseURL: env.EMBEDDING_API_BASE_URL!,
-      apiKey: env.EMBEDDING_API_KEY!,
-      model: env.EMBEDDING_MODEL!,
-      input: text,
-    })
-  }
+
+  const embedding = await embed({
+    baseURL: env.EMBEDDING_API_BASE_URL!,
+    apiKey: env.EMBEDDING_API_KEY!,
+    model: env.EMBEDDING_MODEL!,
+    input: text,
+  })
 
   const values: Partial<Omit<typeof chatMessagesTable.$inferSelect, 'id' | 'created_at' | 'updated_at'>> = {
     platform: 'telegram',
-    from_id: message.from.id.toString(),
+    // The schema uses an empty ID when Telegram supplies no sender identity.
+    from_id: sender.id ?? '',
     platform_message_id: message.message_id.toString(),
-    from_name: message.from.first_name,
+    from_name: sender.name,
     in_chat_id: message.chat.id.toString(),
     content: text,
     is_reply: !!message.reply_to_message,
-    reply_to_name: replyToName === botInfo.first_name ? 'Yourself' : replyToName,
+    reply_to_name: replyToName ?? '',
     reply_to_id: message.reply_to_message?.message_id.toString() || '',
   }
 

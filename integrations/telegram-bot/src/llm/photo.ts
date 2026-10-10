@@ -9,9 +9,11 @@ import { embed } from '@xsai/embed'
 import { generateText } from '@xsai/generate-text'
 import { message } from '@xsai/utils-chat'
 
-import { findPhotosDescriptions, recordPhoto } from '../models'
+import { resolveMessageSender } from '../models/common'
+import { findPhotosDescriptions, recordPhoto } from '../models/photos'
 import { toPngBase64 } from './image'
 
+/** Describes uncached photos and stores each description under its Telegram file ID. */
 export async function interpretPhotos(state: BotContext, msg: Message, photos: PhotoSize[]) {
   try {
     const fileIds = photos.map(photo => photo.file_id)
@@ -19,13 +21,19 @@ export async function interpretPhotos(state: BotContext, msg: Message, photos: P
     const existingFileIds = photoDescriptions.map(photo => photo.file_id)
     const newFileIds = fileIds.filter(fileId => !existingFileIds.includes(fileId))
 
-    const files = await Promise.all(newFileIds.map(fileId => state.bot.api.getFile(fileId)))
-    const photoResArray = await Promise.all(files.map(file => fetch(`https://api.telegram.org/file/bot${state.bot.api.token}/${file.file_path}`)))
+    const photoFiles = await Promise.all(newFileIds.map(async (fileId) => {
+      const file = await state.bot.api.getFile(fileId)
+      const filePath = file.file_path
+      if (!filePath) {
+        throw new Error(`Telegram returned no file path for photo ${fileId}`)
+      }
 
-    const buffers = await Promise.all(photoResArray.map(photoRes => photoRes.arrayBuffer()))
-    const photoBase64s = await Promise.all(buffers.map(buffer => toPngBase64(buffer)))
+      const response = await fetch(`https://api.telegram.org/file/bot${state.bot.api.token}/${filePath}`)
+      const base64 = await toPngBase64(await response.arrayBuffer())
+      return { fileId, filePath, base64 }
+    }))
 
-    await Promise.all(photoBase64s.map(async (base64, index) => {
+    await Promise.all(photoFiles.map(async ({ fileId, filePath, base64 }) => {
       const req = {
         apiKey: env.LLM_VISION_API_KEY!,
         baseURL: env.LLM_VISION_API_BASE_URL!,
@@ -48,19 +56,14 @@ export async function interpretPhotos(state: BotContext, msg: Message, photos: P
             + '- Describe the content of the elements and texts within as much detail as possible.\n'
             + '- Do not finish the description way too easy.'
             + '\n'
-            + `This is a photo sent by user ${msg.from.first_name} ${msg.from.last_name} on Telegram, `
-            + `with the caption ${msg.caption}.`,
+            + `This is a photo sent by ${resolveMessageSender(msg).displayName} on Telegram.${msg.caption ? ` The caption is: ${msg.caption}` : ''}`,
           ),
           message.user([message.imagePart(`data:image/png;base64,${base64}`)]),
         ),
       } satisfies GenerateTextOptions
-      if (env.LLM_OLLAMA_DISABLE_THINK) {
-        (req as Record<string, unknown>).think = false
-      }
-
-      const res = await generateText(req)
-      res.text = res.text.replace(/<think>[\s\S]*?<\/think>/, '').trim()
-      if (!res.text) {
+      const res = await generateText(env.LLM_OLLAMA_DISABLE_THINK ? { ...req, think: false } : req)
+      const description = res.text?.replace(/<think>[\s\S]*?<\/think>/, '').trim()
+      if (!description) {
         throw new Error('No response text')
       }
 
@@ -72,8 +75,8 @@ export async function interpretPhotos(state: BotContext, msg: Message, photos: P
         input: 'Hello, world!',
       })
 
-      await recordPhoto(base64, msg.photo[index].file_id, files[index].file_path, res.text)
-      state.logger.withField('photo', res.text).log('Interpreted photo')
+      await recordPhoto(base64, fileId, filePath, description)
+      state.logger.withField('photo', description).log('Interpreted photo')
     }))
   }
   catch (err) {

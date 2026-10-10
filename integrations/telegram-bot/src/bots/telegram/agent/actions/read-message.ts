@@ -27,6 +27,8 @@ export async function readMessage(
 }> {
   const logger = useLogg('readMessage').useGlobalConfig()
   const tracer = trace.getTracer('airi.telegram.bot')
+  // The read owns this snapshot, while new arrivals remain in the per-chat queue.
+  const unreadSnapshot = [...unreadMessages]
 
   return await tracer.startActiveSpan('telegram.module.read_message', async (span) => {
     span.setAttribute('telegram.bot.id', botId)
@@ -39,7 +41,7 @@ export async function readMessage(
     const lastNMessagesOneliner = lastNMessages.map(msg => chatMessageToOneLine(botId, msg)).join('\n')
     logger.withField('number_of_last_n_messages', lastNMessages.length).log('Successfully found last N messages')
 
-    const unreadMessagesEmbeddingPromises = unreadMessages
+    const unreadMessagesEmbeddingPromises = unreadSnapshot
       .filter(msg => !!msg.text || !!msg.caption)
       .map(async (msg: Message) => {
         const embeddingResult = await tracer.startActiveSpan('llm.embed.embed_with_retry', async (span) => {
@@ -72,10 +74,10 @@ export async function readMessage(
     const unreadHistoryMessagesEmbedding = await Promise.all(unreadMessagesEmbeddingPromises)
     logger.withField('number_of_tasks', unreadMessagesEmbeddingPromises.length).log('Successfully embedded unread history messages')
 
-    const unreadHistoryMessages = await Promise.all(state.unreadMessages[action.chatId].map(msg => telegramMessageToOneLine(botId, msg)))
+    const unreadHistoryMessages = await Promise.all(unreadSnapshot.map(msg => telegramMessageToOneLine(botId, msg)))
     const unreadHistoryMessageOneliner = unreadHistoryMessages.join('\n')
 
-    const existingKnownMessages = [...unreadMessages.map(msg => msg.message_id.toString()), ...lastNMessages.map(msg => msg.platform_message_id)]
+    const existingKnownMessages = [...unreadSnapshot.map(msg => msg.message_id.toString()), ...lastNMessages.map(msg => msg.platform_message_id)]
     const relevantChatMessages = await tracer.startActiveSpan('telegram.module.read_message.find_relevant_messages', async (span) => {
       const res = await findRelevantMessages(botId, chatId, unreadHistoryMessagesEmbedding, existingKnownMessages)
       span.setAttribute('telegram.module.read_message.found_relevant_messages', JSON.stringify(res))
@@ -86,16 +88,24 @@ export async function readMessage(
     const relevantChatMessagesOneliner = relevantChatMessages.map(msgs => msgs.join('\n')).join('\n')
     logger.withField('number_of_relevant_chat_messages', relevantChatMessages.length).log('Successfully composed relevant chat messages')
 
-    state.unreadMessages[action.chatId] = []
+    const result = await actionReadMessages({
+      lastMessages: lastNMessagesOneliner,
+      unreadHistoryMessages: unreadHistoryMessageOneliner,
+      relevantChatMessages: relevantChatMessagesOneliner,
+    })
+    abortController.signal.throwIfAborted()
+
+    // Preserve messages that arrive while this read awaits embeddings and database queries.
+    const readIds = new Set(unreadSnapshot.map(msg => msg.message_id))
+    const pendingMessages = state.unreadMessages[action.chatId]
+    if (pendingMessages) {
+      state.unreadMessages[action.chatId] = pendingMessages.filter(msg => !readIds.has(msg.message_id))
+    }
 
     span.end()
     return {
       break: true,
-      result: await actionReadMessages({
-        lastMessages: lastNMessagesOneliner,
-        unreadHistoryMessages: unreadHistoryMessageOneliner,
-        relevantChatMessages: relevantChatMessagesOneliner,
-      }),
+      result,
     }
   })
 }

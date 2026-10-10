@@ -44,6 +44,7 @@
     "@xsai/shared-chat": "catalog:",
     "@xsai/tool": "catalog:",
     "@xsai/utils-chat": "catalog:",
+    "abort-controller": "catalog:",
     "best-effort-json-parser": "catalog:",
     "drizzle-orm": "catalog:",
     "es-toolkit": "catalog:",
@@ -57,6 +58,7 @@
     "valibot": "catalog:"
   },
   "devDependencies": {
+    "@types/fluent-ffmpeg": "catalog:",
     "@types/pg": "catalog:",
     "drizzle-kit": "catalog:",
     "tsx": "catalog:"

@@ -6,32 +6,41 @@ import type { BotContext, ChatContext } from '../../../../types'
 import { env } from 'node:process'
 
 import { useLogg } from '@guiiai/logg'
-import { sleep } from '@moeru/std'
 import { generateText } from '@xsai/generate-text'
 import { message } from '@xsai/utils-chat'
 import { parse } from 'best-effort-json-parser'
-import { randomInt } from 'es-toolkit'
+import { delay, randomInt } from 'es-toolkit'
 
 import { recordMessage } from '../../../../models'
 import { listJoinedChats } from '../../../../models/chats'
 import { messageSplit } from '../../../../prompts'
 import { cancellable } from '../../../../utils/promise'
+import { withTelegramAbortSignal } from '../../../../utils/telegram'
 
+/**
+ * Extracts message text and a reply target from model output. Plain text remains unchanged.
+ * An explicit array without message text suppresses delivery.
+ *
+ * @example
+ * parseMayStructuredMessage('{"messages":["Hello"]}')
+ * // => { messages: ['Hello'], reply_to_message_id: undefined }
+ */
 export function parseMayStructuredMessage(responseText: string) {
   const logger = useLogg('parseMayStructuredMessage').useGlobalConfig()
 
-  // eslint-disable-next-line regexp/no-super-linear-backtracking, regexp/optimal-quantifier-concatenation
-  const result = /^\{(("?)*.*\s*)*\}$/mu.exec(responseText)
+  const result = /^\{.*\}$/msu.exec(responseText)
   if (result) {
     logger.withField('text', JSON.stringify(responseText)).withField('result', result).log('Multiple messages detected')
 
-    const parsedResponse = parse(result[0]) as ({ messages?: unknown, reply_to_message_id?: unknown } | undefined)
-    const hasMessagesArray = Array.isArray(parsedResponse?.messages)
-    const messages = Array.isArray(parsedResponse?.messages)
-      ? parsedResponse.messages.filter((message): message is string => typeof message === 'string' && message.trim() !== '')
+    const parsedResponse: unknown = parse(result[0])
+    const structuredResponse = typeof parsedResponse === 'object' && parsedResponse !== null ? parsedResponse : undefined
+    const responseMessages = structuredResponse && 'messages' in structuredResponse ? structuredResponse.messages : undefined
+    const hasMessagesArray = Array.isArray(responseMessages)
+    const messages = Array.isArray(responseMessages)
+      ? responseMessages.filter((message): message is string => typeof message === 'string' && message.trim() !== '')
       : []
-    const replyToMessageId = typeof parsedResponse?.reply_to_message_id === 'string'
-      ? parsedResponse.reply_to_message_id
+    const replyToMessageId = structuredResponse && 'reply_to_message_id' in structuredResponse && typeof structuredResponse.reply_to_message_id === 'string'
+      ? structuredResponse.reply_to_message_id
       : undefined
 
     if (messages.length > 0) {
@@ -48,6 +57,11 @@ export function parseMayStructuredMessage(responseText: string) {
   return { messages: [responseText], reply_to_message_id: undefined }
 }
 
+/**
+ * Owns one chat send sequence, from model generation through message recording.
+ * A replacement cancels the previous sequence. Cancellation stops pending waits and API requests.
+ * A confirmed Telegram delivery remains recorded, even if cancellation arrives during that request.
+ */
 export async function sendMessage(
   botContext: BotContext,
   chatContext: ChatContext,
@@ -55,114 +69,109 @@ export async function sendMessage(
   groupId: string,
   abortController: AbortController,
 ) {
-  const logger = useLogg('imagineAnAction').useGlobalConfig()
+  abortController.signal.throwIfAborted()
+  chatContext.currentTask?.cancel()
 
-  const chat = (await listJoinedChats()).find((chat) => {
-    return chat.chat_id === groupId
-  })
-  botContext.logger.withField('chat', chat).log('Chat found')
-  if (!chat) {
-    botContext.logger.withField('groupId', groupId).log('Chat not found')
-    return
-  }
+  const task = cancellable(async (signal) => {
+    const logger = useLogg('imagineAnAction').useGlobalConfig()
+    const chat = (await listJoinedChats()).find(chat => chat.chat_id === groupId)
+    signal.throwIfAborted()
+    botContext.logger.withField('chat', chat).log('Chat found')
+    if (!chat) {
+      botContext.logger.withField('groupId', groupId).log('Chat not found')
+      return
+    }
 
-  const chatId = chat.chat_id
+    const chatId = chat.chat_id
+    const systemContent = String(await messageSplit())
+    signal.throwIfAborted()
+    const req = {
+      apiKey: env.LLM_API_KEY!,
+      baseURL: env.LLM_API_BASE_URL!,
+      model: env.LLM_MODEL!,
+      messages: message.messages(
+        { role: 'system', content: systemContent },
+        { role: 'user', content: 'This is the input message:' },
+        { role: 'user', content: responseText },
+      ),
+      abortSignal: signal,
+    } satisfies GenerateTextOptions
 
-  // Cancel any existing task before starting a new one
-  if (chatContext.currentTask) {
-    chatContext.currentTask.cancel()
-    chatContext.currentTask = null
-  }
+    const res = await generateText(env.LLM_OLLAMA_DISABLE_THINK ? { ...req, think: false } : req)
+    signal.throwIfAborted()
+    if (!res.text) {
+      throw new Error('No response text')
+    }
 
-  // Note: removed "new messages arrived" check — it was preventing the bot
-  // from ever responding in fast-paced chats. The agent loop handles new messages naturally.
+    const text = res.text
+      .replace(/<think>[\s\S]*?<\/think>/, '')
+      .replace(/^```json\s*\n/, '')
+      .replace(/\n```$/, '')
+      .replace(/^```\s*\n/, '')
+      .replace(/\n```$/, '')
+      .trim()
+    if (!text) {
+      throw new Error('No response text')
+    }
 
-  const systemContent = String(await messageSplit())
-  const req = {
-    apiKey: env.LLM_API_KEY!,
-    baseURL: env.LLM_API_BASE_URL!,
-    model: env.LLM_MODEL!,
-    messages: message.messages(
-      { role: 'system' as const, content: systemContent },
-      { role: 'user' as const, content: 'This is the input message:' },
-      { role: 'user' as const, content: String(responseText) },
-    ),
-    abortSignal: abortController.signal,
-  } satisfies GenerateTextOptions
-  if (env.LLM_OLLAMA_DISABLE_THINK) {
-    (req as Record<string, unknown>).think = false
-  }
+    logger.withFields({
+      messages: responseText,
+      response: text,
+      now: new Date().toLocaleString(),
+      totalTokens: res.usage.totalTokens,
+      promptTokens: res.usage.inputTokens,
+      completion_tokens: res.usage.outputTokens,
+    }).log('Message split')
 
-  const res = await generateText(req)
-  res.text = res.text
-    .replace(/<think>[\s\S]*?<\/think>/, '')
-    .replace(/^```json\s*\n/, '')
-    .replace(/\n```$/, '')
-    .replace(/^```\s*\n/, '')
-    .replace(/\n```$/, '')
-    .trim()
-  if (!res.text) {
-    throw new Error('No response text')
-  }
-
-  logger.withFields({
-    messages: responseText,
-    response: res.text,
-    now: new Date().toLocaleString(),
-    totalTokens: res.usage.totalTokens,
-    promptTokens: res.usage.inputTokens,
-    completion_tokens: res.usage.outputTokens,
-  }).log('Message split')
-
-  const structuredMessage = parseMayStructuredMessage(res.text)
-  if (structuredMessage == null) {
-    botContext.logger.log(`Not sending message to ${chatId} - no messages to send`)
-    return
-  }
-
-  botContext.logger.withField('texts', structuredMessage).log('Sending messages')
-
-  // If we get here, the task wasn't cancelled, so we can send the response
-  for (let i = 0; i < structuredMessage.messages.length; i++) {
-    const item = structuredMessage.messages[i]
-    if (!item) {
+    const structuredMessage = parseMayStructuredMessage(text)
+    if (structuredMessage == null) {
       botContext.logger.log(`Not sending message to ${chatId} - no messages to send`)
-      continue
+      return
     }
 
-    // Create cancellable typing and reply tasks
-    try {
-      await botContext.bot.api.sendChatAction(chatId, 'typing')
-    }
-    catch {
-
-    }
-    await sleep(item.length * 50)
-
-    const replyTask = cancellable((async (): Promise<Message.TextMessage> => {
+    botContext.logger.withField('texts', structuredMessage).log('Sending messages')
+    for (const [index, item] of structuredMessage.messages.entries()) {
+      signal.throwIfAborted()
       try {
-        const validReplyToMessageId = structuredMessage.reply_to_message_id ? Number.parseInt(structuredMessage.reply_to_message_id) : undefined
-
-        if (i === 0 && validReplyToMessageId && !Number.isNaN(validReplyToMessageId)) {
-          const sentResult = await botContext.bot.api.sendMessage(chatId, item, { reply_parameters: { message_id: validReplyToMessageId } })
-          return sentResult
-        }
-        else {
-          const sentResult = await botContext.bot.api.sendMessage(chatId, item)
-          return sentResult
-        }
+        await withTelegramAbortSignal(signal, telegramSignal => botContext.bot.api.sendChatAction(chatId, 'typing', undefined, telegramSignal))
       }
-      catch (err) {
-        botContext.logger.withError(err).log('Failed to send message')
-        throw err
+      catch {
+        // A failed typing indicator does not prevent delivery. Cancellation still stops the sequence.
+        signal.throwIfAborted()
       }
-    })())
+      signal.throwIfAborted()
+      await delay(item.length * 50, { signal })
+      signal.throwIfAborted()
 
-    chatContext.currentTask = replyTask
-    const msg = await replyTask.promise
-    await recordMessage(botContext.bot.botInfo, msg)
-    await sleep(randomInt(50, 1000))
+      const replyToMessageId = structuredMessage.reply_to_message_id ? Number.parseInt(structuredMessage.reply_to_message_id) : undefined
+      const options = index === 0 && replyToMessageId && !Number.isNaN(replyToMessageId)
+        ? { reply_parameters: { message_id: replyToMessageId } }
+        : undefined
+
+      let sentMessage: Message.TextMessage
+      try {
+        sentMessage = await withTelegramAbortSignal(signal, telegramSignal => botContext.bot.api.sendMessage(chatId, item, options, telegramSignal))
+      }
+      catch (error) {
+        botContext.logger.withError(error).log('Failed to send message')
+        throw error
+      }
+
+      // Telegram already accepted this message. Recording preserves history when cancellation races with the response.
+      await recordMessage(botContext.bot.botInfo, sentMessage)
+      signal.throwIfAborted()
+      await delay(randomInt(50, 1000), { signal })
+    }
+  }, abortController.signal)
+
+  chatContext.currentTask = task
+  try {
+    await task.promise
   }
-
-  chatContext.currentTask = null
+  finally {
+    // A canceled sequence cannot clear the task that replaced it.
+    if (chatContext.currentTask === task) {
+      chatContext.currentTask = undefined
+    }
+  }
 }

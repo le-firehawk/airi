@@ -1,13 +1,13 @@
 import type { Logg } from '@guiiai/logg'
 import type { Message } from 'grammy/types'
 
-import type { Action, BotContext, ChatContext, ExtendedContext } from '../../types'
+import type { Action, BotContext, ChatContext } from '../../types'
 
 import { env } from 'node:process'
 
 import { useLogg } from '@guiiai/logg'
-import { sleep } from '@moeru/std'
 import { message } from '@xsai/utils-chat'
+import { delay } from 'es-toolkit'
 import { Bot } from 'grammy'
 
 import { imagineAnAction } from '../../llm/actions'
@@ -15,12 +15,19 @@ import { interpretPhotos } from '../../llm/photo'
 import { interpretSticker } from '../../llm/sticker'
 import { findStickerByFileId, findStickersByFileIds, recordMessage } from '../../models'
 import { listJoinedChats, recordJoinedChat } from '../../models/chats'
+import { resolveMessageSender } from '../../models/common'
 import { listStickerPacks, recordStickerPack } from '../../models/sticker-packs'
+import { withTelegramAbortSignal } from '../../utils/telegram'
 import { readMessage } from './agent/actions/read-message'
 import { sendMessage } from './agent/actions/send-message'
 // import { shouldInterruptProcessing } from './agent/interruption'
 
-async function dispatchAction(ctx: BotContext, action: Action, abortController: AbortController, chatCtx?: ChatContext) {
+// Each continuation belongs to one chat. A new message aborts that chat's active step.
+type LoopStep = () => Promise<LoopStep | undefined>
+
+async function dispatchAction(ctx: BotContext, action: Action | undefined, abortController: AbortController, chatCtx?: ChatContext): Promise<LoopStep | undefined> {
+  abortController.signal.throwIfAborted()
+
   // If action generation failed, don't proceed with further processing
   if (!action || !action.action) {
     ctx.logger.withField('action', action).log('No valid action returned.')
@@ -62,20 +69,25 @@ async function dispatchAction(ctx: BotContext, action: Action, abortController: 
       const chatCtx = ensureChatContext(ctx, action.chatId)
 
       try {
-        const file = await ctx.bot.api.getFile(action.fileId)
+        const file = await withTelegramAbortSignal(abortController.signal, signal => ctx.bot.api.getFile(action.fileId, signal))
         if (!file) {
           chatCtx.actions.push({ action, result: `AIRI System: Error executing 'send_sticker': Sticker file ID ${action.fileId} not found, did you list the needed stickers before sending?` })
           return () => handleLoopStep(ctx, chatCtx)
         }
       }
       catch (err) {
+        abortController.signal.throwIfAborted()
         chatCtx.actions.push({ action, result: `AIRI System: Error executing 'send_sticker': Sticker file ID ${action.fileId} not found or failed due to ${String(err)}, did you list the needed stickers before sending?` })
         return () => handleLoopStep(ctx, chatCtx)
       }
 
       const sticker = await findStickerByFileId(action.fileId)
-      chatCtx.actions.push({ action, result: `AIRI System: Sending sticker ${action.fileId} with (${sticker.emoji} in set ${sticker.name}) to ${action.chatId}` })
-      await ctx.bot.api.sendSticker(action.chatId, action.fileId)
+      const stickerDescription = sticker ? ` with (${sticker.emoji} in set ${sticker.name})` : ''
+      chatCtx.actions.push({ action, result: `AIRI System: Sending sticker ${action.fileId}${stickerDescription} to ${action.chatId}` })
+      abortController.signal.throwIfAborted()
+      await withTelegramAbortSignal(abortController.signal, signal => ctx.bot.api.sendSticker(action.chatId, action.fileId, undefined, signal))
+      // A late accepted delivery cannot restart an interrupted chat loop.
+      abortController.signal.throwIfAborted()
 
       return () => handleLoopStep(ctx, chatCtx)
     }
@@ -93,21 +105,16 @@ async function dispatchAction(ctx: BotContext, action: Action, abortController: 
         break
       }
 
-      let unreadMessagesForThisChat: Message[] | undefined = ctx.unreadMessages[action.chatId]
+      const unreadMessagesForThisChat = ctx.unreadMessages[action.chatId]
+      if (!unreadMessagesForThisChat?.length) {
+        ctx.logger.withField('action', action).log('No unread messages for chat')
+        delete ctx.unreadMessages[action.chatId]
+        break
+      }
 
       const mentionedBy = unreadMessagesForThisChat.find(msg => msg.text?.includes(ctx.bot.botInfo.username) || msg.text?.includes(ctx.bot.botInfo.first_name))
       if (mentionedBy) {
-        chatCtx.messages.push(message.user(`AIRI System: You were mentioned in a message: ${mentionedBy.text} by ${mentionedBy.from?.first_name} (${mentionedBy.from?.username}), please respond as much as possible.`))
-      }
-
-      if (!Array.isArray(unreadMessagesForThisChat)) {
-        ctx.logger.withField('action', action).log(`Unread messages for group is not an array - converting to array`)
-        unreadMessagesForThisChat = []
-      }
-      if (unreadMessagesForThisChat.length === 0) {
-        ctx.logger.withField('action', action).log(`No unread messages for group - deleting`)
-        delete ctx.unreadMessages[action.chatId]
-        break
+        chatCtx.messages.push(message.user(`AIRI System: You were mentioned in a message: ${mentionedBy.text} by ${resolveMessageSender(mentionedBy).displayName}, please respond as much as possible.`))
       }
 
       // // Add attention check before processing action
@@ -158,12 +165,13 @@ async function dispatchAction(ctx: BotContext, action: Action, abortController: 
 
       return
     case 'sleep':
-      await sleep(30 * 1000)
+      await delay(30 * 1000, { signal: abortController.signal })
       if (chatCtx) {
         chatCtx.actions.push({ action, result: `AIRI System: Sleeping for ${30} seconds as requested...` })
+        return () => handleLoopStep(ctx, chatCtx)
       }
 
-      return () => handleLoopStep(ctx, chatCtx)
+      return
     default:
       if (chatCtx) {
         chatCtx.messages.push(message.user(`AIRI System: The action you sent ${action.action} haven't implemented yet by developer.`))
@@ -171,7 +179,7 @@ async function dispatchAction(ctx: BotContext, action: Action, abortController: 
   }
 }
 
-async function handleLoopStep(ctx: BotContext, chatCtx: ChatContext, incomingMessage?: Message): Promise<() => Promise<any> | undefined> {
+async function handleLoopStep(ctx: BotContext, chatCtx: ChatContext, incomingMessage?: Message): Promise<LoopStep | undefined> {
   ctx.currentProcessingStartTime = Date.now()
 
   if (chatCtx?.currentAbortController) {
@@ -233,11 +241,11 @@ async function handleLoopStep(ctx: BotContext, chatCtx: ChatContext, incomingMes
       }
     }
 
-    const action = await imagineAnAction(ctx.bot.botInfo.id.toString(), currentController, chatCtx?.messages || [], chatCtx?.actions || [], { unreadMessages: ctx.unreadMessages, incomingMessages: [incomingMessage] })
+    const action = await imagineAnAction(ctx.bot.botInfo.id.toString(), currentController, chatCtx.messages, chatCtx.actions, { unreadMessages: ctx.unreadMessages, incomingMessages: incomingMessage ? [incomingMessage] : undefined })
     return await dispatchAction(ctx, action, currentController, chatCtx)
   }
   catch (err) {
-    if (err.name === 'AbortError') {
+    if (err instanceof Error && err.name === 'AbortError') {
       ctx.logger.log('Operation was aborted due to interruption')
       return
     }
@@ -280,8 +288,7 @@ async function loopIterationPeriodicForExistingChat(ctx: BotContext) {
   for (const [chatId] of ctx.chats) {
     const chatCtx = ensureChatContext(ctx, chatId)
 
-    const action = await imagineAnAction(ctx.bot.botInfo.id.toString(), chatCtx.currentAbortController, chatCtx.messages, chatCtx.actions, { unreadMessages: ctx.unreadMessages })
-    let result = await dispatchAction(ctx, action, chatCtx.currentAbortController, chatCtx)
+    let result = await handleLoopStep(ctx, chatCtx)
 
     while (typeof result === 'function') {
       result = await result()
@@ -302,11 +309,11 @@ async function loopIterationPeriodicWithNoChats(ctx: BotContext) {
 function loopPeriodic(botCtx: BotContext) {
   setTimeout(async () => {
     try {
-      loopIterationPeriodicForExistingChat(botCtx)
-      loopIterationPeriodicWithNoChats(botCtx)
+      await loopIterationPeriodicForExistingChat(botCtx)
+      await loopIterationPeriodicWithNoChats(botCtx)
     }
     catch (err) {
-      if (err.name === 'AbortError')
+      if (err instanceof Error && err.name === 'AbortError')
         botCtx.logger.log('main loop was aborted - restarting loop')
       else
         botCtx.logger.withError(err).log('error in main loop')
@@ -332,7 +339,7 @@ function createBotContext(telegramBot: Bot, logger: Logg): BotContext {
   return botSelf
 }
 
-async function onMessageArrival(botContext: BotContext, chatCtx: ChatContext) {
+async function onMessageArrival(botContext: BotContext) {
   if (botContext.processing)
     return
   botContext.processing = true
@@ -361,7 +368,7 @@ async function onMessageArrival(botContext: BotContext, chatCtx: ChatContext) {
       if (nextMsg.status === 'ready') {
         switch (nextMsg.message.chat.type) {
           case 'private':
-            await recordJoinedChat(nextMsg.message.chat.id.toString(), `${nextMsg.message.from.first_name} ${nextMsg.message.from.last_name}`)
+            await recordJoinedChat(nextMsg.message.chat.id.toString(), [nextMsg.message.chat.first_name, nextMsg.message.chat.last_name].filter(Boolean).join(' '))
             break
           case 'channel':
           case 'group':
@@ -372,7 +379,7 @@ async function onMessageArrival(botContext: BotContext, chatCtx: ChatContext) {
 
         await recordMessage(botContext.bot.botInfo, nextMsg.message)
 
-        let unreadMessagesForThisChat = botContext.unreadMessages[nextMsg.message.chat.id]
+        let unreadMessagesForThisChat = botContext.unreadMessages[nextMsg.message.chat.id.toString()]
 
         if (unreadMessagesForThisChat == null) {
           botContext.logger.withField('chatId', nextMsg.message.chat.id).log('unread messages for this chat is null - creating empty array')
@@ -389,10 +396,11 @@ async function onMessageArrival(botContext: BotContext, chatCtx: ChatContext) {
           unreadMessagesForThisChat = unreadMessagesForThisChat.slice(-100)
         }
 
-        botContext.unreadMessages[nextMsg.message.chat.id] = unreadMessagesForThisChat
+        botContext.unreadMessages[nextMsg.message.chat.id.toString()] = unreadMessagesForThisChat
         botContext.logger.withField('chatId', nextMsg.message.chat.id).log('message queue processed, triggering immediate reaction')
         // Trigger immediate processing when messages are ready
-        loopIterationForChat(botContext, chatCtx, nextMsg.message)
+        const chatCtx = ensureChatContext(botContext, nextMsg.message.chat.id.toString())
+        void loopIterationForChat(botContext, chatCtx, nextMsg.message).catch(err => botContext.logger.withError(err).log('Chat loop failed'))
         botContext.messageQueue.shift()
       }
     }
@@ -406,8 +414,9 @@ async function onMessageArrival(botContext: BotContext, chatCtx: ChatContext) {
 }
 
 function ensureChatContext(botCtx: BotContext, chatId: string): ChatContext {
-  if (botCtx.chats.has(chatId)) {
-    return botCtx.chats.get(chatId)!
+  const existingContext = botCtx.chats.get(chatId)
+  if (existingContext) {
+    return existingContext
   }
 
   const newChatContext: ChatContext = {
@@ -425,31 +434,37 @@ function ensureChatContext(botCtx: BotContext, chatId: string): ChatContext {
 export async function startTelegramBot() {
   const log = useLogg('Bot').useGlobalConfig()
 
-  const telegramBot = new Bot<ExtendedContext>(env.TELEGRAM_BOT_TOKEN!)
+  const telegramBot = new Bot(env.TELEGRAM_BOT_TOKEN!)
   telegramBot.errorHandler = async err => log.withError(err).log('Error occurred')
 
   const botCtx = createBotContext(telegramBot, log)
 
   telegramBot.command('add_sticker_pack', async (ctx) => {
-    if (!(await isChatIdBotAdmin(ctx.message.from.id))) {
-      log.withField('from_id', ctx.message.from.id).log('not an admin - skipping')
+    const commandMessage = ctx.msg
+    const sender = ctx.from
+    if (!commandMessage || !sender || commandMessage.sender_chat || !(await isChatIdBotAdmin(sender.id))) {
+      log.withField('from_id', sender?.id).log('not an admin - skipping')
       return
     }
-    if (ctx.message.reply_to_message == null) {
+    if (commandMessage.reply_to_message == null) {
       await ctx.reply('Please reply to a sticker pack to add it.')
       return
     }
 
     const logger = useLogg('addStickerPack').useGlobalConfig()
 
-    const repliedSticker = ctx.message.reply_to_message.sticker
+    const repliedSticker = commandMessage.reply_to_message.sticker
+    if (!repliedSticker?.set_name) {
+      await ctx.reply('Please reply to a sticker from a sticker pack.')
+      return
+    }
     const stickerSet = await telegramBot.api.getStickerSet(repliedSticker.set_name)
 
     logger.withField('sticker_set', repliedSticker.set_name).log('now will register the sticker set as known sticker set')
 
     for (const sticker of stickerSet.stickers) {
       logger.withField('sticker', sticker).log('interpreting sticker')
-      await interpretSticker(botCtx.bot, ctx.message.reply_to_message, sticker)
+      await interpretSticker(botCtx.bot, commandMessage.reply_to_message, sticker)
       logger.withField('sticker', sticker).log('interpreted sticker')
     }
 
@@ -457,46 +472,18 @@ export async function startTelegramBot() {
     await ctx.reply('Sticker pack added.')
   })
 
-  telegramBot.on('message:sticker', async (ctx) => {
-    const messageId = `${ctx.message.chat.id}-${ctx.message.message_id}`
+  telegramBot.on(['message:sticker', 'channel_post:sticker', 'message:photo', 'channel_post:photo', 'message:text', 'channel_post:text'], async (ctx) => {
+    const incomingMessage = ctx.msg
+    const messageId = `${incomingMessage.chat.id}-${incomingMessage.message_id}`
     if (!botCtx.processedIds.has(messageId)) {
       botCtx.processedIds.add(messageId)
       botCtx.messageQueue.push({
-        message: ctx.message,
-        status: 'pending',
+        message: incomingMessage,
+        status: incomingMessage.sticker || incomingMessage.photo ? 'pending' : 'ready',
       })
     }
 
-    const chatCtx = ensureChatContext(botCtx, ctx.message.chat.id.toString())
-    onMessageArrival(botCtx, chatCtx)
-  })
-
-  telegramBot.on('message:photo', async (ctx) => {
-    const messageId = `${ctx.message.chat.id}-${ctx.message.message_id}`
-    if (!botCtx.processedIds.has(messageId)) {
-      botCtx.processedIds.add(messageId)
-      botCtx.messageQueue.push({
-        message: ctx.message,
-        status: 'pending',
-      })
-    }
-
-    const chatCtx = ensureChatContext(botCtx, ctx.message.chat.id.toString())
-    onMessageArrival(botCtx, chatCtx)
-  })
-
-  telegramBot.on('message:text', async (ctx) => {
-    const messageId = `${ctx.message.chat.id}-${ctx.message.message_id}`
-    if (!botCtx.processedIds.has(messageId)) {
-      botCtx.processedIds.add(messageId)
-      botCtx.messageQueue.push({
-        message: ctx.message,
-        status: 'ready',
-      })
-    }
-
-    const chatCtx = ensureChatContext(botCtx, ctx.message.chat.id.toString())
-    onMessageArrival(botCtx, chatCtx)
+    await onMessageArrival(botCtx)
   })
 
   await telegramBot.init()

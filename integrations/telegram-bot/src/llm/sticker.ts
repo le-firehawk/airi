@@ -9,11 +9,13 @@ import { embed } from '@xsai/embed'
 import { generateText } from '@xsai/generate-text'
 import { message } from '@xsai/utils-chat'
 
-import { findStickerDescription, recordSticker } from '../models'
+import { resolveMessageSender } from '../models/common'
+import { findStickerDescription, recordSticker } from '../models/stickers'
 import { div, span } from '../prompts/utils'
 import { interpretAnimatedSticker } from './animated-sticker'
 import { toPngBase64 } from './image'
 
+/** Describes uncached stickers and stores only nonempty model text. */
 export async function interpretSticker(bot: Bot, msg: Message, sticker: Sticker) {
   const logger = useLogg('interpretSticker').useGlobalConfig()
 
@@ -35,7 +37,12 @@ export async function interpretSticker(bot: Bot, msg: Message, sticker: Sticker)
     }
 
     const file = await bot.api.getFile(sticker.file_id)
-    const stickerRes = await fetch(`https://api.telegram.org/file/bot${bot.api.token}/${file.file_path}`)
+    const filePath = file.file_path
+    if (!filePath) {
+      throw new Error(`Telegram returned no file path for sticker ${sticker.file_id}`)
+    }
+
+    const stickerRes = await fetch(`https://api.telegram.org/file/bot${bot.api.token}/${filePath}`)
     const buffer = await stickerRes.arrayBuffer()
     const stickerBase64 = await toPngBase64(buffer)
 
@@ -56,24 +63,17 @@ export async function interpretSticker(bot: Bot, msg: Message, sticker: Sticker)
           `),
           div(
             span(`When describing, please consider`),
-            span(`The representing emoji of the sticker is ${sticker.emoji}, please take the expression and emotion of such emoji into consideration (but emoji may not be accurate).`),
-            span(`
-            This is a sticker with the emoji ${sticker.emoji} sent by user ${msg.from.first_name}
-            ${msg.from.last_name} on Telegram, which is one of the sticker from ${sticker.set_name}
-            sticker set.
-          `),
+            sticker.emoji ? span(`The sticker represents ${sticker.emoji}. Consider its expression and emotion, but treat the emoji as an imperfect clue.`) : undefined,
+            span(`This is a sticker sent by ${resolveMessageSender(msg).displayName} on Telegram.`),
+            sticker.set_name ? span(`The sticker belongs to the ${sticker.set_name} sticker set.`) : undefined,
           ),
         )),
         message.user([message.imagePart(`data:image/png;base64,${stickerBase64}`)]),
       ),
     } satisfies GenerateTextOptions
-    if (env.LLM_OLLAMA_DISABLE_THINK) {
-      (req as Record<string, unknown>).think = false
-    }
-
-    const res = await generateText(req)
-    res.text = res.text.replace(/<think>[\s\S]*?<\/think>/, '').trim()
-    if (!res.text) {
+    const res = await generateText(env.LLM_OLLAMA_DISABLE_THINK ? { ...req, think: false } : req)
+    const description = res.text?.replace(/<think>[\s\S]*?<\/think>/, '').trim()
+    if (!description) {
       throw new Error('No response text')
     }
 
@@ -85,8 +85,10 @@ export async function interpretSticker(bot: Bot, msg: Message, sticker: Sticker)
       input: 'Hello, world!',
     })
 
-    await recordSticker(stickerBase64, sticker.file_id, file.file_path, res.text, sticker.set_name, sticker.emoji, sticker.set_name)
-    logger.withField('sticker', res.text).log('Interpreted sticker')
+    // The sticker schema stores missing optional metadata as empty strings.
+    const setName = sticker.set_name ?? ''
+    await recordSticker(stickerBase64, sticker.file_id, filePath, description, setName, sticker.emoji ?? '', setName)
+    logger.withField('sticker', description).log('Interpreted sticker')
   }
   catch (err) {
     logger.withError(err).log('Error occurred')

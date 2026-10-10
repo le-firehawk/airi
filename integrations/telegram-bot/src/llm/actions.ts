@@ -40,10 +40,10 @@ export async function imagineAnAction(
     ))
     const userContent = String(div(
       vif(
-        globalStates?.incomingMessages?.length > 0,
+        (globalStates.incomingMessages?.length ?? 0) > 0,
         div(
           'Incoming messages:',
-          globalStates?.incomingMessages?.filter(Boolean).map(msg => `- ${msg?.text}`).join('\n'),
+          globalStates.incomingMessages?.map(msg => `- ${msg.text ?? msg.caption ?? '[Media message]'}`).join('\n'),
         ),
       ),
       'History actions:',
@@ -78,11 +78,13 @@ export async function imagineAnAction(
           abortSignal: currentAbortController?.signal,
         } satisfies GenerateTextOptions
         if (env.LLM_OLLAMA_DISABLE_THINK) {
-          (req as Record<string, unknown>).think = false
           s.setAttribute('llm.chat.ollama.think', false)
         }
 
-        const res = await generateText(req)
+        const res = await generateText(env.LLM_OLLAMA_DISABLE_THINK ? { ...req, think: false } : req)
+        if (!res.text) {
+          throw new Error('No response text')
+        }
         s.setAttribute('llm.chat.generate_text.response.full_text', res.text)
 
         res.text = res.text.replace(/<think>[\s\S]*?<\/think>/, '').trim()
@@ -93,7 +95,7 @@ export async function imagineAnAction(
         s.setAttribute('llm.chat.generate_text.response.text', res.text)
 
         s.end()
-        return res
+        return { ...res, text: res.text }
       })
 
       logger.withFields({

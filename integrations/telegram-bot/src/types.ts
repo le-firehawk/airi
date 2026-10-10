@@ -20,7 +20,7 @@ export interface BotContext {
     message: Message
     status: 'pending' | 'interpreting' | 'ready'
   }>
-  unreadMessages: Record<number, Message[]>
+  unreadMessages: Record<string, Message[]>
   processedIds: Set<string>
   logger: Logg
   processing: boolean
@@ -32,7 +32,7 @@ export interface BotContext {
 export interface ChatContext {
   chatId: string
 
-  currentTask?: CancellablePromise<Message.TextMessage>
+  currentTask?: CancellablePromise<void>
   currentAbortController?: AbortController
 
   messages: LLMMessage[]

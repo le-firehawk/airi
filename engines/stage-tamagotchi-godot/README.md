@@ -283,7 +283,7 @@ Export presets produce the sidecar runtime that Electron packages for release:
 
 ```bash
 godot --headless --export-release "Windows Desktop" out/win/godot-stage.exe
-godot --headless --export-release "Linux" out/linux/godot-stage
+godot --headless --export-release "Linux x64" out/linux/godot-stage
 godot --headless --export-release "macOS" out/mac/godot-stage.app
 ```
 
@@ -292,6 +292,17 @@ The output directories intentionally match electron-builder's `${os}` names:
 - Windows: `out/win`
 - Linux: `out/linux`
 - macOS: `out/mac`
+
+Run the VRM extension regression check from this project directory:
+
+```bash
+godot --headless --script res://tests/vrm-extension-check.gd
+```
+
+The check covers lifecycle return values, emissive conversion, MToon conversion,
+spring-bone export, and VRM editor plugin compilation. It exits with a nonzero
+status on a failed check. The candidate workflow also rejects export logs that
+contain Godot errors, even when the export command exits successfully.
 
 `apps/stage-tamagotchi/electron-builder.config.ts` copies the matching directory
 into `resources/godot-stage` via `extraResources`. To inspect an unpacked

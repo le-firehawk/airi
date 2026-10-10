@@ -24,13 +24,28 @@ whenever vendored add-on files differ from their upstream source.
 - Reason: some VRM 0.0 exporters include `secondaryAnimation` data without a
   scene node named `secondary`. The upstream `get_node()` call throws before
   the existing null fallback can create the node.
-- Validation: comparing vendored source files against upstream commit
-  `651205484c35f5cd7ba56475ff636e10db8ad674` shows this as the only changed
-  `.gd`/`.shader`/`.cfg`/`.cs` file under `addons/`. Runtime import then
-  completes without the `Node not found: "secondary"` importer error.
+- Validation: runtime import completes without the
+  `Node not found: "secondary"` importer error.
 - Removal condition: remove this patch after the upstream add-on ships the same
   lookup fix or otherwise handles missing `secondary` nodes before parsing
   spring bones.
+
+### VRM 1.0 lifecycle return values
+
+Files:
+
+- `addons/vrm/1.0/VRMC_materials_hdr_emissiveMultiplier.gd`
+- `addons/vrm/1.0/VRMC_materials_mtoon.gd`
+- `addons/vrm/1.0/VRMC_springBone.gd`
+
+- Local change: declare the `GLTFDocumentExtension` callback types and return
+  `OK` after successful material import or export and spring-bone export.
+- Reason: Godot `4.7.1` rejects these four callbacks because not all paths return
+  an `Error`. The dependent VRM editor plugin then fails to initialize.
+- Validation: `tests/vrm-extension-check.gd` checks empty and populated material
+  callbacks, spring-bone export, and editor plugin compilation.
+- Removal condition: remove these changes when the pinned upstream add-on
+  supplies the same lifecycle return values.
 
 ### MToon ambient and cutout shader patch
 

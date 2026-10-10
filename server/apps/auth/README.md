@@ -24,6 +24,16 @@ Small shared contracts stay beside those boundaries (`db.ts`, `env.ts`,
 `error.ts`, and `origin.ts`). Tests are collected under `src/tests`; Better
 Auth schema-generation wiring is isolated under `src/tooling`.
 
+## Discovery metadata
+
+The issuer is `PUBLIC_URL` followed by `/api/auth`.
+`routes.ts` serves OAuth metadata at `/.well-known/oauth-authorization-server/api/auth` and OpenID metadata at `/api/auth/.well-known/openid-configuration`.
+Both routes use the OAuth Provider plugin's metadata APIs.
+
+`auth.ts` acknowledges the implemented root-level OAuth route through `silenceWarnings.oauthAuthServerConfig`.
+Other plugin warnings remain enabled.
+`src/tests/routes-discovery.test.ts` covers both routes with real metadata for local and production origins, without database or Redis connections.
+
 ## Run locally
 
 ```bash

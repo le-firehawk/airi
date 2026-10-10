@@ -488,6 +488,10 @@ export function createAuth(
         scopes: [...OIDC_SCOPES],
         validAudiences: [env.PUBLIC_URL],
         accessTokenExpiresIn: 3600,
+        // routes.ts serves /.well-known/oauth-authorization-server/api/auth at the application root.
+        silenceWarnings: {
+          oauthAuthServerConfig: true,
+        },
         // NOTICE: do not enable cachedTrustedClients here.
         // The oauth-provider plugin caches the full oauth_client row in-process,
         // including redirectUris. We mutate redirectUris at runtime for trusted

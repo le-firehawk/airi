@@ -4,6 +4,7 @@
   "version": "0.12.0-beta.5",
   "private": true,
   "description": "LLM powered virtual character",
+  "desktopName": "airi.desktop",
   "author": {
     "name": "Moeru AI",
     "email": "airi@moeru.ai",

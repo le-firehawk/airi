@@ -18,7 +18,7 @@ async function parseTimelineTweets(page: Page): Promise<Tweet[]> {
     const tweets: Tweet[] = []
 
     for (const tweetElement of tweetElements) {
-      const tweet = await extractTweetData(page, tweetElement)
+      const tweet = await extractTweetData(tweetElement)
       if (tweet) {
         tweets.push(tweet)
       }
@@ -34,11 +34,10 @@ async function parseTimelineTweets(page: Page): Promise<Tweet[]> {
 
 /**
  * Extract tweet data from tweet element
- * @param page Playwright page instance
  * @param tweetElement Tweet element handle
  * @returns Promise resolving to Tweet object
  */
-async function extractTweetData(page: Page, tweetElement: ElementHandle): Promise<Tweet | null> {
+async function extractTweetData(tweetElement: ElementHandle): Promise<Tweet | null> {
   try {
     // Extract tweet ID
     const id = await extractTweetId(tweetElement)

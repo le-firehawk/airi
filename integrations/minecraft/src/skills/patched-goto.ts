@@ -137,7 +137,7 @@ export function computeTimeoutFromEta(estimatedMs: number): number {
 }
 
 /**
- * A robust pathfinding wrapper that provides:
+ * Pathfinding with:
  * - ETA-based dynamic timeout (recalculated on path replanning)
  * - Periodic progress tracking with stagnation detection
  * - Structured result with telemetry

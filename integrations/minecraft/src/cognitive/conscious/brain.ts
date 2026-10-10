@@ -454,7 +454,7 @@ export class Brain {
     }
     const variables = this.repl.describeGlobals(
       this.deps.taskExecutor.getAvailableActions(),
-      this.createRuntimeGlobals(replEvent, snapshot as unknown as Record<string, unknown>),
+      this.createRuntimeGlobals(replEvent, { ...snapshot }),
       { includeBuiltins: options.includeBuiltins },
     )
 
@@ -625,7 +625,7 @@ export class Brain {
           payload: { source: 'debug-repl' },
           source: { type: 'system', id: 'debug-repl' },
           timestamp: Date.now(),
-        }, snapshot as unknown as Record<string, unknown>),
+        }, { ...snapshot }),
         async (action: ActionInstruction) => {
           const actionDef = actionDefs.get(action.tool)
           if (actionDef?.followControl === 'detach')
@@ -2082,7 +2082,7 @@ export class Brain {
       const runResult = await this.repl.evaluate(
         codeToEvaluate,
         this.deps.taskExecutor.getAvailableActions(),
-        this.createRuntimeGlobals(event, snapshot as unknown as Record<string, unknown>, bot),
+        this.createRuntimeGlobals(event, { ...snapshot }, bot),
         async (action: ActionInstruction) => {
           const actionDef = actionDefs.get(action.tool)
           if (action.tool === 'stop') {

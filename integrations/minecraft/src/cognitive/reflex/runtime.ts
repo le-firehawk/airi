@@ -294,14 +294,7 @@ export class ReflexRuntime {
       return
     }
 
-    // Explicit task modes (work/wander) take priority over idle follow and suppress it.
-    //
-    // NOTICE: 'alert' was previously here too, which meant any nearby threat (e.g. mobs in a cave)
-    // flipped the bot to 'alert' and SILENTLY cancelled auto-follow — so "follow me down the mine"
-    // left the bot standing still near hostiles. There is currently no alert/defend behavior that
-    // sets a competing pathfinder goal (the only reflex behavior is idle-gaze), so suppressing follow
-    // during alert gave the bot nothing useful to do. A companion should stay with its owner INTO
-    // danger, so alert no longer cancels follow.
+    // Work and wander suppress idle follow. Alert does not assign a competing pathfinder goal, so threats must not silently cancel following.
     if (mode === 'work' || mode === 'wander') {
       if (snapshot.autonomy.followActive)
         this.context.updateAutonomy({ followActive: false })

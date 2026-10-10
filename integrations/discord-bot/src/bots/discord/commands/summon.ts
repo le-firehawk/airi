@@ -385,7 +385,7 @@ export class VoiceManager extends EventEmitter {
       try {
         await this.processTranscription(userId, member, guildId, channelId)
         // Clean all users' previous buffers
-        this.userStates.forEach((state, _) => {
+        this.userStates.forEach((state) => {
           state.buffers.length = 0
           state.totalLength = 0
         })

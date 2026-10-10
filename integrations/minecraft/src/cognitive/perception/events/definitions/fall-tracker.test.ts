@@ -3,21 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { damageTakenEvent } from './damage-taken'
 import { classifyRecentFall, recordPhysicsTick } from './fall-tracker'
 
-// ROOT CAUSE:
-//
-// Fall damage was classified by the instantaneous velocity at the moment the `health` event fired:
-//
-//   if (velocityY < -0.2 && onGround === false) return { cause: 'gravity' }
-//
-// But the server applies fall damage on landing and the health packet arrives a few ticks later,
-// by which point prismarine-physics has already set onGround=true and reset velocity.y≈0. So the
-// check almost never matched: fall damage fell through to the nearest-entity branch and was
-// mislabeled as 'player'/'mob' (or 'unknown'), e.g. blaming a nearby player for a self-inflicted
-// fall.
-//
-// We fixed this by sampling vertical motion every physicsTick (recordPhysicsTick) and remembering
-// the descent speed from just before landing, then classifying via classifyRecentFall at damage
-// time. Each test below establishes its own landing so the shared module state is deterministic.
+// Health packets arrive after landing resets velocity. Record descent on physics ticks and classify recent falls at damage time. Each test establishes its own landing.
 
 /** Build a vertical-motion snapshot for one sampled tick. */
 function motion(velocityY: number, onGround: boolean): { velocity: { y: number }, onGround: boolean } {

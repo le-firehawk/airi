@@ -27,51 +27,48 @@ export function useLogger() {
 
   const logger = useLogg(`${dirName}/${fileName}`).useGlobalConfig()
 
-  // Proxy logger to broadcast events
-  // We need to preserve the original formatting/behavior while adding the side-effect
-  return {
-    log: (message: string, ...args: any[]) => {
-      logger.log(message, ...args)
-      DebugService.getInstance().log('INFO', `[${dirName}/${fileName}] ${message}`, { args })
-    },
-    error: (message: string, ...args: any[]) => {
-      logger.error(message, ...args)
-      DebugService.getInstance().log('ERROR', `[${dirName}/${fileName}] ${message}`, { args })
-    },
-    warn: (message: string, ...args: any[]) => {
-      logger.warn(message, ...args)
-      DebugService.getInstance().log('WARN', `[${dirName}/${fileName}] ${message}`, { args })
-    },
-    withFields: (fields: Record<string, any>) => {
-      const subLogger = logger.withFields(fields)
-      // Return proxied sub-logger
-      return {
-        log: (message: string) => {
-          subLogger.log(message)
-          DebugService.getInstance().log('INFO', `[${dirName}/${fileName}] ${message}`, fields)
-        },
-        error: (message: string) => {
-          subLogger.error(message)
-          DebugService.getInstance().log('ERROR', `[${dirName}/${fileName}] ${message}`, fields)
-        },
-        warn: (message: string) => {
-          subLogger.warn(message)
-          DebugService.getInstance().log('WARN', `[${dirName}/${fileName}] ${message}`, fields)
-        },
-        errorWithError: (message: string, error: unknown) => {
-          subLogger.errorWithError(message, error)
-          DebugService.getInstance().log('ERROR', `[${dirName}/${fileName}] ${message}`, { ...fields, error })
-        },
-        withFields: (newFields: Record<string, any>) => useLogger().withFields({ ...fields, ...newFields }), // Recursion hack for simplicity, ideally properly implement interface
-        withError: (err: unknown) => useLogger().withFields({ ...fields, error: err }), // Recursion hack
-      }
-    },
-    withError: (error: unknown) => {
-      return useLogger().withFields({ error })
-    },
-    errorWithError: (message: string, error: unknown) => {
-      logger.errorWithError(message, error)
-      DebugService.getInstance().log('ERROR', `[${dirName}/${fileName}] ${message}`, { error })
-    },
-  } as unknown as ReturnType<typeof useLogg> // Force type for now as complete Logg interface is complex to mock fully perfectly without more boilerplate
+  // Keep the complete logger contract while forwarding debug records.
+  function withDebugRecords(target: Logger, fields: Record<string, unknown>): Logger {
+    const overrides: Partial<Logger> = {
+      useGlobalConfig: () => withDebugRecords(target.useGlobalConfig(), fields),
+      child: more => withDebugRecords(target.child(more), { ...fields, ...more }),
+      withContext: context => withDebugRecords(target.withContext(context), fields),
+      withLogLevel: level => withDebugRecords(target.withLogLevel(level), fields),
+      withLogLevelString: level => withDebugRecords(target.withLogLevelString(level), fields),
+      withFormat: format => withDebugRecords(target.withFormat(format), fields),
+      withCallStack: error => withDebugRecords(target.withCallStack(error), fields),
+      withTimeFormatter: formatter => withDebugRecords(target.withTimeFormatter(formatter), fields),
+      withErrorProcessor: processor => withDebugRecords(target.withErrorProcessor(processor), fields),
+      log: (message: string, ...args: unknown[]) => {
+        target.log(message, ...args)
+        DebugService.getInstance().log('INFO', `[${dirName}/${fileName}] ${message}`, { ...fields, args })
+      },
+      error: (...parameters: Parameters<Logger['error']>) => {
+        target.error(...parameters)
+        const [message, ...args] = parameters
+        DebugService.getInstance().log('ERROR', `[${dirName}/${fileName}] ${message}`, { ...fields, args })
+      },
+      warn: (message: string, ...args: unknown[]) => {
+        target.warn(message, ...args)
+        DebugService.getInstance().log('WARN', `[${dirName}/${fileName}] ${message}`, { ...fields, args })
+      },
+      withFields: more => withDebugRecords(target.withFields(more), { ...fields, ...more }),
+      withField: (key, value) => withDebugRecords(target.withField(key, value), { ...fields, [key]: value }),
+      withError: error => withDebugRecords(target.withError(error), { ...fields, error }),
+      errorWithError: (message, error) => {
+        target.errorWithError(message, error)
+        DebugService.getInstance().log('ERROR', `[${dirName}/${fileName}] ${message}`, { ...fields, error })
+      },
+    }
+    return new Proxy(target, {
+      get(current, property) {
+        if (Object.hasOwn(overrides, property))
+          return Reflect.get(overrides, property)
+        const member: unknown = Reflect.get(current, property)
+        return typeof member === 'function' ? member.bind(current) : member
+      },
+    })
+  }
+
+  return withDebugRecords(logger, {})
 }

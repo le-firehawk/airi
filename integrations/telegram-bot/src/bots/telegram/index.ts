@@ -178,37 +178,6 @@ async function handleLoopStep(ctx: BotContext, chatCtx: ChatContext, incomingMes
     chatCtx.currentAbortController.abort()
   }
 
-  // // Create a new abort controller for this loop execution
-  // const unreadMessagesForThisChat = ctx.unreadMessages[chatCtx.chatId]
-
-  // if (unreadMessagesForThisChat && unreadMessagesForThisChat.length > 0) {
-  //   const processingTime = ctx.currentProcessingStartTime
-  //     ? Date.now() - ctx.currentProcessingStartTime
-  //     : 0
-
-  //   const messageCount = unreadMessagesForThisChat.length
-
-  //   // Factors to consider for interruption:
-  //   //
-  //   // 1. How long we've been processing (longer = more likely to finish)
-  //   // 2. Number of new messages (more = higher chance to interrupt)
-  //   // 3. Message content importance (could be determined by LLM)
-  //   const shouldInterrupt = await shouldInterruptProcessing({
-  //     processingTime,
-  //     messageCount,
-  //     currentMessages: chatCtx.messages,
-  //     newMessages: unreadMessagesForThisChat,
-  //     chatId: chatCtx.chatId,
-  //   })
-
-  //   if (shouldInterrupt) {
-  //     ctx.logger.withField('chat_id', chatCtx.chatId).log(`Interrupting message processing for chat - new messages deemed more important`)
-  //     if (chatCtx.currentAbortController) {
-  //       chatCtx.currentAbortController.abort()
-  //     }
-  //   }
-  // }
-
   const currentController = new AbortController()
   if (chatCtx) {
     chatCtx.currentAbortController = currentController

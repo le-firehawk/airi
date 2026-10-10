@@ -3,15 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { recentAttacker, recordAttacker } from './attacker-tracker'
 import { damageTakenEvent } from './damage-taken'
 
-// ROOT CAUSE:
-//
-// inferDamageSource attributed damage to the NEAREST entity. When a skeleton shot the bot with a
-// crossbow/bow while the master (dssadg) stood next to it, the nearest entity was the master, so the
-// bot reported "主人你又打我!" and tried to retaliate against its own master instead of the mob.
-//
-// Fix: mineflayer emits entityHurt(victim, source) from the 1.20+ damage_event packet, where source
-// is the REAL attacker. recordAttacker captures it; inferDamageSource prefers it over the nearest-
-// entity guess.
+// Use the damage_event attacker instead of the nearest entity. Otherwise a nearby owner can be blamed for a ranged mob attack.
 
 /** Minimal PerceptionContext stub mirroring the damage-taken harness. */
 function makeCtx(health: number, entity: Record<string, any>, nearby: Record<string, any> = {}): any {

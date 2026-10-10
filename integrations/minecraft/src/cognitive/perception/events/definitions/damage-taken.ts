@@ -39,10 +39,7 @@ function inferDamageSource(ctx: { bot: { entity?: any, entities?: Record<string,
   if (classifyRecentFall(entity, Date.now()))
     return { cause: 'fall' }
 
-  // Real attacker: mineflayer's `entityHurt` (1.20+ damage_event) tells us the ACTUAL entity that
-  // dealt the damage — the skeleton that shot the arrow, the player who hit. Prefer it over the
-  // unreliable "nearest entity" guess below, which blamed the master for a mob's ranged attack when
-  // the master stood nearby. See attacker-tracker.ts.
+  // Prefer the recorded damage_event attacker. Nearest-entity guesses can blame a nearby player for a ranged mob attack. See attacker-tracker.ts.
   const attacker = recentAttacker(Date.now())
   if (attacker) {
     const attributed = attributeDamageEntity(attacker, undefined, ctx.entityId)

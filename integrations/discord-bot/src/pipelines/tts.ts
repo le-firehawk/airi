@@ -12,12 +12,12 @@ import { toWav } from '@proj-airi/audio'
 import { createOpenAI } from '@xsai-ext/providers/create'
 import { generateTranscription } from '@xsai/generate-transcription'
 
-export class WhisperLargeV3Pipeline {
-  static task: PipelineType = 'automatic-speech-recognition'
-  static model = 'Xenova/whisper-medium.en'
-  static instance = null
+class WhisperPipeline {
+  task: PipelineType = 'automatic-speech-recognition'
+  model = 'Xenova/whisper-medium.en'
+  instance: Awaited<ReturnType<typeof pipeline>> | null = null
 
-  static async getInstance(progress_callback = null) {
+  async getInstance(progress_callback = null) {
     if (this.instance === null) {
       this.instance = await pipeline(this.task, this.model, { progress_callback })
     }
@@ -25,6 +25,8 @@ export class WhisperLargeV3Pipeline {
     return this.instance
   }
 }
+
+export const WhisperLargeV3Pipeline = new WhisperPipeline()
 
 export function textFromResult(result: Array<{ text: string }> | { text: string }) {
   if (Array.isArray(result)) {

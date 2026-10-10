@@ -254,10 +254,7 @@ export const actionsList: Action[] = [
     name: 'collectBlocks',
     description: 'Automatically collect the nearest blocks of a given type.',
     execution: 'async',
-    // NOTICE: detach auto-follow before mining. The idle auto-follow reflex drives the same
-    // mineflayer pathfinder as digging; if left attached it periodically re-points the bot at the
-    // followed player, which both cancels navigation to the ore ("Path was stopped") and aborts the
-    // in-progress bot.dig ("Digging aborted"), producing the stutter of repeated half-digs.
+    // Detach idle auto-follow before mining. Both actions control the same pathfinder. Auto-follow otherwise cancels navigation and digging, causing repeated incomplete digs.
     followControl: 'detach',
     schema: z.object({
       type: z.string().describe('The block type to collect.'),

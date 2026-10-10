@@ -14,6 +14,7 @@ import { parse } from 'best-effort-json-parser'
 
 import { personality, systemTicking } from '../prompts'
 import { div, span, vif } from '../prompts/utils'
+import { parseGeneratedAction } from './action-schema'
 
 export async function imagineAnAction(
   botId: string,
@@ -163,7 +164,7 @@ export async function imagineAnAction(
             raw.chatId = unreadChatIds[0]
         }
 
-        const action = raw as unknown as Action
+        const action = parseGeneratedAction(raw)
         s.setAttribute('telegram.bot.id', botId)
         s.setAttribute('telegram.module.generate_agent_action.parsed_action', JSON.stringify(action))
 

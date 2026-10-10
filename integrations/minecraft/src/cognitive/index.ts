@@ -1,5 +1,5 @@
 import type { MineflayerPlugin } from '../libs/mineflayer'
-import type { CognitiveEngineOptions, MineflayerWithAgents } from './types'
+import type { CognitiveEngineOptions } from './types'
 
 import { config } from '../composables/config'
 import { DebugService } from '../debug'
@@ -68,9 +68,7 @@ export function CognitiveEngine(options: CognitiveEngineOptions): MineflayerPlug
       taskExecutor.setMineflayer(bot)
       await taskExecutor.initialize()
 
-      // Type conversion
-      const botWithAgents = bot as unknown as MineflayerWithAgents
-      botWithAgents.reflexManager = reflexManager
+      const botWithAgents = Object.assign(bot, { reflexManager })
 
       const startCognitive = () => {
         if (started)

@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import type { DefaultTheme } from 'vitepress/theme'
 
-import type { Author } from '../functions/authors.data'
-
 import { tryCatch } from '@moeru/std'
 import { intlFormat } from 'date-fns'
 import { AnimatePresence, Motion } from 'motion-v'
@@ -19,9 +17,8 @@ import DocSidebar from '../components/DocSidebar.vue'
 import DocTopbar from '../components/DocTopbar.vue'
 
 import { isBetweenHalloweenAndHalfOfNovember } from '../composables/date'
+import { data as authorsData } from '../functions/authors.data'
 import { flatten } from '../utils/flatten'
-
-import * as authorsData from '../functions/authors.data'
 
 const { t } = useI18n()
 const { theme, frontmatter } = useData()
@@ -105,7 +102,7 @@ const publishedAt = computed(() => {
 })
 
 const authors = computed(() => {
-  const data = (authorsData as unknown as { data: Array<{ url: string, authors: Author[] }> }).data
+  const data = authorsData
   const currentPath = normalizeDocumentPath(path.value)
 
   return data.find(item =>

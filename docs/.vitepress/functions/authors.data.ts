@@ -15,6 +15,9 @@ export interface Author {
   avatarFallback: string
 }
 
+/** Build-time data injected by VitePress for page consumers. */
+export declare const data: Array<{ url: string, authors: Author[] }>
+
 interface MarkdownAuthor {
   name?: string
   role?: string

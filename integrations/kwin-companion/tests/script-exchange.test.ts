@@ -19,7 +19,8 @@ class TestSignal implements Signal {
   }
 
   emit(): void {
-    for (const handler of [...this.handlers])
+    // Snapshot handlers so connect/disconnect during delivery cannot alter this emission.
+    for (const handler of Array.from(this.handlers))
       handler()
   }
 }

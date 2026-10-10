@@ -39,8 +39,8 @@ export class AiriBridge {
   private readonly moduleAnnouncedListeners = new Set<(event: ModuleAnnouncedEvent) => void>()
 
   constructor(
-    private readonly client: Client,
-    private readonly eventBus: EventBus,
+    private readonly client: Pick<Client, 'send' | 'onEvent' | 'offEvent'>,
+    private readonly eventBus: Pick<EventBus, 'emit'>,
   ) {}
 
   init(): void {
@@ -55,15 +55,7 @@ export class AiriBridge {
 
       this.sendEmit(cmd.commandId, 'queued', 'Command received')
 
-      // A spark:command is high-level guidance from the AIRI server. It must carry enough weight to
-      // trigger a fresh decision (Conscious) cycle, never be silently filed into history — so we
-      // always route it through handleActionIntent (→ signal:airi_command → enqueueEvent → decision cycle).
-      //
-      // We intentionally do not special-case `intent === 'context'`: that branch used to emit
-      // signal:airi_context which Brain pushes to conversationHistory WITHOUT waking the loop, so a
-      // command that mislabels its intent as "context" would be silently dropped from action. True
-      // passive context still has its own dedicated channel — `context:update` (see
-      // contextUpdateHandler) — which remains history-only and is unaffected by this routing.
+      // Every spark:command wakes the decision loop, including commands labeled context. Passive context:update events remain history-only.
       this.handleActionIntent(cmd)
     }
 
@@ -195,12 +187,7 @@ export class AiriBridge {
   }
 
   private handleActionIntent(cmd: SparkCommandData): void {
-    // A spark:command is high-level guidance from the AIRI server. Route it through the explicit
-    // `airi_command` signal so the brain runs a fresh decision cycle
-    // (resetNoActionFollowupBudget('airi_command'), normal Conscious wake-up) instead of silently
-    // filing it into history. The directive is attributed to the AIRI server as a neutral source,
-    // not to any specific in-game player. The status context tells Stage when this relay is available
-    // while this bridge remains the final receiver-side availability gate.
+    // The airi_command signal starts a fresh decision cycle with AIRI as its neutral source. Stage receives relay availability separately. This bridge enforces receiver availability.
     const firstOption = cmd.guidance?.options?.[0]
     const label = firstOption?.label?.trim()
     const steps = firstOption?.steps ?? []

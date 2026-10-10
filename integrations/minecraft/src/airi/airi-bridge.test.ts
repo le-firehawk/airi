@@ -1,7 +1,4 @@
-import type { Client } from '@proj-airi/server-sdk'
-
-import type { EventBus } from '../cognitive/event-bus'
-
+import { Client } from '@proj-airi/server-sdk'
 import { describe, expect, it, vi } from 'vitest'
 
 import { AiriBridge } from './airi-bridge'
@@ -19,23 +16,25 @@ interface TestCommandEvent {
 }
 
 function createBridgeHarness(options: { commandAvailable?: boolean } = {}) {
-  const handlers = new Map<string, (event: TestCommandEvent) => void>()
-  const client = {
-    send: vi.fn(),
-    onEvent: vi.fn((type: string, handler: (event: TestCommandEvent) => void) => {
-      handlers.set(type, handler)
-    }),
-    offEvent: vi.fn(),
+  const client = new Client({ name: 'bridge-test', autoConnect: false, heartbeat: false })
+  vi.spyOn(client, 'send').mockImplementation(() => {})
+  const subscriptions = vi.spyOn(client, 'onEvent')
+  const handlers = {
+    get(type: string) {
+      const subscription = subscriptions.mock.calls.find(([event]) => event === type)
+      if (!subscription)
+        return undefined
+      return (event: TestCommandEvent) => subscription[1]({
+        type: 'spark:command',
+        data: event.data,
+        metadata: { source: { id: 'bridge-test' }, event: { id: event.data.commandId } },
+      })
+    },
   }
   const eventBus = {
     emit: vi.fn(),
   }
-  // NOTICE:
-  // The bridge consumes only send/onEvent/offEvent and emit, while the production classes own many unrelated fields.
-  // The root cause is that AiriBridge accepts concrete Client and EventBus classes instead of narrow structural ports.
-  // Source/context: integrations/minecraft/src/airi/airi-bridge.ts constructor.
-  // Remove this cast when the bridge constructor accepts dedicated client and event-bus interfaces.
-  const bridge = new AiriBridge(client as unknown as Client, eventBus as unknown as EventBus)
+  const bridge = new AiriBridge(client, eventBus)
   bridge.init()
   bridge.setCommandAvailable(options.commandAvailable ?? true)
 

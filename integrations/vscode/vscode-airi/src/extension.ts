@@ -1,4 +1,4 @@
-import type { Lifecycle, ProvidedBy } from 'injeca'
+import type { Lifecycle } from 'injeca'
 import type * as vscode from 'vscode'
 
 import { initLogger, LoggerFormat, LoggerLevel, useLogger } from '@guiiai/logg'
@@ -13,6 +13,8 @@ interface IntervalHandle {
   clearInterval: () => void
   setInterval: (fn: () => void) => NodeJS.Timeout
 }
+
+let activeDependencies: Parameters<typeof unregisterListeners>[0] & { client: Client } | undefined
 
 /**
  * Activate the plugin
@@ -72,6 +74,8 @@ async function setup(params: {
   isEnabled: boolean
   sendInterval: number
 }) {
+  activeDependencies = params
+
   // Connect to Airi Channel Server
   if (params.isEnabled) {
     const connected = await params.client.connect()
@@ -232,11 +236,12 @@ function stopMonitoring(params: { controlLoopInterval: IntervalHandle }) {
  * Deactivate the plugin
  */
 export async function deactivate() {
-  const { client } = await injeca.resolve({ client: { key: 'proj-airi:client' } as unknown as ProvidedBy<Client> })
-  const { eventListeners } = await injeca.resolve({ eventListeners: { key: 'self:event-listeners' } as unknown as ProvidedBy<vscode.Disposable[]> })
-  const { controlLoopInterval } = await injeca.resolve({ controlLoopInterval: { key: 'self:control-loop:interval:send' } as unknown as ProvidedBy<IntervalHandle> })
+  const dependencies = activeDependencies
+  activeDependencies = undefined
+  if (!dependencies)
+    return
 
-  unregisterListeners({ eventListeners, controlLoopInterval })
-  client?.disconnect()
+  unregisterListeners(dependencies)
+  dependencies.client.disconnect()
   useLogger().log('AIRI deactivated!')
 }

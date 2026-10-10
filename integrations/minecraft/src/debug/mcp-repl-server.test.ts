@@ -33,7 +33,7 @@ vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => {
 })
 
 describe('mcpReplServer', () => {
-  let brain: Brain
+  let brain: Pick<Brain, 'getDebugSnapshot' | 'executeDebugRepl' | 'injectDebugEvent' | 'getReplState' | 'getLastLlmInput' | 'getLlmLogs' | 'getLlmTrace'>
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -65,14 +65,8 @@ describe('mcpReplServer', () => {
         attempt: 1,
       }),
       getLlmLogs: vi.fn().mockReturnValue([{ id: 1, text: 'log' }]),
-      getLlmTrace: vi.fn().mockReturnValue([{
-        id: 1,
-        turnId: 1,
-        content: 'await skip()',
-        messageCount: 2,
-        estimatedTokens: 10,
-      }]),
-    } as unknown as Brain
+      getLlmTrace: vi.fn().mockReturnValue([{ id: 1, turnId: 1, content: 'await skip()', messageCount: 2, estimatedTokens: 10 }]),
+    }
 
     void new McpReplServer(brain)
   })

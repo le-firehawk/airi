@@ -36,7 +36,7 @@ export class McpReplServer {
   private streamableTransport: StreamableHTTPServerTransport | null = null
   private readonly mcpServer: McpServer
 
-  constructor(private readonly brain: Brain, private readonly port: number = 3001) {
+  constructor(private readonly brain: Pick<Brain, 'getDebugSnapshot' | 'executeDebugRepl' | 'injectDebugEvent' | 'getReplState' | 'getLastLlmInput' | 'getLlmLogs' | 'getLlmTrace'>, private readonly port: number = 3001) {
     this.mcpServer = new McpServer({
       name: 'Minecraft Brain REPL',
       version: '1.0.0',

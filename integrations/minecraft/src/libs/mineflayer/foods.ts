@@ -1,6 +1,3 @@
-import type { Bot } from 'mineflayer'
-import type { Item } from 'prismarine-item'
-
 /**
  * Raw foods that smelt into a strictly higher-saturation cooked variant. Eating these raw is
  * wasteful, so the auto-eat reflex leaves them alone and the conscious brain cooks them first.
@@ -23,10 +20,10 @@ const RAW_TO_COOKED: Record<string, string> = {
 }
 
 /** prismarine-item enriches inventory items with `foodPoints` at runtime; it is absent from its types. */
-type MaybeFood = Item & { foodPoints?: number }
+interface MaybeFood { name: string, foodPoints?: number }
 
-function foodPointsOf(item: Item): number {
-  return (item as MaybeFood).foodPoints ?? 0
+function foodPointsOf(item: MaybeFood): number {
+  return item.foodPoints ?? 0
 }
 
 /**
@@ -62,8 +59,8 @@ export function isCookableToHigherSaturation(itemName: string): boolean {
  *   on hand is still-raw cookable food (left for the conscious cook-then-eat path) or there is no
  *   food at all.
  */
-export function selectReadyFood(bot: Bot): Item | null {
-  let best: Item | null = null
+export function selectReadyFood<T extends MaybeFood>(bot: { inventory: { items: () => T[] } }): T | null {
+  let best: T | null = null
   let bestPoints = -1
   for (const item of bot.inventory.items()) {
     const points = foodPointsOf(item)
@@ -80,6 +77,6 @@ export function selectReadyFood(bot: Bot): Item | null {
 }
 
 /** Whether the bot has any food it can eat right now without cooking. See {@link selectReadyFood}. */
-export function hasReadyFood(bot: Bot): boolean {
+export function hasReadyFood(bot: { inventory: { items: () => MaybeFood[] } }): boolean {
   return selectReadyFood(bot) !== null
 }

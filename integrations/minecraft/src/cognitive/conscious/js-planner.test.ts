@@ -186,11 +186,7 @@ describe('javaScriptPlanner', () => {
 
   // https://github.com/moeru-ai/airi/pull/1915 (Codex P2)
   it('exposes self.pos / self.position as aliases of self.location in the sandbox', async () => {
-    // ROOT CAUSE:
-    // The prompt promises self.pos.x, but the worker bound `self` straight from the reflex snapshot
-    // (only `.location`), so self.pos / self.position were undefined and scripts crashed with
-    // "Cannot read properties of undefined". buildRuntimeSnapshot now aliases pos/position -> location
-    // on the isolate snapshot the worker binds from. Earlier the alias only reached the debug preview.
+    // The worker binds self from the isolate snapshot. Coordinate aliases must reach that snapshot, not only the debug preview.
     const planner = new JavaScriptPlanner()
     const executeAction = vi.fn(async action => `ok:${action.tool}`)
     const withSelf = {

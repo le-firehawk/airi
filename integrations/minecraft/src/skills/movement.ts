@@ -285,10 +285,7 @@ export async function stay(mineflayer: Mineflayer, seconds = 30): Promise<boolea
 }
 
 export async function goToBed(mineflayer: Mineflayer): Promise<boolean> {
-  // Consider several nearby beds, not just the closest. The closest is often already occupied (e.g.
-  // the master is lying in it), and mineflayer's bot.sleep throws "the bed is occupied" — we want to
-  // fall through to a free bed instead of giving up. `name.includes('bed')` matches every colour
-  // variant (white_bed, red_bed, ...); the literal name "bed" does not exist in modern Minecraft.
+  // Try several beds because the closest can be occupied. Match colored bed names, since modern Minecraft has no literal bed block name.
   const bedPositions = mineflayer.bot.findBlocks({
     matching: block => block.name.includes('bed'),
     maxDistance: 32,

@@ -92,11 +92,7 @@ export function createAgentContainer(airiClient: Client) {
         eventBus,
         logger: useLogg('ruleEngine').useGlobalConfig(),
         config: {
-          // NOTICE: Use fileURLToPath, not URL.pathname — on Windows `.pathname` yields
-          // "/D:/.../rules" (leading slash before the drive), which fs.existsSync/readdirSync cannot
-          // resolve, so the rule loader silently found 0 rules and the whole perception rule engine
-          // (damage/punch/movement signals) was dead. The rest of the codebase already uses
-          // fileURLToPath; this line was the lone deviation.
+          // fileURLToPath handles Windows drive letters. URL.pathname adds a leading slash and prevents the rule loader from finding perception rules.
           rulesDir: fileURLToPath(new URL('./perception/rules', import.meta.url)),
           slotMs: 20,
         },

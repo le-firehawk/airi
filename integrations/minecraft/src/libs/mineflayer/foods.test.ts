@@ -1,5 +1,3 @@
-import type { Bot } from 'mineflayer'
-
 import { describe, expect, it } from 'vitest'
 
 import { cookedVariantOf, hasReadyFood, isCookableToHigherSaturation, selectReadyFood } from './foods'
@@ -10,8 +8,8 @@ function item(name: string, foodPoints?: number): { name: string, foodPoints?: n
   return foodPoints === undefined ? { name } : { name, foodPoints }
 }
 
-function botWith(items: Array<{ name: string, foodPoints?: number }>): Bot {
-  return { inventory: { items: () => items } } as unknown as Bot
+function botWith(items: Array<{ name: string, foodPoints?: number }>) {
+  return { inventory: { items: () => items } }
 }
 
 describe('food classification', () => {

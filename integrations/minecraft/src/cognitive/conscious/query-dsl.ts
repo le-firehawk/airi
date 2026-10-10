@@ -395,10 +395,7 @@ function collectEntityRecords(mineflayer: Mineflayer, range: number): EntityReco
         return null
 
       return {
-        // NOTICE: for player entities mineflayer's `entity.name` is the literal type "player"; the
-        // real in-game id is `username`. Expose the username as `name` so the LLM (and whereName)
-        // see "dssadg", not a phantom player called "player". Mobs have no username and fall back to
-        // their species name. Root cause of the bot mistaking its master for an unknown "player".
+        // Player entity.name is the type name. Use username so the model and whereName identify the player. Mobs retain their species name.
         name: (entity as Entity).username ?? entity.name ?? 'unknown',
         type: entity.type,
         username: (entity as Entity).username,

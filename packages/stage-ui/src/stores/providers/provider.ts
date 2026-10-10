@@ -190,13 +190,11 @@ export const useProviderStore = defineStore('provider', () => {
   })
   const providerRevalidationLoops = new Map<string, { pause: () => void, resume: () => void }>()
 
-  // Server-driven availability overrides for providers whose visibility can
-  // only be decided at runtime from the backend (e.g. the streaming TTS
-  // provider, which exists only when `UNSPEECH_UPSTREAM.streaming` is
-  // configured server-side). A `false` entry hides the provider from the
-  // available lists regardless of its static `isAvailableBy`; an absent entry
-  // means no override. Written by the auth-sync glue after it probes the
-  // server. Reactive so the available/configured provider lists re-derive.
+  // Authentication setup writes reactive server availability after probing the backend, including
+  // streaming TTS configuration.
+  // False hides a provider regardless of static isAvailableBy. An absent entry leaves static
+  // availability unchanged.
+  // Available and configured provider lists recompute when these overrides change.
   const providerAvailabilityOverrides = computed({
     get: () => providerStateStore.availabilityOverrides,
     set: value => providerStateStore.availabilityOverrides = value,
@@ -493,7 +491,8 @@ export const useProviderStore = defineStore('provider', () => {
   // Follower windows never run onAfterSync. Drop stale local clients when
   // replicated credentials change.
   watch(providerCredentials, () => {
-    for (const providerId of [...providerInstanceCache.keys()]) {
+    const cachedProviderIds = [...providerInstanceCache.keys()]
+    for (const providerId of cachedProviderIds) {
       const current = providerCredentials.value[providerId]
       if (current && previousCredentialHashes.get(providerId) === JSON.stringify(current))
         continue

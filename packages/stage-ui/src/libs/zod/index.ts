@@ -1,18 +1,15 @@
-import type { ZodObject } from 'zod'
 import type { $ZodType } from 'zod/v4/core'
 
-import { ZodDefault } from 'zod'
+import { ZodDefault, ZodObject } from 'zod'
 
 // https://github.com/colinhacks/zod/discussions/1953#discussioncomment-14098158
 export function getSchemaDefault<T>(schema: $ZodType<T> | null | undefined): Partial<T> {
-  if (!schema)
+  if (!(schema instanceof ZodObject))
     return {}
 
-  const object = schema as unknown as ZodObject
-
   return Object.fromEntries(
-    Object.entries(object.shape)
+    Object.entries(schema.shape)
       .map(([k, v]) => [k, v instanceof ZodDefault ? v._def.defaultValue : undefined])
-      .filter(([_, v]) => v !== undefined),
+      .filter(([, v]) => v !== undefined),
   )
 }

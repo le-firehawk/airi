@@ -260,10 +260,8 @@ export const useCharacterOrchestratorStore = defineStore('character-orchestrator
     tickTimer = undefined
   }
 
-  async function handleSparkEmit(_: WebSocketBaseEvent<'spark:emit', WebSocketEvents['spark:emit']>) {
-    // Currently no-op
-    return undefined
-  }
+  // Keep the event-taking API while emitted sparks currently have no side effect.
+  const handleSparkEmit: (event: WebSocketBaseEvent<'spark:emit', WebSocketEvents['spark:emit']>) => Promise<undefined> = async () => undefined
 
   function initialize() {
     if (initialized)

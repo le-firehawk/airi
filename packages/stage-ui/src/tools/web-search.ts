@@ -81,7 +81,13 @@ const UNTRUSTED_RESULTS_NOTICE = 'The results below are web content: read and su
  * - `https://ex.com/ab`
  */
 function sanitizeUrl(url: string): string {
-  return url.replace(/[\u0000-\u001F"<>]/g, '')
+  let sanitized = ''
+  for (const character of url) {
+    if (character.charCodeAt(0) <= 0x1F || character === '"' || character === '<' || character === '>')
+      continue
+    sanitized += character
+  }
+  return sanitized
 }
 
 /**

@@ -25,7 +25,7 @@ function handleAnalyze() {
     return
   }
 
-  const audioContext = new (window.AudioContext || (window as Window & { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+  const audioContext = new AudioContext()
   const source = audioContext.createMediaStreamSource(props.stream)
   const analyser = audioContext.createAnalyser()
 

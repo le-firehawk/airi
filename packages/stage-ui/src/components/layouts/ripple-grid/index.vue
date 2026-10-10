@@ -81,14 +81,14 @@ function handleItemClick(item: TItem, globalIndex: number) {
 </script>
 
 <template>
-  <div class="flex flex-col gap-5">
+  <div :class="['flex flex-col', 'gap-5']">
     <template v-for="(section, sIndex) in normalizedSections" :key="sIndex">
-      <div v-if="$slots.header && !isFlat" :class="{ 'my-5': sIndex > 0 }">
+      <div v-if="$slots.header && section.section !== undefined" :class="{ 'my-5': sIndex > 0 }">
         <slot name="header" :section="section.section" :index="sIndex" />
       </div>
 
       <div
-        class="grid gap-4 pb-4"
+        :class="['grid', 'gap-4 pb-4']"
         :style="{
           gridTemplateColumns: `repeat(${currentCols}, minmax(0, 1fr))`,
         }"

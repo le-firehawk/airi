@@ -1,4 +1,4 @@
-import { AutoModel } from '@huggingface/transformers'
+import { AutoModel, PretrainedConfig, PreTrainedModel, Tensor } from '@huggingface/transformers'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { VAD } from './vad'
@@ -15,12 +15,12 @@ vi.mock('@huggingface/transformers', async (importOriginal) => {
 })
 
 function createProbabilityModel(probabilities: number[]) {
-  return vi.fn(async (input: { state: unknown }) => ({
+  const model = new PreTrainedModel(new PretrainedConfig({ model_type: 'custom' }), {}, {})
+  vi.spyOn(model, 'forward').mockImplementation(async (input: { state: Tensor }) => ({
     stateN: input.state,
-    output: {
-      data: new Float32Array([probabilities.shift() ?? 0]),
-    },
+    output: new Tensor('float32', new Float32Array([probabilities.shift() ?? 0]), [1]),
   }))
+  return model
 }
 
 describe('vad speech duration', () => {
@@ -37,7 +37,7 @@ describe('vad speech duration', () => {
     //
     // We count detected speech samples separately from post-speech silence.
     const probabilities = [0.9, ...Array.from<number>({ length: 80 }).fill(0)]
-    vi.mocked(AutoModel.from_pretrained, { partial: true }).mockResolvedValue(createProbabilityModel(probabilities))
+    vi.mocked(AutoModel.from_pretrained).mockResolvedValue(createProbabilityModel(probabilities))
     const vad = new VAD({
       sampleRate: 16000,
       newBufferSize: 160,
@@ -62,7 +62,7 @@ describe('vad speech duration', () => {
       ...Array.from<number>({ length: 30 }).fill(0.9),
       ...Array.from<number>({ length: 80 }).fill(0),
     ]
-    vi.mocked(AutoModel.from_pretrained, { partial: true }).mockResolvedValue(createProbabilityModel(probabilities))
+    vi.mocked(AutoModel.from_pretrained).mockResolvedValue(createProbabilityModel(probabilities))
     const vad = new VAD({
       sampleRate: 16000,
       newBufferSize: 160,
@@ -90,7 +90,7 @@ describe('vad speech duration', () => {
       ...Array.from<number>({ length: 30 }).fill(0.9),
       ...Array.from<number>({ length: 80 }).fill(0),
     ]
-    vi.mocked(AutoModel.from_pretrained, { partial: true }).mockResolvedValue(createProbabilityModel(probabilities))
+    vi.mocked(AutoModel.from_pretrained).mockResolvedValue(createProbabilityModel(probabilities))
     const vad = new VAD({
       sampleRate: 16000,
       newBufferSize: 160,

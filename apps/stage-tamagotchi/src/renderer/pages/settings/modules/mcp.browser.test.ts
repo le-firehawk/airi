@@ -2,6 +2,8 @@ import type { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
 
 import type { ElectronMcpConfigText, ElectronMcpRuntimeStatus } from '../../../../shared/eventa'
 
+import { autoAnimatePlugin } from '@formkit/auto-animate/vue'
+import { trackButtonPlugin } from '@proj-airi/stage-ui/directives/track-button'
 import { createPinia, disposePinia } from 'pinia'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { render } from 'vitest-browser-vue'
@@ -45,7 +47,12 @@ describe('saved MCP server details', () => {
     onTestFinished(() => disposePinia(pinia))
     const screen = await render(McpSettings, {
       global: {
-        plugins: [pinia, createI18n({ legacy: false, locale: 'en', missingWarn: false, fallbackWarn: false })],
+        plugins: [
+          pinia,
+          createI18n({ legacy: false, locale: 'en', missingWarn: false, fallbackWarn: false }),
+          autoAnimatePlugin,
+          trackButtonPlugin,
+        ],
       },
     })
     onTestFinished(() => screen.unmount())

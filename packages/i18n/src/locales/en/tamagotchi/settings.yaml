@@ -566,7 +566,7 @@ desktop-companion:
     description: Keep unread events without native banners or priority reaction requests. This setting does not change system DND.
   reactions:
     title: Priority reactions
-    description: Prepare short wave requests for high-priority events. Animation playback is not connected yet.
+    description: Allow high-priority notifications to request an avatar reaction.
   private-message: AIRI has a new update.
   unread: '{count} unread'
   occurrences: '{count} events'

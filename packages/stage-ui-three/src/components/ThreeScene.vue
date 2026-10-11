@@ -13,6 +13,7 @@ import type { TresContext } from '@tresjs/core'
 import type { DirectionalLight, Group, SphericalHarmonics3, Texture, WebGLRenderer, WebGLRenderTarget } from 'three'
 
 import type { VrmInteractionTarget } from '../composables/vrm/interaction'
+import type { MotionStageFitResult } from '../motions/types'
 import type { SceneBootstrap, ScenePhase, Vec3 } from '../stores/model-store'
 import type { VrmLifecycleReason } from '../trace'
 
@@ -26,6 +27,7 @@ import { storeToRefs } from 'pinia'
 import { BlendFunction } from 'postprocessing'
 import {
   ACESFilmicToneMapping,
+  Box3,
   Euler,
   MathUtils,
   PerspectiveCamera,
@@ -41,7 +43,7 @@ import PresenceBubble from './presence-bubble.vue'
 
 // From stage-ui-three package
 import { SceneMotionFraming } from '../companion/scene-motion-framing'
-import { pickModelOrbitPivot } from '../composables/orbit-pivot'
+import { OrbitPivotPicker } from '../composables/orbit-pivot-pick'
 import { useRenderTargetRegionAtClientPoint } from '../composables/render-target'
 import { getVrmInteractionTargetFromObjectName, isClickLikePointerGesture } from '../composables/vrm/interaction'
 // pinia store
@@ -94,6 +96,8 @@ const props = withDefaults(defineProps<{
   enableOrbitControls?: boolean
   /** Localized reset label supplied by the app shell. */
   orbitPivotResetLabel?: string
+  orbitPivotLoadingLabel?: string
+  orbitPivotErrorLabel?: string
   showAxes?: boolean
   idleAnimation?: string
   paused?: boolean
@@ -227,12 +231,15 @@ const controlsRef = shallowRef<InstanceType<typeof OrbitControls>>()
 const pointerManipulation = ref(false)
 const orbitManipulation = ref(false)
 const pivotTransitionActive = ref(false)
-const manipulationActive = computed(() => pointerManipulation.value || orbitManipulation.value || pivotTransitionActive.value)
+const orbitPickBusy = ref(false)
+const orbitPickFailed = ref(false)
+const manipulationActive = computed(() => pointerManipulation.value || orbitManipulation.value || pivotTransitionActive.value || orbitPickBusy.value)
 let framing: SceneMotionFraming | undefined
 let framingRoot: Group | undefined
 let framingModelId = ''
 let cameraRevision = 0
 const framingAnchor = new Vector3()
+const motionStageBounds = new Box3()
 let automaticCameraPosition: Vector3 | undefined
 
 watch(manipulationActive, (active) => {
@@ -568,9 +575,13 @@ const isCompletingBinding = ref(false)
 const canvasReady = ref(false)
 const modelPhase = ref<ModelPhase>(props.modelSrc ? 'loading' : 'no-model')
 const loadedModelIdentity = shallowRef<ModelLoadIdentity>()
+const motionStageReady = ref(false)
+const canFitMotionStage = computed(() => controlsReady.value && modelPhase.value === 'ready' && !props.paused
+  && loadedModelIdentity.value?.modelId === props.modelId && loadedModelIdentity.value?.modelSrc === props.modelSrc
+  && !manipulationActive.value && !sceneMutationLocked.value && motionStageReady.value)
 
 function onVrmFrame(root: Group) {
-  if (!props.automaticMotionFraming || props.paused || !controlsReady.value || modelPhase.value !== 'ready')
+  if (props.paused || !controlsReady.value || modelPhase.value !== 'ready')
     return
   if (root !== framingRoot) {
     framing?.reset({ restore: true })
@@ -578,8 +589,10 @@ function onVrmFrame(root: Group) {
     framingModelId = crypto.randomUUID()
     framing = undefined
   }
-  const snapshot = modelRef.value?.getMotionController()?.snapshot
+  const controller = modelRef.value?.getMotionController()
+  const snapshot = controller?.snapshot
   const motionActive = !!snapshot && (snapshot.loadingId !== undefined || snapshot.activeId !== snapshot.idleId)
+  const circleActive = controller?.stageMovementActive || (!!snapshot && controller?.catalog.get(snapshot.loadingId ?? snapshot.activeId)?.rootMotion === 'circle')
   // Idle primes bounded geometry samples without changing the user's close-up.
   framing ??= new SceneMotionFraming(framingModelId, { maxZoomOut: 2.5 })
   const target = controlsRef.value?.controls?.target
@@ -587,20 +600,35 @@ function onVrmFrame(root: Group) {
     framingAnchor.copy(target)
   else
     framingAnchor.set(modelOrigin.value.x, modelOrigin.value.y, modelOrigin.value.z)
-  const result = framing.tick({
-    modelId: framingModelId,
-    cameraRevision,
-    motionRevision: props.motionRevision ?? 0,
-    manualControl: manipulationActive.value,
-    nowMs: performance.now(),
-    root,
+  // A locomotion path owns the available pixels. Moving its camera creates a path-expansion feedback loop.
+  const result = circleActive
+    ? undefined
+    : framing.tick({
+        modelId: framingModelId,
+        cameraRevision,
+        motionRevision: props.motionRevision ?? 0,
+        manualControl: manipulationActive.value,
+        nowMs: performance.now(),
+        root,
+        camera: camera.value,
+        anchorWorld: framingAnchor,
+        motionActive: props.automaticMotionFraming ? motionActive : false,
+      })
+  if (result) {
+    automaticCameraPosition = result.status === 'applied' && result.factor > 1
+      ? camera.value.position.clone()
+      : undefined
+  }
+  const canvas = tresContextRef.value?.renderer.instance.domElement
+  controller?.setStageFrame({
     camera: camera.value,
-    anchorWorld: framingAnchor,
-    motionActive,
+    root,
+    width: canvas?.clientWidth ?? 0,
+    height: canvas?.clientHeight ?? 0,
+    manualControl: manipulationActive.value,
+    bounds: !motionActive ? framing.copyReferenceBounds(motionStageBounds) : undefined,
   })
-  automaticCameraPosition = result.status === 'applied' && result.factor > 1
-    ? camera.value.position.clone()
-    : undefined
+  motionStageReady.value = controller?.stageBoundsReady ?? false
 }
 
 function resetMotionFraming() {
@@ -608,6 +636,7 @@ function resetMotionFraming() {
   framing = undefined
   framingRoot = undefined
   automaticCameraPosition = undefined
+  motionStageReady.value = false
   cameraRevision++
 }
 
@@ -820,9 +849,57 @@ const pickingRaycaster = new Raycaster()
 const pickingMouse = new Vector2()
 let activePointer: { id: number, x: number, y: number, button: number, dragged: boolean } | undefined
 const customOrbitPivot = ref(false)
+const orbitPicker = new OrbitPivotPicker(
+  (busy) => {
+    orbitPickBusy.value = busy
+    if (busy)
+      orbitPickFailed.value = false
+  },
+  point => controlsRef.value?.shiftTarget(point),
+  (error) => {
+    orbitPickFailed.value = true
+    console.error('[ThreeScene] Failed to find orbit center:', error)
+  },
+)
+
+useEventListener(() => tresContextRef.value?.renderer.instance.domElement, 'wheel', () => orbitPicker.cancel(), { passive: true })
+
+watch([() => props.modelId, () => props.modelSrc, () => props.paused, controlEnable, modelRef], () => {
+  orbitPicker.cancel()
+  orbitPickFailed.value = false
+}, { flush: 'sync' })
+
+function onOrbitInteractionChanged(active: boolean) {
+  if (active)
+    orbitPicker.cancel()
+  orbitManipulation.value = active
+}
 
 function resetOrbitPivot() {
+  orbitPicker.cancel()
+  orbitPickFailed.value = false
   controlsRef.value?.shiftTarget(modelOrigin.value, true)
+}
+
+function fitMotionStage(): MotionStageFitResult {
+  orbitPicker.cancel()
+  const controller = modelRef.value?.getMotionController()
+  if (!canFitMotionStage.value || !controller?.stageBoundsReady)
+    return 'not-ready'
+  const view = controller.suggestStageMotionView(controlsRef.value?.controls?.maxDistance)
+  if (!view)
+    return 'insufficient-room'
+  controller.reset()
+  resetMotionFraming()
+  controlsRef.value?.cancelPivotTransition()
+  camera.value.position.copy(view.position)
+  modelOrigin.value = toVec3(view.target)
+  cameraPosition.value = toVec3(view.position)
+  cameraDistance.value = view.distance
+  controlsRef.value?.setTarget(view.target)
+  camera.value.updateMatrixWorld(true)
+  cameraRevision++
+  return 'applied'
 }
 
 function onCanvasPointerMove(event: PointerEvent) {
@@ -831,6 +908,7 @@ function onCanvasPointerMove(event: PointerEvent) {
 }
 
 function onCanvasPointerDown(event: PointerEvent) {
+  orbitPicker.cancel()
   if (!event.isPrimary || (event.button !== 0 && event.button !== 1))
     return
   pointerManipulation.value = true
@@ -859,10 +937,7 @@ function onCanvasPointerUp(event: PointerEvent) {
     const model = modelRef.value?.scene
     if (!canvas || !model)
       return
-    const point = pickModelOrbitPivot(model, camera.value, { x: event.clientX, y: event.clientY }, canvas.getBoundingClientRect())
-    if (point) {
-      controlsRef.value?.shiftTarget(point)
-    }
+    orbitPicker.pick(model, camera.value, { x: event.clientX, y: event.clientY }, canvas.getBoundingClientRect())
     return
   }
   handleCanvasInteraction(event)
@@ -894,6 +969,7 @@ useEventListener(defaultWindow, 'pointerup', () => {
   pointerManipulation.value = false
 })
 useEventListener(defaultWindow, 'blur', () => {
+  orbitPicker.cancel()
   activePointer = undefined
   pointerManipulation.value = false
   orbitManipulation.value = false
@@ -906,6 +982,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  orbitPicker.dispose()
   resetMotionFraming()
   emit('manipulationChange', false)
   const canvas = tresContextRef.value?.renderer.instance.domElement
@@ -1091,6 +1168,18 @@ const screenContainerBounding = useElementBounding(() => screenRef.value?.contai
 // Mobile viewport panning moves an ancestor without resizing this container.
 // Measure after Vue applies that transform, so eye tracking uses the new position.
 useEventListener(defaultWindow?.visualViewport, ['resize', 'scroll'], screenContainerBounding.update)
+watch([
+  cameraPosition,
+  cameraDistance,
+  cameraFOV,
+  modelOrigin,
+  modelOffset,
+  modelRotationY,
+  screenContainerBounding.width,
+  screenContainerBounding.height,
+  screenContainerBounding.left,
+  screenContainerBounding.top,
+], () => orbitPicker.cancel(), { deep: true, flush: 'sync' })
 
 function getScreenBBox() {
   // No measured box before the first observation; the previous inline read had the same fallback.
@@ -1111,7 +1200,10 @@ watch(directionalLightRotation, (newRotation) => {
 
 defineExpose({
   resetOrbitPivot,
+  canFitMotionStage,
+  fitMotionStage,
   getLoadedModelId: () => modelPhase.value === 'ready' ? loadedModelIdentity.value?.modelId : undefined,
+  getLoadedModelSource: () => modelPhase.value === 'ready' ? loadedModelIdentity.value?.modelSrc : undefined,
   getMotionController: () => modelRef.value?.getMotionController(),
   setExpression: (expression: string, intensity = 1) => {
     modelRef.value?.setExpression(expression, intensity)
@@ -1174,7 +1266,7 @@ defineExpose({
         @orbit-controls-camera-changed="onOrbitControlsCameraChanged"
         @orbit-controls-ready="onOrbitControlsReady"
         @orbit-controls-pivot-changed="customOrbitPivot = $event"
-        @orbit-controls-interaction-changed="orbitManipulation = $event"
+        @orbit-controls-interaction-changed="onOrbitInteractionChanged"
         @orbit-controls-transition-changed="pivotTransitionActive = $event"
       />
       <SkyBox
@@ -1244,6 +1336,17 @@ defineExpose({
       </VRMModel>
       <TresAxesHelper v-if="props.showAxes" :size="1" />
     </TresCanvas>
+    <div
+      v-if="orbitPickBusy || (orbitPickFailed && orbitPivotErrorLabel)"
+      role="status"
+      aria-live="polite"
+      :class="['pointer-events-none absolute inset-0 z-10', 'flex items-center justify-center']"
+    >
+      <div :class="['mx-4 flex items-center gap-2 rounded-xl px-4 py-3', 'bg-neutral-50/90 text-neutral-800 shadow-lg dark:bg-neutral-900/90 dark:text-neutral-100']">
+        <span v-if="orbitPickBusy" aria-hidden="true" :class="['i-solar:refresh-linear h-5 w-5', 'animate-spin motion-reduce:animate-none']" />
+        <span>{{ orbitPickBusy ? orbitPivotLoadingLabel : orbitPivotErrorLabel }}</span>
+      </div>
+    </div>
     <OverlayButton
       v-if="customOrbitPivot && orbitPivotResetLabel && enableOrbitControls"
       :class="['absolute bottom-3 right-3', 'z-10']"

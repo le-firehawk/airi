@@ -182,3 +182,11 @@ export async function loadMotionClip(bytes: ArrayBuffer, vrm: VRMCore, signal: A
   signal.throwIfAborted()
   return createVRMAnimationClip(animation, vrm)
 }
+
+/** Loads the bundled relaxed idle with measured arm targets. User-imported clips keep their authored rotations. */
+export async function loadRelaxedIdleClip(bytes: ArrayBuffer, vrm: VRMCore, signal: AbortSignal) {
+  const source = await loadMotionClip(bytes, vrm, signal)
+  const { createRelaxedIdleClip } = await import('./procedural')
+  signal.throwIfAborted()
+  return createRelaxedIdleClip(source, vrm)
+}

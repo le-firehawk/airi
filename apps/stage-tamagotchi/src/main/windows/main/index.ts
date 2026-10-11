@@ -23,7 +23,7 @@ import { defineInvokeHandler } from '@moeru/eventa'
 import { createContext } from '@moeru/eventa/adapters/electron/main'
 import { initScreenCaptureForWindow } from '@proj-airi/electron-screen-capture/main'
 import { defu } from 'defu'
-import { BrowserWindow, ipcMain } from 'electron'
+import { BrowserWindow, ipcMain, screen } from 'electron'
 import { isLinux, isMacOS } from 'std-env'
 import { array, number, object, optional, string } from 'valibot'
 
@@ -35,6 +35,8 @@ import { baseUrl, getElectronMainDirname, load, withHashRoute } from '../../libs
 import { createConfig } from '../../libs/electron/persistence'
 import { protectPrivilegedWindowNavigation, setWindowAlwaysOnTop, transparentWindowConfig } from '../shared'
 import { setupMainWindowElectronInvokes } from './rpc/index.electron'
+import { restoreStageWindowBounds } from './stage-size'
+import { createMainWindowOptions } from './window-options'
 
 const appConfigSchema = object({
   windows: optional(array(object({
@@ -79,25 +81,15 @@ export async function setupMainWindow(params: {
 
   const mainWindowConfig = getConfig().windows?.find(w => w.title === 'AIRI' && w.tag === 'main')
 
-  const window = new BrowserWindow({
-    title: 'AIRI',
-    width: mainWindowConfig?.width ?? 450.0,
-    height: mainWindowConfig?.height ?? 600.0,
-    x: mainWindowConfig?.x,
-    y: mainWindowConfig?.y,
-    show: false,
+  const initialBounds = restoreStageWindowBounds(mainWindowConfig ?? {}, screen.getAllDisplays(), screen.getPrimaryDisplay())
+
+  const window = new BrowserWindow(createMainWindowOptions({
+    bounds: initialBounds,
+    preloadPath: join(dirname(fileURLToPath(import.meta.url)), '../preload/index.mjs'),
     icon,
-    webPreferences: {
-      preload: join(dirname(fileURLToPath(import.meta.url)), '../preload/index.mjs'),
-      sandbox: false,
-    },
-    // Thanks to [@HeartArmy](https://github.com/HeartArmy) for the tip implementation.
-    //
-    // https://github.com/electron/electron/issues/10078#issuecomment-3410164802
-    // https://stackoverflow.com/questions/39835282/set-browserwindow-always-on-top-even-other-app-is-in-fullscreen-electron-mac
-    type: isMacOS ? 'panel' : undefined,
-    ...transparentWindowConfig(),
-  })
+    isMacOS,
+    transparentOptions: transparentWindowConfig(),
+  }))
 
   if (params.onWindowCreated) {
     params.onWindowCreated(window)

@@ -38,6 +38,7 @@ import { createWidgetsService } from '../../../services/airi/widgets'
 import { createAutoUpdaterService } from '../../../services/electron'
 import { centerWindowOnDisplay } from '../../shared/display'
 import { setupBaseWindowElectronInvokes } from '../../shared/window'
+import { setupStageWindowSize } from '../stage-size'
 
 export async function setupMainWindowElectronInvokes(params: {
   window: BrowserWindow
@@ -62,6 +63,7 @@ export async function setupMainWindowElectronInvokes(params: {
 
   const { context, dispose } = createContext(ipcMain, params.window)
   onWindowClosed(params.window, dispose)
+  setupStageWindowSize(context, params.window)
 
   await setupBaseWindowElectronInvokes({ context, window: params.window, serverChannel: params.serverChannel, i18n: params.i18n })
   createWidgetsService({ context, widgetsManager: params.widgetsManager, window: params.window })

@@ -637,7 +637,7 @@ function computeBoundingBox(vrmScene: Object3D) {
   const box = new Box3()
   const childBox = new Box3()
 
-  vrmScene.updateMatrixWorld(true)
+  vrmScene.updateWorldMatrix(true, true)
 
   vrmScene.traverse((obj) => {
     if (!obj.visible)
@@ -671,9 +671,11 @@ function getEyePosition(activeVrm: VRM): number | null {
   return eyePos.y
 }
 
-function buildSceneBootstrap(activeVrm: VRM, cacheHit: boolean): SceneBootstrap {
+function buildSceneBootstrap(activeVrm: VRM, cacheHit: boolean, motions: MotionController): SceneBootstrap {
   const bootstrapRoot = activeVrm.scene.parent ?? activeVrm.scene
   const box = computeBoundingBox(bootstrapRoot)
+  motions.setStageFrame({ camera: camera.value, root: bootstrapRoot.parent ?? bootstrapRoot, width: renderer.instance.domElement.clientWidth, height: renderer.instance.domElement.clientHeight, manualControl: false })
+  motions.setLoadedStageBounds(box)
   const modelSize = new Vector3()
   const modelCenter = new Vector3()
   box.getSize(modelSize)
@@ -777,7 +779,7 @@ async function loadModel() {
           vrm: reusableInstance.vrm,
           vrmGroup: reusableInstance.group,
         })
-        emit('sceneBootstrap', buildSceneBootstrap(reusableInstance.vrm, true))
+        emit('sceneBootstrap', buildSceneBootstrap(reusableInstance.vrm, true, reusableInstance.motions))
         commitManagedVrmInstance(reusableInstance, currentLoadReason)
         didCommitLoad = true
 
@@ -856,6 +858,7 @@ async function loadModel() {
     _vrmGroup.add(movementRoot)
     movementRoot.add(_vrm.scene)
     nextMotionController = new MotionController(_vrm, clip, movementRoot)
+    nextMotionController.setStageFrame({ camera: camera.value, root: _vrmGroup, width: renderer.instance.domElement.clientWidth, height: renderer.instance.domElement.clientHeight, manualControl: false })
     nextVrmAnimationMixer = nextMotionController.mixer
 
     nextVrmEmote = useVRMEmote(_vrm)
@@ -922,7 +925,7 @@ async function loadModel() {
       }
     })
 
-    emit('sceneBootstrap', buildSceneBootstrap(_vrm, false))
+    emit('sceneBootstrap', buildSceneBootstrap(_vrm, false, nextMotionController))
 
     const nextInteractionColliders = createVrmInteractionColliders(_vrm)
 

@@ -85,12 +85,32 @@ Invalid existing storage remains untouched. A storage error appears in the setti
 
 Priority reactions use the shared motion owner and a bounded wave queue. User actions and games take priority over waves.
 DND, manual manipulation, model changes, and expired intents cannot restart stale playback. See [the integration contract](../../docs/ai/companion-integration.md).
-Native window expansion, KWin transport, roaming, and minimized-window gestures remain separate work.
+KWin transport, desktop-wide roaming, and minimized-window gestures remain separate work.
 
 Primary platform contracts: [Electron screen](https://www.electronjs.org/docs/latest/api/screen),
 [BrowserWindow](https://www.electronjs.org/docs/latest/api/browser-window),
 [Notification](https://www.electronjs.org/docs/latest/api/notification), and
 [freedesktop notifications](https://specifications.freedesktop.org/notification/latest-single/).
+
+### Resize the character stage
+
+Select **Resize stage** beside the move handle. Drag the bottom-right grip, or enter a width and height.
+The dashed outline shows the actual canvas boundary. **Room to move** requests a 960 × 720 stage.
+**Default size** requests 450 × 600. Accepted native sizes persist across app restarts.
+The focused grip also accepts arrow keys. Hold Shift for larger steps.
+The sizing panel keeps click-through off until you select **Done** or press Escape.
+
+Sizes use logical display pixels. AIRI clamps them to the display work area and keeps saved windows reachable after display changes.
+The minimum is 280 × 320, or the work-area size on a smaller display.
+The stage canvas receives the accepted size directly. Resizing does not change the model's camera settings.
+Select **Fit model for motion** to stop playback and explicitly frame the full body with room for motion.
+This action changes the camera and orbit pivot once. It does not change the model asset or restrict later manual camera controls.
+The action is available only for a ready VRM. Opening the panel, resizing, and loading another model do not invoke it.
+
+Native Wayland controls window placement and can reject programmatic resizing.
+AIRI sends size-only requests there and uses primary-display limits because Electron cannot report the window's real origin.
+If a request has no effect, use the desktop's native resize command. On KDE, press Alt+F3 and select **Resize**.
+This control does not grant global cursor access or programmatic window movement on Wayland.
 
 ### Desktop companion checks
 
@@ -102,3 +122,10 @@ pnpm -F @proj-airi/stage-tamagotchi exec vitest run --project browser src/render
 The node suite covers unavailable/error delivery, repetition, coalescing, read/clear, restart, DND, privacy, bounded history, IPC isolation, and display geometry.
 The browser suite covers local pointer expiry, global sample expiry, hotplug invalidation, and snapshot hydration races.
 Native notification appearance, compositor behavior, and mixed-DPI hardware require a live desktop check.
+
+### Background stage rendering
+
+The main companion window disables Electron background throttling.
+This matches the stage lifecycle: loss of focus keeps animation active, and minimization pauses it explicitly.
+An unfocused stage can use more CPU and battery because Chromium no longer reduces its frame and timer rates.
+The configured stage frame-rate limit still applies.

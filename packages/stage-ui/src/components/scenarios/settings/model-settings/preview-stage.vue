@@ -235,6 +235,8 @@ const cursorPosition = computed(() => ({
         :automatic-motion-framing="true"
         :motion-revision="vrmMotionHost.motionRevision.value"
         :orbit-pivot-reset-label="t('settings.vrm.orbit-pivot.reset')"
+        :orbit-pivot-loading-label="t('settings.vrm.orbit-pivot.loading')"
+        :orbit-pivot-error-label="t('settings.vrm.orbit-pivot.error')"
         :cursor-position="cursorPosition"
         :model-id="stageModelSelected"
         :model-src="stageModelSelectedUrl"

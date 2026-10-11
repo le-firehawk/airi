@@ -1,9 +1,12 @@
 import type { VRMCore, VRMHumanBoneName } from '@pixiv/three-vrm-core'
-import type { Vector3 } from 'three'
 
-import { AnimationClip, Euler, Quaternion, QuaternionKeyframeTrack, VectorKeyframeTrack } from 'three'
+import type { ArmPose } from './joint-kinematics'
 
+import { AnimationClip, Euler, Quaternion, QuaternionKeyframeTrack, Vector3, VectorKeyframeTrack } from 'three'
+
+import { JointKinematics } from './joint-kinematics'
 import { measureRig } from './rig'
+import { createRunGaitPose } from './run-gait'
 
 type Angles = [number, number, number]
 type Pose = Partial<Record<VRMHumanBoneName, Angles>>
@@ -42,12 +45,14 @@ function plantLeg(pose: Pose, side: 'left' | 'right', thighRest: Vector3, shinRe
  */
 export function createProceduralClip(vrm: VRMCore, id: string, duration: number) {
   const rig = measureRig(vrm)
+  const joints = new JointKinematics(vrm)
   const times: number[] = []
   const positions: number[] = []
   const rotations = new Map<VRMHumanBoneName, number[]>()
   const samples = Math.ceil(duration * 30)
   const euler = new Euler()
   const quaternion = new Quaternion()
+  const hipsOffset = new Vector3()
   const bones = Object.keys(vrm.humanoid.normalizedHumanBones) as VRMHumanBoneName[]
   for (const bone of bones) {
     if (bone !== 'leftEye' && bone !== 'rightEye' && bone !== 'jaw')
@@ -56,15 +61,12 @@ export function createProceduralClip(vrm: VRMCore, id: string, duration: number)
 
   for (let frame = 0; frame <= samples; frame++) {
     const progress = frame / samples
-    const phase = progress * Math.PI * 2
+    const phase = progress * Math.PI * 2 * (id === 'natural-idle' ? duration / 6 : 1)
     const hold = envelope(progress)
     const beat = Math.sin(phase)
-    const pose: Pose = {
-      leftUpperArm: [0, 0, -1.25],
-      rightUpperArm: [0, 0, 1.25],
-      leftLowerArm: [0, -0.1, -0.12],
-      rightLowerArm: [0, 0.1, 0.12],
-    }
+    const pose: Pose = {}
+    const leftArm: ArmPose = { elevation: 0.1, forward: 0.04, twist: 0, elbow: 0.2, wrist: 0 }
+    const rightArm: ArmPose = { ...leftArm }
     let drop = 0
     let depth = 0
 
@@ -74,8 +76,10 @@ export function createProceduralClip(vrm: VRMCore, id: string, duration: number)
         pose.spine = [0.012 * beat, 0, 0.008 * Math.sin(phase * 2)]
         pose.chest = [-0.015 * beat, 0, -0.006 * Math.sin(phase * 2)]
         pose.head = [0.006 * beat, 0.012 * beat, 0]
-        pose.leftUpperArm = [0.02 * beat, 0, -1.28 + 0.015 * beat]
-        pose.rightUpperArm = [-0.015 * beat, 0, 1.28 + 0.015 * beat]
+        leftArm.forward += 0.02 * beat
+        rightArm.forward -= 0.015 * beat
+        leftArm.elevation += 0.01 * beat
+        rightArm.elevation -= 0.01 * beat
         break
       }
       case 'bow': {
@@ -85,8 +89,8 @@ export function createProceduralClip(vrm: VRMCore, id: string, duration: number)
         pose.chest = [0.12 * hold, 0, 0]
         pose.neck = [0.08 * hold, 0, 0]
         pose.head = [0.1 * hold, 0, 0]
-        pose.leftUpperArm = [-0.25 * hold, 0, -1.25 - 0.1 * hold]
-        pose.rightUpperArm = [-0.25 * hold, 0, 1.25 + 0.1 * hold]
+        leftArm.forward += 0.5 * hold
+        rightArm.forward += 0.5 * hold
         break
       }
       case 'dance': {
@@ -94,34 +98,30 @@ export function createProceduralClip(vrm: VRMCore, id: string, duration: number)
         pose.spine = [0.04 * Math.sin(phase * 2), 0.12 * beat, 0.12 * beat]
         pose.chest = [0, -0.08 * beat, -0.07 * beat]
         pose.head = [0, -0.05 * beat, -0.05 * beat]
-        pose.leftUpperArm = [0.35 * beat, -0.15, -0.75 + 0.25 * beat]
-        pose.rightUpperArm = [-0.35 * beat, 0.15, 0.75 + 0.25 * beat]
-        pose.leftLowerArm = [0, -0.55 - 0.25 * beat, -0.3]
-        pose.rightLowerArm = [0, 0.55 - 0.25 * beat, 0.3]
+        leftArm.elevation = 0.65 + 0.22 * beat
+        rightArm.elevation = 0.65 - 0.22 * beat
+        leftArm.forward = -0.35 * beat
+        rightArm.forward = 0.35 * beat
+        leftArm.elbow = 0.65 + 0.25 * beat
+        rightArm.elbow = 0.65 - 0.25 * beat
         break
       }
       case 'run-circle': {
-        // The gentle jog limits displacement. Clothing and floor clearance still depend on the avatar.
-        drop = rig.height * 0.0015 * (1 - Math.cos(phase * 2))
-        pose.spine = [0.12, 0.08 * beat, 0]
-        pose.chest = [0.05, -0.1 * beat, 0]
-        pose.head = [-0.12, 0, 0]
-        pose.leftUpperArm = [0.65 * beat, 0, -1.34]
-        pose.rightUpperArm = [-0.65 * beat, 0, 1.34]
-        pose.leftLowerArm = [0, -1.25, 0]
-        pose.rightLowerArm = [0, 1.25, 0]
-        pose.leftUpperLeg = [-0.28 * beat, 0, 0]
-        pose.rightUpperLeg = [0.28 * beat, 0, 0]
-        pose.leftLowerLeg = [0.2 + 1.25 * Math.max(0, -beat), 0, 0]
-        pose.rightLowerLeg = [0.2 + 1.25 * Math.max(0, beat), 0, 0]
-        pose.leftFoot = [-0.15 - 0.3 * Math.max(0, -beat), 0, 0]
-        pose.rightFoot = [-0.15 - 0.3 * Math.max(0, beat), 0, 0]
+        const gait = createRunGaitPose(phase, rig.height)
+        Object.assign(pose, gait.pose)
+        drop = gait.drop
+        depth = gait.depth
+        leftArm.forward = -0.65 * beat
+        rightArm.forward = 0.65 * beat
+        leftArm.elevation = rightArm.elevation = 0.12
+        leftArm.elbow = rightArm.elbow = 1.25
         break
       }
       case 'wave': {
-        pose.rightUpperArm = [-0.3 * hold, 0, 1.25 - 1.45 * hold]
-        pose.rightLowerArm = [0, 0.2 * hold, (-1.55 + 0.28 * Math.sin(phase * 3)) * hold]
-        pose.rightHand = [0, 0, 0.25 * Math.sin(phase * 3) * hold]
+        rightArm.elevation += 1.95 * hold
+        rightArm.twist = -0.65 * hold
+        rightArm.elbow += (0.9 + 0.1 * Math.sin(phase * 3)) * hold
+        rightArm.wrist = 0.25 * Math.sin(phase * 3) * hold
         pose.spine = [0, -0.06 * hold, 0]
         pose.head = [0, -0.05 * hold, -0.05 * hold]
         break
@@ -137,24 +137,26 @@ export function createProceduralClip(vrm: VRMCore, id: string, duration: number)
       }
       case 'celebrate': {
         drop += rig.height * 0.018 * (1 - Math.cos(phase * 2)) * hold
-        pose.leftUpperArm = [0, 0, -1.25 + 2.3 * hold]
-        pose.rightUpperArm = [0, 0, 1.25 - 2.3 * hold]
-        pose.leftLowerArm = [0, -0.15, -0.3 * hold]
-        pose.rightLowerArm = [0, 0.15, 0.3 * hold]
+        leftArm.elevation = rightArm.elevation = 0.1 + 2.4 * hold
+        leftArm.forward = rightArm.forward = 0.12 * hold
+        leftArm.twist = rightArm.twist = -0.4 * hold
+        leftArm.elbow = rightArm.elbow = 0.12 + 0.23 * hold
         pose.chest = [-0.07 * hold, 0, 0]
         break
       }
       case 'stretch': {
-        pose.leftUpperArm = [0, 0, -1.25 + 2.75 * hold]
-        pose.rightUpperArm = [0, 0, 1.25 - 2.75 * hold]
+        leftArm.elevation = rightArm.elevation = 0.1 + 2.7 * hold
+        leftArm.twist = rightArm.twist = -0.2 * hold
         pose.spine = [0, 0, 0.12 * beat * hold]
         pose.chest = [-0.04 * hold, 0, 0.08 * beat * hold]
         break
       }
       case 'present': {
-        pose.rightUpperArm = [-0.25 * hold, 0.1 * hold, 1.25 - 0.65 * hold]
-        pose.rightLowerArm = [0.15 * hold, 0.7 * hold, 0.12]
-        pose.rightHand = [0, 0, -0.4 * hold]
+        rightArm.elevation += 0.7 * hold
+        rightArm.forward += 0.25 * hold
+        rightArm.twist = -0.55 * hold
+        rightArm.elbow += 0.6 * hold
+        rightArm.wrist = -0.3 * hold
         pose.spine = [0, -0.1 * hold, 0]
         pose.head = [0, -0.15 * hold, 0]
         break
@@ -164,15 +166,20 @@ export function createProceduralClip(vrm: VRMCore, id: string, duration: number)
     }
 
     if (id !== 'run-circle') {
-      plantLeg(pose, 'left', rig.leftThigh, rig.leftShin, drop, depth)
-      plantLeg(pose, 'right', rig.rightThigh, rig.rightShin, drop, depth)
+      plantLeg(pose, 'left', joints.restSegment('leftLowerLeg'), joints.restSegment('leftFoot'), drop, depth)
+      plantLeg(pose, 'right', joints.restSegment('rightLowerLeg'), joints.restSegment('rightFoot'), drop, depth)
     }
     times.push(progress * duration)
-    positions.push(rig.hipsPosition.x, rig.hipsPosition.y - drop, rig.hipsPosition.z + depth)
+    joints.displacement(hipsOffset.set(0, -drop, depth)).add(rig.hipsPosition).toArray(positions, positions.length)
+    const arms = new Map([...joints.arm('left', leftArm), ...joints.arm('right', rightArm)])
     for (const [bone, values] of rotations) {
       const angles = pose[bone]
       euler.set(angles?.[0] ?? 0, angles?.[1] ?? 0, angles?.[2] ?? 0, 'XYZ')
-      quaternion.setFromEuler(euler).toArray(values, values.length)
+      const arm = arms.get(bone)
+      if (arm)
+        arm.toArray(values, values.length)
+      else
+        joints.rotation(quaternion.setFromEuler(euler)).toArray(values, values.length)
     }
   }
 
@@ -186,4 +193,23 @@ export function createProceduralClip(vrm: VRMCore, id: string, duration: number)
   if (hips)
     tracks.push(new VectorKeyframeTrack(`${hips.uuid}.position`, times, positions))
   return new AnimationClip(id, duration, tracks)
+}
+
+/** Preserves the bundled idle body and finger tracks while its arms use the avatar's measured rest geometry. */
+export function createRelaxedIdleClip(source: AnimationClip, vrm: VRMCore) {
+  const armTargets = new Set<string>()
+  for (const side of ['left', 'right'] as const) {
+    for (const part of ['Shoulder', 'UpperArm', 'LowerArm', 'Hand'] as const) {
+      const node = vrm.humanoid.getNormalizedBoneNode(`${side}${part}`)
+      if (node) {
+        armTargets.add(`${node.uuid}.quaternion`)
+        armTargets.add(`${node.name}.quaternion`)
+      }
+    }
+  }
+  const relaxed = createProceduralClip(vrm, 'natural-idle', source.duration)
+  return new AnimationClip(source.name, source.duration, [
+    ...source.tracks.filter(track => !armTargets.has(track.name)),
+    ...relaxed.tracks.filter(track => armTargets.has(track.name)),
+  ], source.blendMode)
 }

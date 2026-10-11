@@ -5,7 +5,7 @@ import { useAsyncState } from '@vueuse/core'
 
 const isWindows = useElectronEventaInvoke(electron.app.isWindows)
 const { handleResizeStart } = useElectronWindowResize()
-const isWindowsRef = useAsyncState(() => isWindows(), false)
+const { state: isWindowsRef } = useAsyncState(() => isWindows(), false)
 </script>
 
 <template>

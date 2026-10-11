@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { MotionStageFitResult } from '@proj-airi/stage-ui-three/motions'
+
 import { defineInvoke } from '@moeru/eventa'
 import { useElectronEventaContext, useElectronEventaInvoke, useElectronMouseInElement } from '@proj-airi/electron-vueuse'
 import { IS_DEV } from '@proj-airi/stage-shared'
@@ -18,6 +20,7 @@ import ControlsIslandFadeOnHover from './controls-island-fade-on-hover.vue'
 import ControlsIslandHearingConfig from './controls-island-hearing-config.vue'
 import ControlsIslandProfilePicker from './controls-island-profile-picker.vue'
 import ControlsIslandSpeechMute from './controls-island-speech-mute.vue'
+import ControlsIslandStageSize from './controls-island-stage-size.vue'
 import IndicatorMicVolume from './indicator-mic-volume.vue'
 
 import {
@@ -42,6 +45,8 @@ const props = withDefaults(defineProps<{
    * page owns the cursor signals and decides this.
    */
   cursorAway?: boolean
+  /** The current ready VRM owns this explicit camera-fit action. */
+  fitMotionStage?: () => MotionStageFitResult
 }>(), {
   cursorAway: false,
 })
@@ -488,6 +493,14 @@ function resetMainWindowPosition() {
           <ControlsIslandSpeechMute
             :button-style="adjustStyleClasses.button"
             :icon-class="adjustStyleClasses.icon"
+          />
+
+          <ControlsIslandStageSize
+            :button-style="adjustStyleClasses.button"
+            :icon-class="adjustStyleClasses.icon"
+            :show="blockingOverlays.has('stage-size')"
+            :fit-motion-stage="props.fitMotionStage"
+            @update:show="setOverlay('stage-size', $event)"
           />
 
           <ControlButtonTooltip side="inward">

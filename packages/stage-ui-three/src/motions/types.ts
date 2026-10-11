@@ -27,7 +27,7 @@ export interface MotionPlayOptions {
   speed?: number
   /** Seconds, capped at 60. @default 15 for loops, otherwise the clip duration. */
   duration?: number
-  /** Circle radius in avatar-local meters, capped at 20% of avatar height. @default 12% of avatar height. */
+  /** Radius limit in scene units. A bound stage uses its available space by default. Headless playback defaults to 12% of avatar height. */
   radius?: number
 }
 
@@ -41,3 +41,6 @@ export interface MotionControllerSnapshot {
   cachedClipCount: number
   error: string | undefined
 }
+
+/** An explicit fit request changes the view only when the loaded stage has enough usable pixels. */
+export type MotionStageFitResult = 'applied' | 'not-ready' | 'insufficient-room'

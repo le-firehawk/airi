@@ -1,13 +1,16 @@
 import type { VRMCore } from '@pixiv/three-vrm-core'
-import type { AnimationAction, Group } from 'three'
+import type { AnimationAction, Box3, Group } from 'three'
 
 import type { MotionCatalog } from './catalog'
+import type { MotionStageFrame, StageMotionPlan } from './stage-bounds'
 import type { MotionControllerSnapshot, MotionMetadata, MotionPlayOptions } from './types'
 
 import { AnimationClip, AnimationMixer, LoopOnce, LoopRepeat, Quaternion, Vector3 } from 'three'
 
-import { createMotionCatalog } from './catalog'
+import { builtinMotionMetadata, createMotionCatalog } from './catalog'
+import { JointKinematics } from './joint-kinematics'
 import { createBodyClip, measureRig } from './rig'
+import { createStageMotionEnvelope, fitStageMotionView, planStageMotion, transformStageOffset } from './stage-bounds'
 
 interface ClipEntry {
   clip: AnimationClip
@@ -34,6 +37,7 @@ interface ActiveMotion {
   deadline: number
   speed: number
   circleRadius: number | undefined
+  stageRadius?: number
 }
 
 function bounded(value: number | undefined, fallback: number, minimum: number, maximum: number) {
@@ -60,6 +64,13 @@ export class MotionController {
   private readonly targetRotation = new Quaternion()
   private readonly yawAxis = new Vector3(0, 1, 0)
   private readonly height: number
+  private readonly forwardYaw: number
+  private stage: MotionStageFrame | undefined
+  private stageBounds: Box3 | undefined
+  private stagePlan: StageMotionPlan | undefined
+  private stageEnvelope: Box3 | undefined
+  private stageTurn = 0
+  private readonly stageReadyListeners = new Set<() => void>()
   private movementYaw = 0
   private yawVelocity = 0
   private active: ActiveMotion
@@ -84,6 +95,8 @@ export class MotionController {
     this.height = measureRig(vrm).height
     this.restPosition = movementRoot.position.clone()
     this.restRotation = movementRoot.quaternion.clone()
+    const forward = new JointKinematics(vrm).displacement(new Vector3(0, 0, 1)).applyQuaternion(vrm.scene.quaternion).applyQuaternion(this.restRotation)
+    this.forwardYaw = Math.atan2(forward.x, forward.z)
     this.mixer = new AnimationMixer(vrm.scene)
     this.catalog.register({
       id: 'default-idle',
@@ -111,6 +124,86 @@ export class MotionController {
       cachedClipCount: this.clips.size,
       error: this.error,
     }
+  }
+
+  /** Framing stays fixed until both travel and its smooth return have reached the saved transform. */
+  get stageMovementActive() {
+    return this.active.circleRadius !== undefined || this.movementRoot.position.distanceToSquared(this.restPosition) > 0.00000001
+      || Math.abs(this.movementYaw) > 0.0001 || Math.abs(this.yawVelocity) > 0.001
+  }
+
+  get stageBoundsReady() {
+    return !this.disposed && !!this.stage && !!this.stageBounds
+  }
+
+  /** Reuses the complete load-time geometry box. Its world coordinates are converted before viewport admission. */
+  setLoadedStageBounds(worldBounds: Box3) {
+    if (this.disposed || !this.stage || worldBounds.isEmpty() || ![...worldBounds.min.toArray(), ...worldBounds.max.toArray()].every(Number.isFinite))
+      return
+    const root = this.stage.root
+    root.updateWorldMatrix(true, false)
+    if (!root.matrixWorld.elements.every(Number.isFinite) || root.matrixWorld.determinant() === 0)
+      return
+    const bounds = worldBounds.clone().applyMatrix4(root.matrixWorld.clone().invert())
+    this.setStageFrame({ ...this.stage, bounds })
+  }
+
+  /** Returns a one-shot view proposal for an explicit user action. No model or camera state changes here. */
+  suggestStageMotionView(maximumDistance = Infinity) {
+    if (this.disposed || !this.stage || !this.stageBounds)
+      return undefined
+    const envelope = this.stageBounds.clone()
+    let circleEnvelope: Box3 | undefined
+    for (const metadata of builtinMotionMetadata) {
+      const bounds = createStageMotionEnvelope(this.stageBounds, metadata, this.height)
+      if (!bounds)
+        return undefined
+      envelope.union(bounds)
+      if (metadata.rootMotion === 'circle')
+        circleEnvelope = bounds
+    }
+    return circleEnvelope ? fitStageMotionView(this.stage, envelope, circleEnvelope, maximumDistance) : undefined
+  }
+
+  /** The scene updates this after camera changes. Only complete idle samples can establish the reference silhouette. */
+  setStageFrame(frame: MotionStageFrame) {
+    if (this.disposed)
+      return
+    this.stage = frame
+    if (frame.bounds && this.active.deadline === Infinity && this.movementRoot.position.distanceToSquared(this.restPosition) < 0.00000001)
+      this.stageBounds = this.stageBounds ? this.stageBounds.union(frame.bounds) : frame.bounds.clone()
+    if (this.stageBounds) {
+      for (const ready of this.stageReadyListeners)
+        ready()
+    }
+    if (this.active.id === 'default-idle' && this.active.deadline === Infinity && !this.stageMovementActive && this.retiring.size === 0) {
+      this.stageEnvelope = undefined
+      this.stagePlan = undefined
+    }
+    if (this.active.deadline === Infinity && !this.stageEnvelope && this.active.id === 'default-idle')
+      return
+    const metadata = this.catalog.get(this.active.id)
+    if (!metadata)
+      return
+    if (!this.admitToStage(metadata, this.active.stageRadius)) {
+      const idle = this.catalog.get(this.idleId)
+      const envelope = idle && this.stageBounds && createStageMotionEnvelope(this.stageBounds, idle, this.height)
+      const idlePlan = envelope ? planStageMotion(frame, envelope, false) : undefined
+      if (!idlePlan) {
+        // A selected imported idle can stop fitting after resize. The supplied idle preserves the user's existing view.
+        this.idleId = 'default-idle'
+        this.idleClip = this.stockClip
+      }
+      const error = this.error
+      // A shrinking viewport cannot safely retain the outgoing pose for a crossfade.
+      this.reset()
+      this.error = error
+      if (this.idleId !== 'default-idle') {
+        this.stageEnvelope = envelope
+        this.stagePlan = idlePlan
+      }
+    }
+    this.clampMovementToStage()
   }
 
   /** Resolves true when playback starts or a request enters the queue. Stale or invalid requests resolve false. */
@@ -150,6 +243,17 @@ export class MotionController {
     try {
       const clip = await this.loadClip(id, request.signal)
       if (request.signal.aborted || this.disposed)
+        return false
+      if (id === 'default-idle' && id === this.idleId && clip === this.idleClip) {
+        this.error = undefined
+        return true
+      }
+      // The host restores its saved idle before the first mesh sample. Keep that selection pending until bounds arrive.
+      if (!await this.waitForStageBounds(request.signal) || request.signal.aborted || this.disposed)
+        return false
+      if (this.clips.get(id)?.revision !== this.catalog.getRevision(id))
+        return false
+      if (!this.admitToStage(metadata, undefined, this.active.deadline === Infinity))
         return false
       if (id === this.idleId && clip === this.idleClip) {
         this.error = undefined
@@ -211,6 +315,9 @@ export class MotionController {
     this.movementRoot.quaternion.copy(this.restRotation)
     this.movementYaw = 0
     this.yawVelocity = 0
+    this.stageEnvelope = undefined
+    this.stagePlan = undefined
+    this.stageTurn = 0
     this.returnToIdle(true)
     this.mixer.update(0)
     this.trimCache()
@@ -305,6 +412,12 @@ export class MotionController {
       const clip = await this.loadClip(id, request.signal)
       if (request.signal.aborted || this.disposed)
         return false
+      const stageRadius = options.radius === undefined ? undefined : bounded(options.radius, this.height * 0.12, 0, this.height * 2)
+      if (!this.admitToStage(metadata, stageRadius)) {
+        // Queue admission uses the current viewport after loading, not the size when the item was enqueued.
+        this.queued.length = 0
+        return false
+      }
       const speed = bounded(options.speed, 1, 0.25, 2)
       const loop = options.loop ?? metadata.loop
       const requestedDeadline = bounded(options.duration, loop ? 15 : clip.duration / speed, 0.1, 60)
@@ -313,6 +426,8 @@ export class MotionController {
         ? bounded(options.radius, this.height * 0.12, 0, this.height * 0.2)
         : undefined
       this.transition(id, clip, loop, speed, deadline, circleRadius)
+      this.active.stageRadius = stageRadius
+      this.stageTurn = 0
       return true
     }
     catch {
@@ -442,10 +557,84 @@ export class MotionController {
     void this.start(next.id, next.options, metadata)
   }
 
+  private admitToStage(metadata: Readonly<MotionMetadata>, radius?: number, commit = true) {
+    if (!this.stage)
+      return true
+    if (this.stage.manualControl) {
+      this.error = 'Finish adjusting the camera before starting a motion.'
+      return false
+    }
+    if (!this.stageBounds) {
+      this.error = 'The stage is preparing model bounds. Try the motion again when the model is ready.'
+      return false
+    }
+    const envelope = createStageMotionEnvelope(this.stageBounds, metadata, this.height)
+    if (envelope && this.stageEnvelope && (this.retiring.size > 0 || Math.abs(this.movementYaw) > 0.0001))
+      envelope.union(this.stageEnvelope)
+    const plan = envelope && planStageMotion(this.stage, envelope, metadata.rootMotion === 'circle', radius)
+    if (!plan) {
+      this.error = 'This motion needs more room. Enlarge the model window or zoom out, then try again.'
+      return false
+    }
+    if (commit) {
+      this.stageEnvelope = envelope
+      this.stagePlan = plan
+    }
+    return true
+  }
+
+  private waitForStageBounds(signal: AbortSignal): Promise<boolean> {
+    if (!this.stage || this.stageBounds)
+      return Promise.resolve(true)
+    return new Promise((resolve) => {
+      let abort: () => void
+      let readyListener: () => void
+      const finish = (ready: boolean) => {
+        signal.removeEventListener('abort', abort)
+        this.stageReadyListeners.delete(readyListener)
+        resolve(ready)
+      }
+      abort = () => finish(false)
+      readyListener = () => finish(true)
+      this.stageReadyListeners.add(readyListener)
+      signal.addEventListener('abort', abort, { once: true })
+      if (signal.aborted)
+        abort()
+    })
+  }
+
+  private clampMovementToStage() {
+    const plan = this.stagePlan
+    if (!plan)
+      return
+    const offset = transformStageOffset(this.movementRoot.position.clone().sub(this.restPosition), plan.parentToCamera)
+    offset.x = Math.max(plan.minimum.x, Math.min(plan.maximum.x, offset.x))
+    offset.y = Math.max(plan.minimum.y, Math.min(plan.maximum.y, offset.y))
+    offset.z = 0
+    transformStageOffset(offset, plan.cameraToParent)
+    this.movementRoot.position.copy(this.restPosition).add(offset)
+  }
+
   private updateMovement(delta: number) {
     this.targetPosition.copy(this.restPosition)
     let targetYaw = 0
-    if (this.active.circleRadius !== undefined) {
+    if (this.active.circleRadius !== undefined && this.stagePlan && this.stage) {
+      const plan = this.stagePlan
+      const radiusX = plan.radius.x
+      const radiusY = plan.radius.y
+      const phase = this.stageTurn
+      const direction = Math.sign(plan.center.x)
+      const pathSpeed = transformStageOffset(new Vector3(direction * radiusX * Math.sin(phase), -radiusY * Math.cos(phase), 0), plan.cameraToParent).length()
+      // Distance follows gait cadence. Larger stages create larger paths rather than faster sliding feet.
+      const strideSpeed = this.height * 0.44 / this.active.sourceClip.duration * this.active.speed
+      this.stageTurn += Math.min(Math.PI, strideSpeed / Math.max(this.height * 0.05, pathSpeed)) * delta
+      this.targetPosition.set(plan.center.x - direction * Math.cos(this.stageTurn) * radiusX, plan.center.y - Math.sin(this.stageTurn) * radiusY, 0)
+      transformStageOffset(this.targetPosition, plan.cameraToParent).add(this.restPosition)
+      // Screen up represents the far side of the stage. Heading follows the ellipse's tangent, not its phase alone.
+      const heading = transformStageOffset(new Vector3(direction * radiusX * Math.sin(this.stageTurn), 0, radiusY * Math.cos(this.stageTurn)), plan.cameraToParent)
+      targetYaw = Math.atan2(heading.x, heading.z) - this.forwardYaw
+    }
+    else if (this.active.circleRadius !== undefined && !this.stage) {
       const elapsed = this.active.elapsed
       const turn = elapsed * this.active.speed * Math.PI / 2
       const entry = Math.min(1, elapsed / 0.6)
@@ -456,6 +645,7 @@ export class MotionController {
     }
     const blend = 1 - Math.exp(-10 * delta)
     this.movementRoot.position.lerp(this.targetPosition, blend)
+    this.clampMovementToStage()
 
     // Signed velocity bounds both turns and direction changes, including a return from the opposite heading.
     const maximumSpeed = Math.PI

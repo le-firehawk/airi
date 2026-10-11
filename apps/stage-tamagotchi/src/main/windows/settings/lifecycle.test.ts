@@ -1,4 +1,4 @@
-import type { BrowserWindow as ElectronWindow } from 'electron'
+import type { BrowserWindow as ElectronWindow, Rectangle } from 'electron'
 
 import { EventEmitter } from 'node:events'
 
@@ -31,10 +31,17 @@ vi.mock('~build/git', () => ({ committerDate: '2026-04-01T00:00:00.000Z' }))
 vi.mock('electron-updater', () => ({ default: { autoUpdater: {} } }))
 vi.mock('electron', async () => {
   const { EventEmitter } = await import('node:events')
+  const display = {
+    id: 1,
+    bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+    workArea: { x: 0, y: 30, width: 1920, height: 1050 },
+    scaleFactor: 1,
+  }
   let id = 0
   class Window extends EventEmitter {
     readonly id = ++id
     private destroyed = false
+    private bounds = { x: 100, y: 100, width: 450, height: 600 }
     readonly webContents = Object.assign(new EventEmitter(), {
       id: this.id,
       isDestroyed: () => this.destroyed,
@@ -53,6 +60,12 @@ vi.mock('electron', async () => {
     isDestroyed() { return this.destroyed }
     isVisible() { return false }
     getTitle() { return 'Settings' }
+    getBounds = () => ({ ...this.bounds })
+    getSize = () => [this.bounds.width, this.bounds.height]
+    setBounds = vi.fn((bounds: Partial<Rectangle>) => { this.bounds = { ...this.bounds, ...bounds } })
+    setSize = vi.fn((width: number, height: number) => { this.bounds = { ...this.bounds, width, height } })
+    setMinimumSize = vi.fn()
+    setMaximumSize = vi.fn()
     loadFile = vi.fn().mockResolvedValue(undefined)
     close() {
       this.destroyed = true
@@ -65,7 +78,9 @@ vi.mock('electron', async () => {
     ipcMain: new EventEmitter(),
     powerMonitor: new EventEmitter(),
     screen: Object.assign(new EventEmitter(), {
-      getAllDisplays: () => [],
+      getAllDisplays: () => [display],
+      getDisplayMatching: () => display,
+      getPrimaryDisplay: () => display,
     }),
     app: {
       isPackaged: true,
@@ -240,6 +255,9 @@ describe('main and settings window cleanup at the Electron boundary', () => {
     const window = new BrowserWindow()
     const stopChatState = vi.fn()
     const ipcBaseline = ipcMain.listenerCount('eventa-message')
+    const displayEvents = ['display-added', 'display-removed', 'display-metrics-changed']
+    const displayBaselines = displayEvents.map(event => screen.listenerCount(event))
+    const moveBaseline = window.listenerCount('move')
     try {
       await setupMainWindowElectronInvokes({
         ...params,
@@ -252,6 +270,11 @@ describe('main and settings window cleanup at the Electron boundary', () => {
         inlayWindow: vi.fn(),
       })
       initScreenCaptureForWindow(window)
+      expect(window.setMinimumSize).toHaveBeenCalledWith(280, 320)
+      expect(window.setMaximumSize).toHaveBeenCalledWith(1920, 1050)
+      expect(window.listenerCount('move')).toBeGreaterThan(moveBaseline)
+      for (const [index, event] of displayEvents.entries())
+        expect(screen.listenerCount(event)).toBeGreaterThan(displayBaselines[index])
       expect(window.listenerCount('closed')).toBe(7)
       // Non-Linux main windows also remove their native dragging invoke handler on close.
       window.on('closed', vi.fn())
@@ -260,6 +283,9 @@ describe('main and settings window cleanup at the Electron boundary', () => {
       window.close()
       expect(stopChatState).toHaveBeenCalledOnce()
       expect(ipcMain.listenerCount('eventa-message')).toBe(ipcBaseline)
+      expect(window.listenerCount('move')).toBe(moveBaseline)
+      for (const [index, event] of displayEvents.entries())
+        expect(screen.listenerCount(event)).toBe(displayBaselines[index])
     }
     finally {
       if (!window.isDestroyed())

@@ -34,6 +34,28 @@ docs:
   'account': Account
   'logout': Sign out
 
+stage-size:
+  title: Resize stage
+  description: Drag the bottom-right grip or enter a size. The outlined area gives the character room to move.
+  current: 'Current size: {width} × {height}'
+  width: Width
+  height: Height
+  apply: Apply
+  wide: Room to move
+  reset: Default size
+  fit: Fit model for motion
+  fit-description: Stops playback and changes the view to show the full body with room for motion. Manual camera controls remain available.
+  fit-not-ready: Available when a VRM model is ready.
+  fit-result:
+    applied: View fitted for motion.
+    not-ready: The VRM model is not ready. Wait for it to load, then try again.
+    insufficient-room: The model cannot fit safely in this view. Increase the stage size, then try again.
+    failed: Unable to fit the view. Try again.
+  done: Done
+  grip: Drag to resize the stage. Arrow keys resize. Shift uses larger steps.
+  native-hint: If your desktop blocks this resize, use its native window resize command. On KDE, press Alt+F3 and choose Resize.
+  error: Unable to change the stage size. Try again.
+
 'chat-window':
   style:
     title: Chat window style

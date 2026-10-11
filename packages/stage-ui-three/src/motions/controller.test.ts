@@ -1,9 +1,10 @@
 import type { VRMHumanBones } from '@pixiv/three-vrm-core'
 
 import { VRMCore, VRMHumanoid } from '@pixiv/three-vrm-core'
-import { AnimationClip, AnimationMixer, Group, NumberKeyframeTrack, Object3D, QuaternionKeyframeTrack, Vector3, VectorKeyframeTrack } from 'three'
+import { AnimationClip, AnimationMixer, Box3, BoxGeometry, Group, Mesh, MeshBasicMaterial, NumberKeyframeTrack, Object3D, PerspectiveCamera, QuaternionKeyframeTrack, Vector3, VectorKeyframeTrack } from 'three'
 import { describe, expect, it, vi } from 'vitest'
 
+import { SceneMotionFraming } from '../companion/scene-motion-framing'
 import { builtinMotionMetadata, createMotionCatalog, MotionCatalog, MotionController } from './index'
 
 function createRig(scale = 1, bent = false) {
@@ -557,6 +558,252 @@ describe('motion controller', () => {
     controller.dispose()
   })
 
+  it('restores the saved idle requested before bounds are ready and cancels an obsolete selection', async () => {
+    const { controller, placement } = createController()
+    const camera = new PerspectiveCamera(45, 4 / 3, 0.1, 100)
+    camera.position.set(0, 0.9, 5)
+    camera.lookAt(0, 0.9, 0)
+    const frame = { camera, root: placement, width: 1200, height: 900, manualControl: false }
+    controller.setStageFrame(frame)
+    expect(await controller.setIdle('default-idle')).toBe(true)
+    expect(controller.snapshot.error).toBeUndefined()
+    const obsolete = controller.setIdle('natural-idle')
+    await Promise.resolve()
+    const selected = controller.setIdle('natural-idle')
+    await Promise.resolve()
+    controller.setStageFrame({ ...frame, bounds: new Box3(new Vector3(-0.3, 0, -0.2), new Vector3(0.3, 1.7, 0.2)) })
+    expect(await obsolete).toBe(false)
+    expect(await selected).toBe(true)
+    expect(controller.snapshot.idleId).toBe('natural-idle')
+    expect(controller.snapshot.error).toBeUndefined()
+    controller.dispose()
+  })
+
+  it('cancels an idle waiting for initial bounds when the model is disposed', async () => {
+    const { controller, placement } = createController()
+    controller.setStageFrame({ camera: new PerspectiveCamera(), root: placement, width: 800, height: 600, manualControl: false })
+    const pending = controller.setIdle('natural-idle')
+    await Promise.resolve()
+    controller.dispose()
+    expect(await pending).toBe(false)
+  })
+
+  it('reuses load-time world bounds under a rotated scaled parent and after a cached reset', async () => {
+    const { controller, placement } = createController()
+    placement.position.set(0.2, -0.1, 0.3)
+    placement.rotation.set(0.04, 0.4, -0.03)
+    placement.scale.set(1.1, 0.9, 1.2)
+    placement.updateMatrixWorld(true)
+    const camera = new PerspectiveCamera(45, 4 / 3, 0.1, 100)
+    camera.position.set(0, 0.9, 8)
+    camera.lookAt(0, 0.9, 0)
+    const frame = { camera, root: placement, width: 1200, height: 900, manualControl: false }
+    controller.setStageFrame(frame)
+    const local = new Box3(new Vector3(-0.3, 0, -0.2), new Vector3(0.3, 1.7, 0.2))
+    const world = local.clone().applyMatrix4(placement.matrixWorld)
+    const original = world.clone()
+    controller.setLoadedStageBounds(world)
+    expect(world.equals(original)).toBe(true)
+    expect(await controller.play('run-circle')).toBe(true)
+    advance(controller, 0.5)
+    controller.reset()
+    const replacementCamera = camera.clone()
+    controller.setStageFrame({ ...frame, camera: replacementCamera })
+    controller.setLoadedStageBounds(world)
+    expect(await controller.play('run-circle')).toBe(true)
+    expect(controller.snapshot.error).toBeUndefined()
+    controller.dispose()
+  })
+
+  it('revalidates a cached selected imported idle against a replacement camera', async () => {
+    const { controller, idle, placement } = createController()
+    const camera = new PerspectiveCamera(45, 4 / 3, 0.1, 100)
+    camera.position.set(0, 0.9, 20)
+    camera.lookAt(0, 0.9, 0)
+    const frame = { camera, root: placement, width: 1200, height: 900, manualControl: false }
+    const bounds = new Box3(new Vector3(-0.3, 0, -0.2), new Vector3(0.3, 1.7, 0.2))
+    controller.setStageFrame({ ...frame, bounds })
+    controller.catalog.register({ id: 'wide-idle', name: 'Wide idle', category: 'idle', duration: 4, loop: true, source: 'imported' }, () => idle.clone())
+    expect(await controller.setIdle('wide-idle')).toBe(true)
+    controller.reset()
+    const closeCamera = camera.clone()
+    closeCamera.position.z = 2
+    controller.setStageFrame({ ...frame, camera: closeCamera })
+    controller.setLoadedStageBounds(bounds)
+    expect(controller.snapshot.idleId).toBe('default-idle')
+    expect(await controller.setIdle('wide-idle')).toBe(false)
+    expect(controller.snapshot.error).toContain('needs more room')
+    controller.dispose()
+  })
+
+  it('retains ownership of a gesture camera offset through circle travel and restores it only after returning', async () => {
+    const { controller, root, placement } = createController()
+    const mesh = new Mesh(new BoxGeometry(0.6, 1.7, 0.4), new MeshBasicMaterial())
+    mesh.position.y = 0.85
+    root.add(mesh)
+    const camera = new PerspectiveCamera(45, 4 / 3, 0.1, 100)
+    camera.position.set(0, 0.9, 5)
+    camera.lookAt(0, 0.9, 0)
+    const baseline = camera.position.clone()
+    const stage = { camera, root: placement, width: 1200, height: 900, manualControl: false }
+    const bounds = new Box3(new Vector3(-0.3, 0, -0.2), new Vector3(0.3, 1.7, 0.2))
+    controller.setStageFrame({ ...stage, bounds })
+    vi.useFakeTimers({ toFake: ['performance'] })
+    try {
+      const framing = new SceneMotionFraming('movement', { maxZoomOut: 2.5 })
+      const frame = { modelId: 'movement', motionRevision: 0, cameraRevision: 0, manualControl: false, root: placement, camera, anchorWorld: new Vector3(0, 0.9, 0), nowMs: 0, motionActive: false }
+      framing.tick(frame)
+      expect(await controller.play('bow')).toBe(true)
+      const expanded = bounds.clone().expandByScalar(1)
+      const gesture = framing.tick({ ...frame, nowMs: 200, motionActive: true, motionRevision: 1, motionEnvelope: expanded })
+      expect(gesture.status).toBe('applied')
+      expect(camera.position.distanceTo(baseline)).toBeGreaterThan(0.1)
+      const temporaryCamera = camera.position.clone()
+      controller.setStageFrame(stage)
+      expect(await controller.play('run-circle')).toBe(true)
+      for (let tick = 0; tick < 180; tick++) {
+        controller.update(1 / 60)
+        expect(controller.stageMovementActive).toBe(true)
+        // ThreeScene skips framing while this predicate owns travel and its return.
+        controller.setStageFrame(stage)
+        expect(camera.position.toArray()).toEqual(temporaryCamera.toArray())
+      }
+      controller.stop()
+      expect(controller.stageMovementActive).toBe(true)
+      advance(controller, 4)
+      expect(controller.stageMovementActive).toBe(false)
+      for (let tick = 0; tick < 240; tick++)
+        framing.tick({ ...frame, nowMs: 8000 + tick * 1000 / 60, motionRevision: 2 })
+      expect(camera.position.distanceTo(baseline)).toBeLessThan(0.000001)
+    }
+    finally {
+      controller.dispose()
+      mesh.geometry.dispose()
+      mesh.material.dispose()
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps gait-coupled travel consistent when the placement and camera scale together', async () => {
+    const fixtures = [createController(), createController()]
+    for (let index = 0; index < fixtures.length; index++) {
+      const scale = index + 1
+      const { controller, placement } = fixtures[index]!
+      placement.scale.setScalar(scale)
+      const camera = new PerspectiveCamera(45, 4 / 3, 0.1, 100)
+      camera.position.set(0, 0.9 * scale, 5 * scale)
+      camera.lookAt(0, 0.9 * scale, 0)
+      controller.setStageFrame({ camera, root: placement, width: 1200, height: 900, manualControl: false, bounds: new Box3(new Vector3(-0.3, 0, -0.2), new Vector3(0.3, 1.7, 0.2)) })
+      expect(await controller.play('run-circle')).toBe(true)
+    }
+    for (let tick = 0; tick < 180; tick++) {
+      for (const { controller } of fixtures)
+        controller.update(1 / 60)
+      expect(fixtures[0]!.root.position.distanceTo(fixtures[1]!.root.position)).toBeLessThan(0.000001)
+    }
+    for (const { controller } of fixtures)
+      controller.dispose()
+  })
+
+  it('keeps mirrored travel symmetric under rotated nonuniform placement scales', async () => {
+    const fixtures = [createController(), createController()]
+    for (let index = 0; index < fixtures.length; index++) {
+      const direction = index === 0 ? -1 : 1
+      const { controller, placement } = fixtures[index]!
+      placement.position.x = direction * 0.3
+      placement.rotation.z = direction * 0.3
+      placement.scale.set(1.4, 0.7, 1)
+      const camera = new PerspectiveCamera(45, 4 / 3, 0.1, 100)
+      camera.position.set(0, 0.85, 7)
+      camera.lookAt(0, 0.85, 0)
+      controller.setStageFrame({ camera, root: placement, width: 1200, height: 900, manualControl: false, bounds: new Box3(new Vector3(-0.3, 0, -0.2), new Vector3(0.3, 1.7, 0.2)) })
+      expect(await controller.play('run-circle')).toBe(true)
+    }
+    for (let tick = 0; tick < 180; tick++) {
+      for (const { controller } of fixtures)
+        controller.update(1 / 60)
+      expect(fixtures[0]!.root.position.x).toBeCloseTo(-fixtures[1]!.root.position.x, 8)
+      expect(fixtures[0]!.root.position.y).toBeCloseTo(fixtures[1]!.root.position.y, 8)
+    }
+    for (const { controller } of fixtures)
+      controller.dispose()
+  })
+
+  it('requires complete stage bounds and moves the avatar through both screen dimensions', async () => {
+    const { controller, root, placement } = createController()
+    const camera = new PerspectiveCamera(45, 4 / 3, 0.1, 100)
+    camera.position.set(0, 0.9, 5)
+    camera.lookAt(0, 0.9, 0)
+    const frame = { camera, root: placement, width: 1200, height: 900, manualControl: false }
+    controller.setStageFrame(frame)
+    expect(await controller.play('run-circle')).toBe(false)
+    expect(controller.snapshot.error).toContain('preparing model bounds')
+    const bounds = new Box3(new Vector3(-0.3, 0, -0.2), new Vector3(0.3, 1.7, 0.2))
+    controller.setStageFrame({ ...frame, bounds })
+    const initialCamera = camera.position.clone()
+    expect(await controller.play('run-circle', { duration: 15 })).toBe(true)
+    const travel = new Box3()
+    for (let tick = 0; tick < 600; tick++) {
+      controller.update(1 / 60)
+      controller.setStageFrame(frame)
+      travel.expandByPoint(root.position)
+    }
+    expect(travel.getSize(new Vector3()).x).toBeGreaterThan(1)
+    expect(travel.getSize(new Vector3()).y).toBeGreaterThan(0.5)
+    expect(camera.position.toArray()).toEqual(initialCamera.toArray())
+    expect(placement.position.toArray()).toEqual([0, 0, 0])
+    controller.stop()
+    advance(controller, 3)
+    expect(root.position.toArray()).toEqual([0, 0, 0])
+    controller.dispose()
+  })
+
+  it('stops and clears queued motion when a stage resize removes the required space', async () => {
+    const { controller, root, placement } = createController()
+    const camera = new PerspectiveCamera(45, 4 / 3, 0.1, 100)
+    camera.position.set(0, 0.9, 5)
+    camera.lookAt(0, 0.9, 0)
+    const frame = { camera, root: placement, width: 1200, height: 900, manualControl: false }
+    controller.setStageFrame({ ...frame, bounds: new Box3(new Vector3(-0.3, 0, -0.2), new Vector3(0.3, 1.7, 0.2)) })
+    expect(await controller.play('run-circle')).toBe(true)
+    expect(await controller.play('wave', { mode: 'queue' })).toBe(true)
+    advance(controller, 1)
+    camera.aspect = 160 / 900
+    camera.updateProjectionMatrix()
+    controller.setStageFrame({ ...frame, width: 160 })
+    expect(controller.snapshot.activeId).toBe('default-idle')
+    expect(controller.snapshot.queuedIds).toEqual([])
+    expect(controller.snapshot.error).toContain('needs more room')
+    expect(root.position.toArray()).toEqual([0, 0, 0])
+    expect(await controller.play('run-circle')).toBe(false)
+    controller.dispose()
+  })
+
+  it('rechecks current bounds after asynchronous loading and applies admission to imported idle changes', async () => {
+    const { controller, idle, placement } = createController()
+    const camera = new PerspectiveCamera(45, 4 / 3, 0.1, 100)
+    camera.position.set(0, 0.9, 20)
+    camera.lookAt(0, 0.9, 0)
+    const frame = { camera, root: placement, width: 1200, height: 900, manualControl: false }
+    controller.setStageFrame({ ...frame, bounds: new Box3(new Vector3(-0.3, 0, -0.2), new Vector3(0.3, 1.7, 0.2)) })
+    let finish: (clip: AnimationClip) => void = () => {}
+    controller.catalog.register({ id: 'slow-stage', name: 'Slow stage', category: 'gesture', duration: 4, loop: false, source: 'imported' }, () => new Promise<AnimationClip>((resolve) => {
+      finish = resolve
+    }))
+    const pending = controller.play('slow-stage')
+    camera.position.z = 2
+    controller.setStageFrame(frame)
+    finish(idle.clone())
+    expect(await pending).toBe(false)
+    expect(controller.snapshot.activeId).toBe('default-idle')
+    expect(controller.snapshot.error).toContain('needs more room')
+    expect(await controller.setIdle('slow-stage')).toBe(false)
+    camera.position.z = 20
+    controller.setStageFrame(frame)
+    expect(await controller.setIdle('slow-stage')).toBe(true)
+    controller.dispose()
+  })
+
   it('keeps stage placement unchanged and returns circle movement smoothly', async () => {
     const { controller, root, placement } = createController()
     placement.position.set(1, 2, 3)
@@ -744,7 +991,7 @@ describe('procedural motions', () => {
     mixer.stopAllAction()
   })
 
-  it('produces opposite gentle-jog strides with full knee, foot, and arm movement', async () => {
+  it('produces opposite running strides with full knee, foot, and arm movement', async () => {
     const { vrm } = createRig()
     const clip = await createMotionCatalog().load('run-circle', vrm, new AbortController().signal)
     const mixer = new AnimationMixer(vrm.scene)
@@ -754,7 +1001,7 @@ describe('procedural motions', () => {
     mixer.update(clip.duration / 4)
     expect(left.rotation.x).toBeLessThan(-0.27)
     expect(right.rotation.x).toBeGreaterThan(0.27)
-    expect(vrm.humanoid.getNormalizedBoneNode('rightLowerLeg')!.rotation.x).toBeGreaterThan(1.3)
+    expect(vrm.humanoid.getNormalizedBoneNode('rightLowerLeg')!.rotation.x).toBeGreaterThan(1.2)
     expect(vrm.humanoid.getNormalizedBoneNode('rightFoot')!.rotation.x).toBeLessThan(-0.4)
     expect(vrm.humanoid.getNormalizedBoneNode('leftUpperArm')!.rotation.x).toBeGreaterThan(0.6)
     expect(vrm.humanoid.getNormalizedBoneNode('rightUpperArm')!.rotation.x).toBeLessThan(-0.6)
@@ -764,7 +1011,7 @@ describe('procedural motions', () => {
     mixer.stopAllAction()
   })
 
-  it('bounds the gentle jog stride and hips bob at different avatar scales', async () => {
+  it('bounds the running stride and visible hips bob at different avatar scales', async () => {
     for (const scale of [0.6, 1, 1.8]) {
       const { vrm, hips } = createRig(scale)
       const height = 1.7 * scale
@@ -780,13 +1027,13 @@ describe('procedural motions', () => {
         mixer.update(1 / 120)
         stride = Math.max(stride, Math.abs(left.rotation.x), Math.abs(right.rotation.x))
         bob = Math.max(bob, restY - hips.position.y)
-        expect(Math.abs(left.rotation.x)).toBeLessThanOrEqual(0.280001)
-        expect(Math.abs(right.rotation.x)).toBeLessThanOrEqual(0.280001)
-        expect(restY - hips.position.y).toBeLessThanOrEqual(height * 0.003 + 0.000001)
+        expect(Math.abs(left.rotation.x)).toBeLessThanOrEqual(0.520001)
+        expect(Math.abs(right.rotation.x)).toBeLessThanOrEqual(0.520001)
+        expect(restY - hips.position.y).toBeLessThanOrEqual(height * 0.024 + 0.000001)
         expect(hips.position.y - restY).toBeLessThanOrEqual(0.000001)
       }
       expect(stride).toBeGreaterThan(0.27)
-      expect(bob).toBeGreaterThan(height * 0.0025)
+      expect(bob).toBeGreaterThan(height * 0.022)
       mixer.stopAllAction()
       mixer.uncacheRoot(vrm.scene)
     }

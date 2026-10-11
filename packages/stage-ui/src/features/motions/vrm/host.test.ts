@@ -76,6 +76,10 @@ it('does not relabel the mounted avatar while a selected model URL is still reso
     const store = useVrmMotionsStore()
     expect(await host.interact('wave')).toBe(true)
     expect(first.snapshot.activeId).toBe('wave')
+    const beforeFitStop = host.motionRevision.value
+    host.stop()
+    expect(host.motionRevision.value).toBeGreaterThan(beforeFitStop)
+    expect(first.snapshot.activeId).toBe(first.snapshot.idleId)
 
     await host.interact('bow')
     await host.interact('wave')

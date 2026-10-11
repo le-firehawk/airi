@@ -2,6 +2,7 @@ import type { NotificationWaveIntent } from '@proj-airi/stage-ui-three/companion
 import type { MotionController } from '@proj-airi/stage-ui-three/motions'
 import type { MaybeRefOrGetter } from 'vue'
 
+import { loadRelaxedIdleClip } from '@proj-airi/stage-ui-three/motions'
 import { onScopeDispose, ref, toValue, watch } from 'vue'
 
 import * as v from 'valibot'
@@ -104,7 +105,7 @@ export function useVrmMotionHost(options: {
       const response = await fetch(relaxedIdleUrl, { signal })
       if (!response.ok)
         throw new Error('Relaxed idle asset unavailable')
-      return loadMotionClip(await response.arrayBuffer(), vrm, signal)
+      return loadRelaxedIdleClip(await response.arrayBuffer(), vrm, signal)
     })
     for (const entry of entries)
       controller.catalog.register(entry, async (vrm, signal) => loadMotionClip(await readMotionBytes(entry.id), vrm, signal))
@@ -222,6 +223,10 @@ export function useVrmMotionHost(options: {
   return {
     act,
     motionRevision,
+    stop: () => {
+      ownership?.stop()
+      refreshMotionRevision()
+    },
     acknowledgeNotifications: (ids: readonly string[]) => ownership?.acknowledgeNotifications(ids),
     notify: (intent: Omit<NotificationWaveIntent, 'modelId'>) => {
       const accepted = ownership?.notify(intent)

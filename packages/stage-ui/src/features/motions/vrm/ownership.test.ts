@@ -124,6 +124,27 @@ describe('loaded avatar ownership', () => {
     host.dispose()
   })
 
+  it('revokes game ownership and queued attention after an explicit stage fit resets the controller', async () => {
+    const { host, controller, revoked } = setup()
+    expect(host.reserveGame('room', 1)).toBe(true)
+    host.notify(intent('waiting-during-fit'))
+    const played = host.playGame('room', 1, 'gesture', 'wave')
+    await settle()
+    expect(controller.snapshot.activeId).toBe('wave')
+    controller.reset()
+    host.stop()
+    expect(await played).toBe(false)
+    expect(host.gameActive).toBe(false)
+    expect(revoked).toHaveBeenCalledOnce()
+    expect(host.heartbeatGame('room', 1)).toBe(false)
+    advance(controller)
+    host.tick()
+    await settle()
+    expect(controller.snapshot.activeId).toBe(controller.snapshot.idleId)
+    expect(controller.snapshot.queuedIds).toEqual([])
+    host.dispose()
+  })
+
   it('resolves game playback only after completion and ignores stale lease release', async () => {
     const { host, controller } = setup()
     host.reserveGame('room', 1)

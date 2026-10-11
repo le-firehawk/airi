@@ -2125,6 +2125,8 @@ voices: Voice
 vrm:
   orbit-pivot:
     reset: Reset orbit center
+    loading: Finding orbit center…
+    error: Orbit center lookup failed. Try another point.
     hint: Middle-click the model to center rotation on that point. Middle-drag still zooms.
   motions:
     title: Motion Library

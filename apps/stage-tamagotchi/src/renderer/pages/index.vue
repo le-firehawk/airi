@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MotionStageFitResult } from '@proj-airi/stage-ui-three/motions'
 import type { ModelSettingsRuntimeSnapshot } from '@proj-airi/stage-ui/components/scenarios/settings/model-settings/runtime'
 
 import { electron } from '@proj-airi/electron-eventa'
@@ -118,6 +119,20 @@ const expressionStore = useExpressionStore()
 const { sceneMutationLocked, scenePhase } = storeToRefs(modelStore)
 const { stagePaused } = storeToRefs(useStageWindowLifecycleStore())
 const { fadeOnHoverEnabled } = storeToRefs(useControlsIslandStore())
+const motionFitAction = computed<(() => MotionStageFitResult) | undefined>(() => {
+  const stage = widgetStageRef.value
+  const modelSource = stageModelSelectedUrl.value
+  if (!modelSource || stageModelRenderer.value !== 'vrm' || !stageMounted.value || stagePaused.value || sceneMutationLocked.value || !stage?.canFitMotionStage)
+    return undefined
+  return () => {
+    // A rendered button can retain its old callback until Vue applies a model replacement.
+    if (stage !== widgetStageRef.value || modelSource !== stageModelSelectedUrl.value
+      || stageModelRenderer.value !== 'vrm' || !stageMounted.value || stagePaused.value || sceneMutationLocked.value || !stage.canFitMotionStage) {
+      return 'not-ready'
+    }
+    return stage.fitMotionStage()
+  }
+})
 const modelSettingsRuntimeOwnerInstanceId = `tamagotchi-main-stage:${Math.random().toString(36).slice(2, 10)}`
 const shouldUseThreeTransparencyHitTest = computed(() => shouldSampleStageTransparency({
   componentState: componentStateStage.value,
@@ -463,6 +478,7 @@ onUnmounted(() => {
           <ControlsIsland
             ref="controlsIslandRef"
             :cursor-away="cursorAwayFromWindow"
+            :fit-motion-stage="motionFitAction"
             :[stageOpaqueAttribute]="true"
             @interaction-change="controlsIslandInteractionActive = $event"
           />

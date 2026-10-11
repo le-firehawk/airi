@@ -3,6 +3,7 @@ import type { Live2DLipSync, Live2DLipSyncOptions } from '@proj-airi/model-drive
 import type { Profile } from '@proj-airi/model-driver-lipsync/shared/wlipsync'
 import type { CaptionChannelEvent, PresenceBubbleState } from '@proj-airi/stage-shared'
 import type { VrmInteractionTarget } from '@proj-airi/stage-ui-three'
+import type { MotionStageFitResult } from '@proj-airi/stage-ui-three/motions'
 
 import type { EmotionPayload } from '../../constants/emotions'
 
@@ -653,8 +654,22 @@ onUnmounted(() => {
   speechDestination.disconnect()
 })
 
+const canFitMotionStage = computed(() => stageModelRenderer.value === 'vrm' && showStage.value && !props.paused
+  && componentState.value === 'mounted' && !!vrmViewerRef.value?.canFitMotionStage
+  && vrmViewerRef.value.getLoadedModelId() === stageModelSelected.value
+  && vrmViewerRef.value.getLoadedModelSource() === stageModelSelectedUrl.value)
+
+function fitMotionStage(): MotionStageFitResult {
+  const result = canFitMotionStage.value ? vrmViewerRef.value?.fitMotionStage() ?? 'not-ready' : 'not-ready'
+  if (result === 'applied')
+    vrmMotionHost.stop()
+  return result
+}
+
 defineExpose({
   canvasElement,
+  canFitMotionStage,
+  fitMotionStage,
   notify: vrmMotionHost.notify,
   acknowledgeNotifications: vrmMotionHost.acknowledgeNotifications,
   /**
@@ -702,6 +717,8 @@ defineExpose({
         :motion-revision="vrmMotionHost.motionRevision.value"
         :automatic-motion-framing="true"
         :orbit-pivot-reset-label="t('settings.vrm.orbit-pivot.reset')"
+        :orbit-pivot-loading-label="t('settings.vrm.orbit-pivot.loading')"
+        :orbit-pivot-error-label="t('settings.vrm.orbit-pivot.error')"
         :presence="presenceBubble"
         :background-url="activeBackgroundUrl"
         min-w="50% <lg:full" h-full w-full flex-1

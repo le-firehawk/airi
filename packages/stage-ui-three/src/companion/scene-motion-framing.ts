@@ -122,6 +122,11 @@ export class SceneMotionFraming {
     this.restoreRate = bounded(options.shrinkRate, 0.75, 0.01, 4)
   }
 
+  /** Copies a complete reference sample without another geometry traversal. Partial samples remain private. */
+  copyReferenceBounds(target: Box3) {
+    return this.restBounds ? target.copy(this.restBounds) : undefined
+  }
+
   /** Restores only a still-owned automatic offset. Manual camera changes are never undone. */
   reset(options: { restore?: boolean } = {}) {
     const baseline = this.baseline

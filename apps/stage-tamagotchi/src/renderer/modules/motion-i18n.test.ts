@@ -68,6 +68,8 @@ const expectedMessages = {
   'settings.vrm.motions.errors.missing': 'The animation file is no longer in the local library.',
   'settings.vrm.motions.errors.interpolation': 'Only linear keyframes are supported. Export this animation with linear keyframes.',
   'settings.vrm.orbit-pivot.reset': 'Reset orbit center',
+  'settings.vrm.orbit-pivot.loading': 'Finding orbit center…',
+  'settings.vrm.orbit-pivot.error': 'Orbit center lookup failed. Try another point.',
   'settings.vrm.orbit-pivot.hint': 'Middle-click the model to center rotation on that point. Middle-drag still zooms.',
   'tamagotchi.settings.desktop-companion.reactions.description': 'Allow high-priority notifications to request an avatar reaction.',
 }

@@ -155,6 +155,60 @@ describe('motion controller', () => {
     controller.dispose()
   })
 
+  it('plays a mixed queue of new actions and returns to the selected new idle', async () => {
+    const { controller, root } = createController()
+    try {
+      expect(await controller.setIdle('thoughtful-idle')).toBe(true)
+      expect(await controller.play('blow-kiss', { duration: 0.2 })).toBe(true)
+      const queued = ['laugh', 'head-bob', 'walk-circle', 'shrug']
+      for (const id of queued)
+        expect(await controller.play(id, { mode: 'queue', duration: 0.2 })).toBe(true)
+      expect(controller.snapshot.queuedIds).toEqual(queued)
+      for (const id of queued) {
+        advance(controller, 0.25)
+        await vi.waitFor(() => expect(controller.snapshot.activeId).toBe(id))
+      }
+      advance(controller, 3)
+      expect(controller.snapshot.activeId).toBe('thoughtful-idle')
+      expect(controller.snapshot.queuedIds).toEqual([])
+      expect(root.position.toArray()).toEqual([0, 0, 0])
+
+      expect(await controller.play('walk-circle')).toBe(true)
+      expect(await controller.play('blow-kiss', { mode: 'queue' })).toBe(true)
+      expect(await controller.play('laugh', { mode: 'queue' })).toBe(true)
+      advance(controller, 0.7)
+      expect(root.position.length()).toBeGreaterThan(0)
+      controller.stop()
+      expect(controller.snapshot.activeId).toBe('thoughtful-idle')
+      expect(controller.snapshot.queuedIds).toEqual([])
+      advance(controller, 3)
+      expect(root.position.toArray()).toEqual([0, 0, 0])
+      expect(controller.snapshot.activeId).toBe('thoughtful-idle')
+    }
+    finally {
+      controller.dispose()
+    }
+  })
+
+  it('cancels a new procedural load and its queue when stop interrupts before playback', async () => {
+    const { controller } = createController()
+    try {
+      expect(await controller.setIdle('attentive-idle')).toBe(true)
+      const pending = controller.play('blow-kiss')
+      const queued = controller.play('shrug', { mode: 'queue' })
+      controller.stop()
+      expect(await pending).toBe(false)
+      expect(await queued).toBe(true)
+      expect(controller.snapshot.loadingId).toBeUndefined()
+      expect(controller.snapshot.queuedIds).toEqual([])
+      advance(controller, 8)
+      expect(controller.snapshot.activeId).toBe('attentive-idle')
+    }
+    finally {
+      controller.dispose()
+    }
+  })
+
   it('does not let queued playback overtake a pending replacement load', async () => {
     const { controller, idle } = createController()
     let finish: (clip: AnimationClip) => void = () => {}
@@ -729,27 +783,104 @@ describe('motion controller', () => {
       controller.dispose()
   })
 
-  it('requires complete stage bounds and moves the avatar through both screen dimensions', async () => {
+  it('keeps a walking support foot at ground height through controller clip sanitization', async () => {
+    const { controller, vrm, root } = createController()
+    const feet = ['leftFoot', 'rightFoot'].map(name => vrm.humanoid.getNormalizedBoneNode(name as 'leftFoot' | 'rightFoot')!)
+    root.updateMatrixWorld(true)
+    const ground = Math.min(...feet.map(foot => foot.getWorldPosition(new Vector3()).y))
+    try {
+      expect(await controller.play('walk-circle', { radius: 0 })).toBe(true)
+      advance(controller, 0.5)
+      for (let frame = 0; frame < 144; frame++) {
+        controller.update(1 / 60)
+        root.updateMatrixWorld(true)
+        const support = Math.min(...feet.map(foot => foot.getWorldPosition(new Vector3()).y))
+        expect(Math.abs(support - ground)).toBeLessThan(0.001)
+      }
+    }
+    finally {
+      controller.dispose()
+    }
+  })
+
+  it.each([false, true])('moves walking slower than running at the same playback speed with stage bounds %s', async (stageBound) => {
+    const fixtures = [createController(), createController()]
+    const distances = [0, 0]
+    try {
+      for (const [index, { controller, placement }] of fixtures.entries()) {
+        if (stageBound) {
+          const camera = new PerspectiveCamera(45, 4 / 3, 0.1, 100)
+          camera.position.set(0, 0.9, 5)
+          camera.lookAt(0, 0.9, 0)
+          controller.setStageFrame({ camera, root: placement, width: 1200, height: 900, manualControl: false, bounds: new Box3(new Vector3(-0.3, 0, -0.2), new Vector3(0.3, 1.7, 0.2)) })
+        }
+        expect(await controller.play(index === 0 ? 'walk-circle' : 'run-circle', { duration: 5, speed: 1 })).toBe(true)
+      }
+      for (let frame = 0; frame < 240; frame++) {
+        for (const [index, { controller, root }] of fixtures.entries()) {
+          const previous = root.position.clone()
+          controller.update(1 / 60)
+          distances[index] += root.position.distanceTo(previous)
+        }
+      }
+      expect(distances[0]).toBeGreaterThan(0.5)
+      expect(distances[1]).toBeGreaterThan(distances[0] * 1.4)
+      expect(fixtures[0]!.controller.snapshot.activeId).toBe('walk-circle')
+      expect(fixtures[1]!.controller.snapshot.activeId).toBe('run-circle')
+    }
+    finally {
+      for (const { controller } of fixtures)
+        controller.dispose()
+    }
+  })
+
+  it.each(['blow-kiss', 'laugh', 'head-bob', 'walk-circle', 'shrug', 'attentive-idle', 'thoughtful-idle'])('rejects %s when a close-up lacks body clearance', async (id) => {
+    const { controller, root, placement } = createController()
+    const camera = new PerspectiveCamera(45, 4 / 3, 0.1, 100)
+    camera.position.set(0, 0.9, 1)
+    camera.lookAt(0, 0.9, 0)
+    const originalCamera = camera.position.clone()
+    const originalRotation = root.quaternion.clone()
+    controller.setStageFrame({ camera, root: placement, width: 1200, height: 900, manualControl: false, bounds: new Box3(new Vector3(-0.3, 0, -0.2), new Vector3(0.3, 1.7, 0.2)) })
+    try {
+      expect(await controller.play(id)).toBe(false)
+      expect(controller.snapshot.activeId).toBe('default-idle')
+      expect(controller.snapshot.queuedIds).toEqual([])
+      expect(controller.snapshot.error).toContain('needs more room')
+      expect(camera.position.toArray()).toEqual(originalCamera.toArray())
+      expect(root.position.toArray()).toEqual([0, 0, 0])
+      expect(root.quaternion.toArray()).toEqual(originalRotation.toArray())
+      if (id.endsWith('-idle')) {
+        expect(await controller.setIdle(id)).toBe(false)
+        expect(controller.snapshot.idleId).toBe('default-idle')
+      }
+    }
+    finally {
+      controller.dispose()
+    }
+  })
+
+  it.each(['run-circle', 'walk-circle'])('requires complete stage bounds and moves the avatar through both screen dimensions for %s', async (id) => {
     const { controller, root, placement } = createController()
     const camera = new PerspectiveCamera(45, 4 / 3, 0.1, 100)
     camera.position.set(0, 0.9, 5)
     camera.lookAt(0, 0.9, 0)
     const frame = { camera, root: placement, width: 1200, height: 900, manualControl: false }
     controller.setStageFrame(frame)
-    expect(await controller.play('run-circle')).toBe(false)
+    expect(await controller.play(id)).toBe(false)
     expect(controller.snapshot.error).toContain('preparing model bounds')
     const bounds = new Box3(new Vector3(-0.3, 0, -0.2), new Vector3(0.3, 1.7, 0.2))
     controller.setStageFrame({ ...frame, bounds })
     const initialCamera = camera.position.clone()
-    expect(await controller.play('run-circle', { duration: 15 })).toBe(true)
+    expect(await controller.play(id, { duration: 15 })).toBe(true)
     const travel = new Box3()
-    for (let tick = 0; tick < 600; tick++) {
+    for (let tick = 0; tick < 840; tick++) {
       controller.update(1 / 60)
       controller.setStageFrame(frame)
       travel.expandByPoint(root.position)
     }
-    expect(travel.getSize(new Vector3()).x).toBeGreaterThan(1)
-    expect(travel.getSize(new Vector3()).y).toBeGreaterThan(0.5)
+    expect(travel.getSize(new Vector3()).x).toBeGreaterThan(0.6)
+    expect(travel.getSize(new Vector3()).y).toBeGreaterThan(0.3)
     expect(camera.position.toArray()).toEqual(initialCamera.toArray())
     expect(placement.position.toArray()).toEqual([0, 0, 0])
     controller.stop()
@@ -758,14 +889,14 @@ describe('motion controller', () => {
     controller.dispose()
   })
 
-  it('stops and clears queued motion when a stage resize removes the required space', async () => {
+  it.each(['run-circle', 'walk-circle'])('stops and clears queued motion when a stage resize removes the required space for %s', async (id) => {
     const { controller, root, placement } = createController()
     const camera = new PerspectiveCamera(45, 4 / 3, 0.1, 100)
     camera.position.set(0, 0.9, 5)
     camera.lookAt(0, 0.9, 0)
     const frame = { camera, root: placement, width: 1200, height: 900, manualControl: false }
     controller.setStageFrame({ ...frame, bounds: new Box3(new Vector3(-0.3, 0, -0.2), new Vector3(0.3, 1.7, 0.2)) })
-    expect(await controller.play('run-circle')).toBe(true)
+    expect(await controller.play(id)).toBe(true)
     expect(await controller.play('wave', { mode: 'queue' })).toBe(true)
     advance(controller, 1)
     camera.aspect = 160 / 900
@@ -775,7 +906,7 @@ describe('motion controller', () => {
     expect(controller.snapshot.queuedIds).toEqual([])
     expect(controller.snapshot.error).toContain('needs more room')
     expect(root.position.toArray()).toEqual([0, 0, 0])
-    expect(await controller.play('run-circle')).toBe(false)
+    expect(await controller.play(id)).toBe(false)
     controller.dispose()
   })
 

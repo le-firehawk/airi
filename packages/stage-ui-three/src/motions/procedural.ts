@@ -20,12 +20,12 @@ function envelope(progress: number) {
   return smooth(progress / 0.22) * smooth((1 - progress) / 0.24)
 }
 
-function plantLeg(pose: Pose, side: 'left' | 'right', thighRest: Vector3, shinRest: Vector3, hipDrop: number, hipDepth: number) {
+function plantLeg(pose: Pose, side: 'left' | 'right', thighRest: Vector3, shinRest: Vector3, hipDrop: number, hipDepth: number, ankleRise = 0, ankleDepth = 0) {
   // The sagittal two-link solution preserves the ankle point and each bone's lateral rest offset.
   const thigh = Math.max(0.01, Math.hypot(thighRest.y, thighRest.z))
   const shin = Math.max(0.01, Math.hypot(shinRest.y, shinRest.z))
-  const vertical = -thighRest.y - shinRest.y - hipDrop
-  const depth = thighRest.z + shinRest.z - hipDepth
+  const vertical = -thighRest.y - shinRest.y - hipDrop - ankleRise
+  const depth = thighRest.z + shinRest.z - hipDepth + ankleDepth
   const reach = Math.max(Math.abs(thigh - shin) + 0.000001, Math.min(thigh + shin - 0.000001, Math.hypot(vertical, depth)))
   const angle = Math.atan2(-depth, vertical)
   const thighOffset = Math.acos(Math.max(-1, Math.min(1, (thigh * thigh + reach * reach - shin * shin) / (2 * thigh * reach))))
@@ -67,6 +67,8 @@ export function createProceduralClip(vrm: VRMCore, id: string, duration: number)
     const pose: Pose = {}
     const leftArm: ArmPose = { elevation: 0.1, forward: 0.04, twist: 0, elbow: 0.2, wrist: 0 }
     const rightArm: ArmPose = { ...leftArm }
+    let rightHandTarget: Vector3 | undefined
+    let reachWeight = 0
     let drop = 0
     let depth = 0
 
@@ -80,6 +82,96 @@ export function createProceduralClip(vrm: VRMCore, id: string, duration: number)
         rightArm.forward -= 0.015 * beat
         leftArm.elevation += 0.01 * beat
         rightArm.elevation -= 0.01 * beat
+        break
+      }
+      case 'attentive-idle': {
+        drop = rig.height * 0.001 * (1 - Math.cos(phase))
+        pose.spine = [0.025 + 0.009 * beat, 0, 0]
+        pose.chest = [-0.015 - 0.006 * beat, 0.015 * Math.sin(phase), 0]
+        pose.head = [0.015 * Math.sin(phase * 2), -0.035 * beat, 0.018 * beat]
+        leftArm.forward = 0.09 + 0.015 * beat
+        rightArm.forward = 0.07 - 0.012 * beat
+        leftArm.elbow = 0.28
+        rightArm.elbow = 0.24
+        break
+      }
+      case 'thoughtful-idle': {
+        drop = rig.height * 0.001 * (1 - Math.cos(phase))
+        pose.spine = [0.025 + 0.008 * beat, 0, 0]
+        pose.head = [0.035, -0.025 + 0.012 * beat, -0.05]
+        leftArm.forward = 0.12
+        leftArm.elbow = 0.45
+        rightHandTarget = joints.restPoint('head')!.add(new Vector3(-rig.height * 0.035, -rig.height * 0.055, rig.height * 0.115))
+        reachWeight = 1
+        for (const finger of ['Index', 'Middle', 'Ring', 'Little'] as const) {
+          pose[`right${finger}Proximal`] = [0, 0.45, 0]
+          pose[`right${finger}Intermediate`] = [0, 0.55, 0]
+          pose[`right${finger}Distal`] = [0, 0.35, 0]
+        }
+        break
+      }
+      case 'blow-kiss': {
+        const release = smooth((progress - 0.42) / 0.25)
+        reachWeight = smooth(progress / 0.25) * smooth((1 - progress) / 0.2)
+        rightHandTarget = joints.restPoint('head')!.add(new Vector3(-rig.height * (0.025 + 0.12 * release), rig.height * (-0.03 - 0.035 * release), rig.height * (0.12 + 0.14 * release)))
+        pose.spine = [0.035 * hold, -0.04 * hold, 0]
+        pose.head = [0.045 * hold, 0.035 * hold, -0.025 * hold]
+        rightArm.wrist = -0.2 * hold
+        leftArm.forward += 0.06 * hold
+        break
+      }
+      case 'laugh': {
+        const pulse = Math.sin(progress * Math.PI * 8) ** 2 * (0.8 + 0.2 * Math.sin(phase)) * hold
+        drop = rig.height * 0.005 * pulse
+        pose.spine = [0.1 * hold + 0.035 * pulse, 0, 0.02 * hold]
+        pose.chest = [0.025 * pulse, -0.025 * hold, 0]
+        pose.head = [-0.055 * hold + 0.035 * pulse, 0.015 * hold, -0.025 * hold]
+        leftArm.forward += 0.12 * hold
+        rightArm.forward += 0.28 * hold
+        leftArm.elbow += 0.38 * hold
+        rightArm.elbow += 0.85 * hold
+        leftArm.elevation += 0.03 * pulse
+        rightArm.elevation += 0.04 * pulse
+        break
+      }
+      case 'head-bob': {
+        const pulse = 1 - Math.cos(phase * 2)
+        drop = rig.height * 0.0025 * pulse
+        pose.spine = [0.014 * Math.sin(phase * 2 - 0.4), 0.025 * beat, 0]
+        pose.chest = [-0.018 * Math.sin(phase * 2 - 0.25), -0.015 * beat, 0]
+        pose.neck = [0.02 * Math.sin(phase * 2), 0, 0]
+        pose.head = [0.09 * Math.sin(phase * 2), 0.018 * beat, 0.025 * beat]
+        leftArm.forward += 0.025 * beat
+        rightArm.forward -= 0.025 * beat
+        break
+      }
+      case 'shrug': {
+        leftArm.elevation += 0.52 * hold
+        rightArm.elevation += 0.52 * hold
+        leftArm.forward += 0.18 * hold
+        rightArm.forward += 0.18 * hold
+        leftArm.elbow += 0.95 * hold
+        rightArm.elbow += 0.95 * hold
+        leftArm.twist = rightArm.twist = -0.75 * hold
+        leftArm.wrist = rightArm.wrist = -0.2 * hold
+        pose.head = [0.015 * hold, 0, 0.1 * hold]
+        pose.chest = [-0.025 * hold, 0, 0]
+        break
+      }
+      case 'walk-circle': {
+        drop = rig.height * 0.012 * beat ** 2
+        pose.spine = [0.02, -0.035 * beat, -0.012 * beat]
+        pose.chest = [0, -0.025 * beat, 0.012 * beat]
+        pose.head = [-0.015, 0.025 * beat, 0]
+        leftArm.forward = -0.22 * beat
+        rightArm.forward = 0.22 * beat
+        leftArm.elbow = rightArm.elbow = 0.35
+        for (const side of ['left', 'right'] as const) {
+          const sidePhase = phase + (side === 'left' ? 0 : Math.PI)
+          const lift = rig.height * 0.022 * Math.max(0, Math.cos(sidePhase)) ** 2
+          const travel = rig.height * 0.078 * Math.sin(sidePhase)
+          plantLeg(pose, side, joints.restSegment(`${side}LowerLeg`), joints.restSegment(`${side}Foot`), drop, 0, lift, travel)
+        }
         break
       }
       case 'bow': {
@@ -165,13 +257,18 @@ export function createProceduralClip(vrm: VRMCore, id: string, duration: number)
         throw new Error(`Procedural motion "${id}" is not defined.`)
     }
 
-    if (id !== 'run-circle') {
+    if (id !== 'run-circle' && id !== 'walk-circle') {
       plantLeg(pose, 'left', joints.restSegment('leftLowerLeg'), joints.restSegment('leftFoot'), drop, depth)
       plantLeg(pose, 'right', joints.restSegment('rightLowerLeg'), joints.restSegment('rightFoot'), drop, depth)
     }
     times.push(progress * duration)
     joints.displacement(hipsOffset.set(0, -drop, depth)).add(rig.hipsPosition).toArray(positions, positions.length)
     const arms = new Map([...joints.arm('left', leftArm), ...joints.arm('right', rightArm)])
+    if (rightHandTarget) {
+      // Only kiss and thoughtful poses need this near-head range. Other motions retain the original arm limits.
+      for (const [bone, target] of joints.reachArm('right', rightHandTarget, 2.35, rightArm.wrist))
+        arms.get(bone)?.slerp(target, reachWeight)
+    }
     for (const [bone, values] of rotations) {
       const angles = pose[bone]
       euler.set(angles?.[0] ?? 0, angles?.[1] ?? 0, angles?.[2] ?? 0, 'XYZ')

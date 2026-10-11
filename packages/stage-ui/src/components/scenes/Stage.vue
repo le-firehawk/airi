@@ -33,6 +33,7 @@ import { useI18n } from 'vue-i18n'
 import StageRenderError from './stage-render-error.vue'
 
 import { useDuckDb } from '../../composables/use-duck-db'
+import { useStageRenderLifecycle } from '../../composables/use-stage-render-lifecycle'
 import { Emotion, EMOTION_EmotionMotionName_value, EMOTION_VRMExpressionName_value, EmotionThinkMotionName } from '../../constants/emotions'
 import { live2dMotionMagicProfiles, useLive2DMotionMagic, useLive2DMotionMagicSettings } from '../../features/motions/live2d'
 import { useVrmMotionHost } from '../../features/motions/vrm/host'
@@ -66,6 +67,7 @@ const emit = defineEmits<{ error: [error: Error] }>()
 const { t } = useI18n()
 
 const componentState = defineModel<'pending' | 'loading' | 'mounted'>('state', { default: 'pending' })
+const stageRenderError = defineModel<Error | undefined>('renderError')
 
 const { getDb } = useDuckDb()
 // const transformersProvider = createTransformers({ embedWorkerURL })
@@ -208,30 +210,37 @@ const chatHookCleanups: Array<() => void> = []
 //             cross-window broadcast wiring.
 
 const live2dStore = useLive2dParams()
-const showStage = ref(true)
-const stageRenderError = shallowRef<Error>()
+const renderLifecycle = useStageRenderLifecycle({
+  state: componentState,
+  error: stageRenderError,
+  renderer: stageModelRenderer,
+  modelId: stageModelSelected,
+  modelSrc: stageModelSelectedUrl,
+})
+const { attempt: renderAttempt, showStage } = renderLifecycle
 const viewUpdateCleanups: Array<() => void> = []
 
-function handleStageRenderError(error: Error) {
-  stageRenderError.value = error
-  emit('error', error)
-}
+const rendererEvents = computed(() => {
+  const attempt = renderAttempt.value
+  return {
+    updateState: attempt.updateState,
+    reportError: attempt.fail,
+    reportUnknownError(error: unknown) {
+      if (attempt.fail(new Error(errorMessageFrom(error) ?? 'Failed to render stage')))
+        console.error(error)
+    },
+  }
+})
 
 function reportStageRenderError(error: unknown) {
   console.error(error)
-  handleStageRenderError(new Error(errorMessageFrom(error) ?? 'Failed to render stage'))
+  stageRenderError.value = new Error(errorMessageFrom(error) ?? 'Failed to render stage')
 }
 
-async function retryStageRenderer() {
-  stageRenderError.value = undefined
-  showStage.value = false
-  await nextTick()
-  showStage.value = true
-}
-
-watch([stageModelRenderer, stageModelSelected, stageModelSelectedUrl], () => {
-  stageRenderError.value = undefined
-})
+watch(stageRenderError, (error) => {
+  if (error)
+    emit('error', error)
+}, { flush: 'sync' })
 
 // Caption + Presentation broadcast channels
 const { post: postCaption } = useBroadcastChannel<CaptionChannelEvent, CaptionChannelEvent>({ name: 'airi-caption-overlay' })
@@ -242,13 +251,9 @@ type PresentEvent
     | { type: 'assistant-append', text: string }
 const { post: postPresent } = useBroadcastChannel<PresentEvent, PresentEvent>({ name: 'airi-chat-present' })
 
-viewUpdateCleanups.push(live2dStore.onShouldUpdateView(async () => {
-  showStage.value = false
-  await settingsStore.updateStageModel()
-  setTimeout(() => {
-    showStage.value = true
-  }, 100)
-}))
+viewUpdateCleanups.push(live2dStore.onShouldUpdateView(() =>
+  renderLifecycle.reload(() => settingsStore.updateStageModel()),
+))
 
 const audioAnalyser = ref<AnalyserNode>()
 const lipSyncStarted = ref(false)
@@ -692,7 +697,8 @@ defineExpose({
       <Live2DScene
         v-if="stageModelRenderer === 'live2d' && showStage"
         ref="live2dSceneRef"
-        v-model:state="componentState"
+        :key="renderAttempt.generation"
+        :state="componentState"
         :presence="presenceBubble"
         min-w="50% <lg:full"
         h-full w-full flex-1
@@ -708,12 +714,14 @@ defineExpose({
         :live2d-shadow-enabled="live2dShadowEnabled"
         :live2d-max-fps="live2dMaxFps"
         :live2d-render-scale="live2dRenderScale"
-        @error="handleStageRenderError"
+        @update:state="rendererEvents.updateState"
+        @error="rendererEvents.reportError"
       />
       <ThreeScene
         v-if="stageModelRenderer === 'vrm' && showStage"
         ref="vrmViewerRef"
-        v-model:state="componentState"
+        :key="renderAttempt.generation"
+        :state="componentState"
         :motion-revision="vrmMotionHost.motionRevision.value"
         :automatic-motion-framing="true"
         :orbit-pivot-reset-label="t('settings.vrm.orbit-pivot.reset')"
@@ -731,7 +739,8 @@ defineExpose({
         :enable-orbit-controls="props.enableOrbitControls"
         :audio-context="audioContext"
         :current-audio-source="currentAudioSource"
-        @error="reportStageRenderError"
+        @update:state="rendererEvents.updateState"
+        @error="rendererEvents.reportUnknownError"
         @vrm-interact="onVRMInteract"
         @manipulation-change="vrmManipulationActive = $event"
       />
@@ -808,7 +817,7 @@ defineExpose({
         :error="stageRenderError"
         :renderer="stageModelRenderer === 'live2d' ? 'Live2D' : stageModelRenderer ?? 'Model'"
         :model-id="stageModelSelected"
-        @retry="retryStageRenderer"
+        @retry="renderLifecycle.retry"
       />
     </div>
   </div>

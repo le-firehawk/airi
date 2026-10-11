@@ -5,6 +5,9 @@ import type { PixiLive2DInternalModel } from './motion-manager'
 
 import { useExpressionStore } from '../../stores/expression-store'
 
+// Renderer instances share this store. Only the latest initialization owns its data and cleanup.
+const expressionStoreOwners = new WeakMap<ReturnType<typeof useExpressionStore>, symbol>()
+
 // ---------------------------------------------------------------------------
 // Types for model3.json / exp3.json data
 // ---------------------------------------------------------------------------
@@ -51,6 +54,8 @@ export interface ExpressionControllerOptions {
  */
 export function useExpressionController(options: ExpressionControllerOptions) {
   const store = useExpressionStore()
+  let initializationToken: symbol | undefined
+  let registeredToken: symbol | undefined
 
   // Track which parameter IDs were written in the previous frame so we can
   // detect active→inactive transitions and explicitly reset them.
@@ -74,12 +79,27 @@ export function useExpressionController(options: ExpressionControllerOptions) {
     expressionRefs: Model3ExpressionRef[],
     readExpFile: (path: string) => Promise<string>,
   ) {
+    const token = Symbol('expression-initialization')
+    const internalModel = options.internalModel.value
+    initializationToken = token
+    registeredToken = undefined
+    expressionStoreOwners.set(store, token)
+    activeLastFrame.clear()
+    const isCurrent = () => initializationToken === token
+      && expressionStoreOwners.get(store) === token
+      && options.internalModel.value === internalModel
     const groups: ExpressionGroupDefinition[] = []
     const entryMap = new Map<string, ExpressionEntry>()
 
     for (const expRef of expressionRefs) {
+      if (!isCurrent())
+        return
+
       try {
         const raw = await readExpFile(expRef.File)
+        if (!isCurrent())
+          return
+
         const exp3: Exp3Json = JSON.parse(raw)
 
         const groupParams: ExpressionGroupDefinition['parameters'] = []
@@ -120,15 +140,22 @@ export function useExpressionController(options: ExpressionControllerOptions) {
         groups.push({ name: expRef.Name, parameters: groupParams })
       }
       catch (err) {
+        if (!isCurrent())
+          return
+
         console.warn(`[expression-controller] Failed to parse exp3 for "${expRef.Name}" (${expRef.File}):`, err)
       }
     }
+
+    if (!isCurrent())
+      return
 
     store.registerExpressions(
       modelId ?? 'unknown',
       groups,
       Array.from(entryMap.values()),
     )
+    registeredToken = token
   }
 
   // ---- Per-frame application -----------------------------------------------
@@ -151,6 +178,9 @@ export function useExpressionController(options: ExpressionControllerOptions) {
    * @param coreModel - The Cubism core model (coreModel from internalModel).
    */
   function applyExpressions(coreModel: Pick<PixiLive2DInternalModel['coreModel'], 'getParameterValueById' | 'setParameterValueById'>) {
+    if (!initializationToken || registeredToken !== initializationToken || expressionStoreOwners.get(store) !== initializationToken)
+      return
+
     const activeThisFrame = new Set<string>()
 
     for (const entry of store.expressions.values()) {
@@ -230,7 +260,14 @@ export function useExpressionController(options: ExpressionControllerOptions) {
   // ---- Cleanup -------------------------------------------------------------
 
   function dispose() {
-    store.dispose()
+    const token = initializationToken
+    initializationToken = undefined
+    registeredToken = undefined
+    activeLastFrame.clear()
+    if (token && expressionStoreOwners.get(store) === token) {
+      expressionStoreOwners.delete(store)
+      store.dispose()
+    }
   }
 
   // ---- Private helpers -----------------------------------------------------

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 
 import { all } from '@proj-airi/i18n'
+import { builtinMotionMetadata } from '@proj-airi/stage-ui-three/motions'
 import { describe, expect, it } from 'vitest'
 import { createI18n } from 'vue-i18n'
 import { parse } from 'yaml'
@@ -32,6 +33,13 @@ const expectedMessages = {
   'settings.vrm.motions.names.celebrate': 'Celebrate',
   'settings.vrm.motions.names.stretch': 'Stretch',
   'settings.vrm.motions.names.present': 'Present',
+  'settings.vrm.motions.names.blow-kiss': 'Blow a kiss',
+  'settings.vrm.motions.names.laugh': 'Laugh',
+  'settings.vrm.motions.names.head-bob': 'Head bob',
+  'settings.vrm.motions.names.walk-circle': 'Walk in a circle',
+  'settings.vrm.motions.names.shrug': 'Shrug',
+  'settings.vrm.motions.names.attentive-idle': 'Attentive idle',
+  'settings.vrm.motions.names.thoughtful-idle': 'Thoughtful idle',
   'settings.vrm.motions.default-idle': 'Default idle',
   'settings.vrm.motions.idle': 'Idle motion',
   'settings.vrm.motions.idle-description': 'This choice is saved for this avatar. Select Default idle to restore AIRI\'s original motion.',
@@ -88,6 +96,14 @@ describe('motion library translations', () => {
         expect(translated.trim(), key).not.toBe('')
         if (locale === 'en' || !i18n.global.te(key, locale))
           expect(translated, key).toBe(english.replaceAll('{count}', '3').replaceAll('{page}', '2'))
+      }
+      for (const entry of builtinMotionMetadata) {
+        const key = `settings.vrm.motions.names.${entry.id}`
+        expect(Object.hasOwn(expectedMessages, key), key).toBe(true)
+        expect(i18n.global.t(key, {}, { locale: 'en' }), key).toBe(entry.name)
+        expect(i18n.global.t(key), key).not.toBe(key)
+        if (!i18n.global.te(key, locale))
+          expect(i18n.global.t(key), key).toBe(entry.name)
       }
       const title = v.parse(v.object({ vrm: v.object({ title: v.string() }) }), messages[locale].settings).vrm.title
       expect(i18n.global.t('settings.vrm.title')).toBe(title)

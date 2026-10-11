@@ -20,7 +20,7 @@ import { Mutex } from 'es-toolkit'
 import { storeToRefs } from 'pinia'
 import { DropShadowFilter } from 'pixi-filters'
 import { Live2DFactory, Live2DModel, MotionPriority } from 'pixi-live2d-display/cubism4'
-import { computed, onMounted, onUnmounted, ref, shallowRef, toRef, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, onUnmounted, ref, shallowRef, toRef, watch } from 'vue'
 
 import {
   createBeatSyncController,
@@ -114,8 +114,9 @@ const {
 const modelSrcRef = toRef(() => props.modelSrc)
 
 const modelLoading = ref(false)
-// NOTICE: boolean is sufficient; this flag is only used inside loadModel to bail out if the component unmounts mid-load.
+// Disposal and newer load requests invalidate work before it can touch the stage or shared expression store.
 let isUnmounted = false
+let modelLoadSequence = 0
 
 const modelLoadMutex = new Mutex()
 
@@ -274,18 +275,33 @@ const disposeShouldUpdateView = live2dStore.onShouldUpdateView(() => {
 })
 
 async function loadModel() {
+  if (isUnmounted)
+    return
+
+  const requestId = ++modelLoadSequence
   await until(modelLoading).not.toBeTruthy()
 
   await modelLoadMutex.acquire()
   try {
-    await performModelLoad()
+    if (isUnmounted || requestId !== modelLoadSequence)
+      return
+
+    await performModelLoad(requestId)
   }
   finally {
     modelLoadMutex.release()
   }
 }
 
-async function performModelLoad() {
+async function performModelLoad(requestId: number) {
+  const pendingModel = {
+    id: props.modelId,
+    src: modelSrcRef.value,
+  }
+  const isCurrentModel = () => !isUnmounted
+    && requestId === modelLoadSequence
+    && pendingModel.id === props.modelId
+    && pendingModel.src === modelSrcRef.value
   modelLoading.value = true
   componentState.value = 'loading'
 
@@ -295,11 +311,18 @@ async function performModelLoad() {
       // Wait briefly for the new stage instead of bailing out, otherwise we keep a blank screen.
       await until(() => !!pixiApp.value && !!pixiApp.value.stage).toBeTruthy({ timeout: 1500 })
     }
-    catch {
+    catch (error) {
       modelLoading.value = false
-      componentState.value = 'mounted'
+      if (isCurrentModel())
+        emits('error', error instanceof Error ? error : new Error(String(error)))
       return
     }
+  }
+
+  const currentApp = pixiApp.value
+  if (!isCurrentModel() || !currentApp?.stage) {
+    modelLoading.value = false
+    return
   }
 
   // REVIEW: here as await until(...) guarded the pixiApp and stage to be valid.
@@ -319,10 +342,6 @@ async function performModelLoad() {
     model.value = undefined
     headTracker.reset()
   }
-  const pendingModel = {
-    id: props.modelId,
-    src: modelSrcRef.value,
-  }
   if (!pendingModel.src) {
     console.warn('No Live2D model source provided.')
     modelLoading.value = false
@@ -330,15 +349,16 @@ async function performModelLoad() {
     return
   }
 
+  let acquiredModel: Live2DModel<PixiLive2DInternalModel> | undefined
   try {
-    if (isUnmounted) {
-      modelLoading.value = false
-      componentState.value = 'mounted'
+    const live2DModel = new Live2DModel<PixiLive2DInternalModel>()
+    acquiredModel = live2DModel
+    await Live2DFactory.setupLive2DModel(live2DModel, { url: pendingModel.src, id: pendingModel.id }, { autoInteract: false })
+    if (!isCurrentModel() || pixiApp.value !== currentApp || !currentApp.stage) {
+      live2DModel.destroy()
       return
     }
 
-    const live2DModel = new Live2DModel<PixiLive2DInternalModel>()
-    await Live2DFactory.setupLive2DModel(live2DModel, { url: pendingModel.src, id: pendingModel.id }, { autoInteract: false })
     availableMotions.value.forEach((motion) => {
       if (motion.motionName in Emotion) {
         motionMap.value[motion.fileName] = motion.motionName
@@ -351,8 +371,7 @@ async function performModelLoad() {
     // --- Scene
 
     model.value = live2DModel
-    // REVIEW: pixiApp and stage are guaranteed to be valid here due to the until(...) above.
-    pixiApp.value!.stage.addChild(model.value)
+    currentApp.stage.addChild(model.value)
     initialModelWidth.value = model.value.width
     initialModelHeight.value = model.value.height
     model.value.anchor.set(0.5, 0.5)
@@ -402,6 +421,9 @@ async function performModelLoad() {
 
     if (selectedMotionGroup !== null && selectedMotionIndex && live2dIdleAnimationEnabled.value) {
       setTimeout(() => {
+        if (!isCurrentModel())
+          return
+
         console.info('Playing selected runtime motion:', selectedMotionGroup, selectedMotionIndex)
         currentMotion.value = {
           group: selectedMotionGroup,
@@ -473,6 +495,9 @@ async function performModelLoad() {
 
     // Listen for motion finish to restart runtime motion for looping
     motionManager.on('motionFinish', () => {
+      if (!isCurrentModel())
+        return
+
       const selectedMotionGroup = localStorage.getItem('selected-runtime-motion-group')
       const selectedMotionIndex = localStorage.getItem('selected-runtime-motion-index')
 
@@ -481,6 +506,9 @@ async function performModelLoad() {
         console.info('Motion finished, restarting runtime motion:', selectedMotionGroup, selectedMotionIndex)
         // Use requestAnimationFrame to restart on the next frame for smooth transition
         requestAnimationFrame(() => {
+          if (!isCurrentModel())
+            return
+
           currentMotion.value = {
             group: selectedMotionGroup,
             index: Number.parseInt(selectedMotionIndex),
@@ -538,17 +566,25 @@ async function performModelLoad() {
     }
 
     emits('modelLoaded')
+    componentState.value = 'mounted'
+    await initExpressionController(internalModelRef.value, loadedModelId).catch((err) => {
+      console.warn('[Model.vue] Expression controller initialization failed:', err)
+    })
   }
   catch (error) {
+    // The SDK starts its ticker when internalModel arrives, before texture loading can fail.
+    // Its destroy() requires internalModel. Earlier failures own no ticker or internal model.
+    if (acquiredModel?.internalModel && !acquiredModel.destroyed && acquiredModel !== model.value)
+      acquiredModel.destroy()
+
+    if (!isCurrentModel())
+      return
+
     console.error('[Live2D] Failed to load model:', error)
     emits('error', error instanceof Error ? error : new Error(String(error)))
   }
   finally {
     modelLoading.value = false
-    componentState.value = 'mounted'
-    await initExpressionController(internalModelRef.value, loadedModelId).catch((err) => {
-      console.warn('[Model.vue] Expression controller initialization failed:', err)
-    })
   }
 }
 
@@ -560,6 +596,9 @@ async function performModelLoad() {
  * expression loading does not prevent the model itself from rendering.
  */
 async function initExpressionController(internalModel?: PixiLive2DInternalModel, modelId?: string) {
+  if (isUnmounted)
+    return
+
   // Dispose any previous state (handles model reloads)
   expressionController.dispose()
 
@@ -663,7 +702,7 @@ function updateModelFilters() {
   updateFilterStack()
 }
 
-watch(modelSrcRef, async () => await loadModel(), { immediate: true })
+watch([modelSrcRef, () => props.modelId], async () => await loadModel(), { immediate: true })
 watch(dark, updateModelFilters, { immediate: true })
 watch([model, themeColorsHue], updateModelFilters)
 watch([live2dShadowEnabled, screenAmbientLightActive], updateFilterStack)
@@ -902,19 +941,33 @@ onMounted(async () => {
   updateModelFilters()
 })
 
-onUnmounted(() => {
+onBeforeUnmount(() => {
   isUnmounted = true
+  modelLoadSequence++
+  cancelAnimationFrame(dropShadowAnimationId.value)
+  dropShadowAnimationId.value = 0
   resizeAnimation?.pause()
   disposeShouldUpdateView?.()
   expressionController.dispose()
+  internalModelRef.value = undefined
   loadedModelId = undefined
 
   // Destroying a display object does not destroy its filters, and each mount
   // creates its own pair, so the light-map textures and the blur pass would
   // stay on the GPU for every renderer switch. The stack comes off the model
   // first so that nothing can reference a destroyed filter.
-  if (model.value)
-    model.value.filters = []
+  const currentModel = model.value
+  model.value = undefined
+  if (currentModel) {
+    currentModel.filters = []
+    try {
+      currentModel.parent?.removeChild(currentModel)
+      currentModel.destroy()
+    }
+    catch (error) {
+      console.warn('Error removing old model:', error)
+    }
+  }
   screenAmbientLightFilter.value.destroy()
   dropShadowFilter.value.destroy()
 })

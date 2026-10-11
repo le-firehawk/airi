@@ -48,6 +48,10 @@ export function createStageMotionEnvelope(bounds: Box3, metadata: Readonly<Motio
     envelope.min.y -= height * 0.04
     envelope.max.y += height * 0.04
   }
+  else if (metadata.id === 'thoughtful-idle') {
+    // The raised forearm needs forward clearance even when this pose remains selected as idle.
+    envelope.expandByVector(new Vector3(height * 0.12, height * 0.08, height * 0.25))
+  }
   else if (metadata.id === 'nod' || metadata.id === 'shake-head' || metadata.category === 'idle') {
     envelope.expandByScalar(height * 0.035)
   }

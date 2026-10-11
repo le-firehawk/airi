@@ -8,6 +8,9 @@ import { AnimationMixer, Euler, Group, Object3D, Quaternion, Vector3 } from 'thr
 import { describe, expect, it } from 'vitest'
 
 import { builtinMotionMetadata, createMotionCatalog, loadMotionClip, loadRelaxedIdleClip, MotionController } from './index'
+import { JointKinematics } from './joint-kinematics'
+
+const nearHeadMotions = new Set(['blow-kiss', 'thoughtful-idle'])
 
 interface JointRigOptions {
   facing?: number
@@ -178,7 +181,8 @@ describe('procedural joint geometry', () => {
           const thigh = position(vrm, `${side}LowerLeg`).sub(position(vrm, `${side}UpperLeg`))
           const shin = position(vrm, `${side}Foot`).sub(position(vrm, `${side}LowerLeg`))
           expect(upper.angleTo(lower)).toBeGreaterThan(0.035)
-          expect(upper.angleTo(lower)).toBeLessThan(2.21)
+          const maximumFlexion = side === 'right' && nearHeadMotions.has(metadata.id) ? 2.35001 : 2.21
+          expect(upper.angleTo(lower), `${metadata.id} ${side} normalized elbow`).toBeLessThan(maximumFlexion)
           expect(thigh.angleTo(shin)).toBeLessThan(2.4)
           expect(new Vector3().crossVectors(thigh, shin).dot(lateral)).toBeGreaterThan(-0.00001)
           expect(upper.length()).toBeCloseTo(0.25, 5)
@@ -253,7 +257,8 @@ describe('procedural joint geometry', () => {
   it('retains authored forearm constraints and bounded raw joints after the full VRM update', async () => {
     const { vrm, root } = createJointRig({ armRest: 0.04, rawRotations: true, carrying: true })
     const constraints = [...vrm.nodeConstraintManager!.constraints]
-    const weights = constraints.map(constraint => constraint.weight)
+    const bindings = constraints.map(({ source, destination, weight }) => ({ source, destination, weight }))
+    const rawRest = structuredClone(vrm.humanoid.rawRestPose)
     const catalog = createMotionCatalog()
     for (const metadata of builtinMotionMetadata) {
       const clip = await catalog.load(metadata.id, vrm, new AbortController().signal)
@@ -269,7 +274,8 @@ describe('procedural joint geometry', () => {
           const hand = vrm.humanoid.getRawBoneNode(`${side}Hand`)!.getWorldPosition(new Vector3())
           const upperDirection = lower.clone().sub(upper)
           const lowerDirection = hand.sub(lower)
-          expect(upperDirection.angleTo(lowerDirection)).toBeLessThan(2.21)
+          const maximumFlexion = side === 'right' && nearHeadMotions.has(metadata.id) ? 2.55 : 2.21
+          expect(upperDirection.angleTo(lowerDirection), `${metadata.id} ${side} raw elbow`).toBeLessThan(maximumFlexion)
           expect(upperDirection.length()).toBeCloseTo(0.25, 5)
           expect(lowerDirection.length()).toBeCloseTo(0.22, 5)
         }
@@ -278,7 +284,8 @@ describe('procedural joint geometry', () => {
       mixer.uncacheRoot(vrm.scene)
     }
     expect([...vrm.nodeConstraintManager!.constraints]).toEqual(constraints)
-    expect(constraints.map(constraint => constraint.weight)).toEqual(weights)
+    expect(constraints.map(({ source, destination, weight }) => ({ source, destination, weight }))).toEqual(bindings)
+    expect(vrm.humanoid.rawRestPose).toEqual(rawRest)
   })
 
   it.each(['bow', 'dance', 'natural-idle'])('plants both feet in %s across facing directions and source scales', async (id) => {
@@ -301,5 +308,197 @@ describe('procedural joint geometry', () => {
         mixer.uncacheRoot(vrm.scene)
       }
     }
+  })
+
+  it.each([0, Math.PI])('reaches near the head with fixed bone lengths and rest measurements for facing %s', (facing) => {
+    const { vrm, root, frame } = createJointRig({ facing, armRest: 0.35, forearmRest: 0.5, rawRotations: true })
+    const joints = new JointKinematics(vrm)
+    const target = joints.restPoint('head')!.add(new Vector3(-0.05, 0, 0.18))
+    const rest = joints.restPoint('rightUpperArm')!
+    for (const [name, rotation] of joints.reachArm('right', target))
+      vrm.humanoid.getNormalizedBoneNode(name)?.quaternion.copy(rotation)
+    vrm.update(0)
+    root.updateMatrixWorld(true)
+    const hand = position(vrm, 'rightHand').applyQuaternion(frame.clone().invert())
+    expect(hand.distanceTo(target)).toBeLessThan(0.00001)
+    expect(position(vrm, 'rightLowerArm').distanceTo(position(vrm, 'rightUpperArm'))).toBeCloseTo(0.25, 5)
+    expect(position(vrm, 'rightHand').distanceTo(position(vrm, 'rightLowerArm'))).toBeCloseTo(0.22, 5)
+    root.rotation.set(0.2, 0.4, -0.1)
+    root.scale.setScalar(2)
+    root.updateMatrixWorld(true)
+    expect(new JointKinematics(vrm).restPoint('rightUpperArm')!.toArray()).toEqual(rest.toArray())
+  })
+
+  it('clamps unreachable hand targets instead of extending the arm or overbending the elbow', () => {
+    const { vrm, root } = createJointRig({ armRest: 0.35, forearmRest: 0.5 })
+    const joints = new JointKinematics(vrm)
+    const target = joints.restPoint('rightUpperArm')!
+    for (const [name, rotation] of joints.reachArm('right', target))
+      vrm.humanoid.getNormalizedBoneNode(name)?.quaternion.copy(rotation)
+    vrm.update(0)
+    root.updateMatrixWorld(true)
+    const upper = position(vrm, 'rightLowerArm').sub(position(vrm, 'rightUpperArm'))
+    const lower = position(vrm, 'rightHand').sub(position(vrm, 'rightLowerArm'))
+    expect(upper.length()).toBeCloseTo(0.25, 5)
+    expect(lower.length()).toBeCloseTo(0.22, 5)
+    expect(upper.angleTo(lower)).toBeCloseTo(2, 5)
+    expect(position(vrm, 'rightHand').distanceTo(target)).toBeGreaterThan(0.2)
+  })
+
+  it('caps an explicitly expanded reach without changing the default reach limit', () => {
+    for (const [requested, expected] of [[undefined, 2], [2.35, 2.35], [100, 2.35]] as const) {
+      const { vrm, root } = createJointRig({ armRest: 0.35, forearmRest: 0.5 })
+      const joints = new JointKinematics(vrm)
+      const target = joints.restPoint('rightUpperArm')!
+      for (const [name, rotation] of joints.reachArm('right', target, requested))
+        vrm.humanoid.getNormalizedBoneNode(name)?.quaternion.copy(rotation)
+      root.updateMatrixWorld(true)
+      const upper = position(vrm, 'rightLowerArm').sub(position(vrm, 'rightUpperArm'))
+      const lower = position(vrm, 'rightHand').sub(position(vrm, 'rightLowerArm'))
+      expect(upper.angleTo(lower)).toBeCloseTo(expected, 5)
+      expect(upper.length()).toBeCloseTo(0.25, 5)
+      expect(lower.length()).toBeCloseTo(0.22, 5)
+    }
+  })
+
+  it.each([0, Math.PI])('preserves bounded wrist articulation without moving the reached hand for facing %s', (facing) => {
+    const { vrm, root } = createJointRig({ facing, armRest: 0.35, forearmRest: 0.5, rawRotations: true })
+    const joints = new JointKinematics(vrm)
+    const target = joints.restPoint('head')!.add(new Vector3(-0.05, 0, 0.18))
+    const neutral = joints.reachArm('right', target, 2.35)
+    for (const [name, rotation] of neutral)
+      vrm.humanoid.getNormalizedBoneNode(name)?.quaternion.copy(rotation)
+    root.updateMatrixWorld(true)
+    const hand = position(vrm, 'rightHand')
+    for (const [requested, expected] of [[-0.2, 0.2], [-100, 0.45], [100, 0.45]]) {
+      const articulated = joints.reachArm('right', target, 2.35, requested)
+      for (const [name, rotation] of articulated) {
+        expect(rotation.angleTo(neutral.get(name)!)).toBeCloseTo(name === 'rightHand' ? expected : 0, 5)
+        vrm.humanoid.getNormalizedBoneNode(name)?.quaternion.copy(rotation)
+      }
+      root.updateMatrixWorld(true)
+      expect(position(vrm, 'rightHand').distanceTo(hand)).toBeLessThan(0.00001)
+    }
+  })
+
+  it.each([0, Math.PI])('keeps near-head transitions and holds bounded without reversing the elbow pole for facing %s', async (facing) => {
+    for (const id of nearHeadMotions) {
+      const { vrm, root, frame } = createJointRig({ facing, armRest: 0.04, rawRotations: true, carrying: true })
+      const catalog = createMotionCatalog()
+      const metadata = catalog.get(id)!
+      const idle = await catalog.load('natural-idle', vrm, new AbortController().signal)
+      const controller = new MotionController(vrm, idle, root, catalog)
+      const inverseFrame = frame.clone().invert()
+      const constraints = [...vrm.nodeConstraintManager!.constraints]
+      const bindings = constraints.map(({ source, destination, weight }) => ({ source, destination, weight }))
+      const rawRest = structuredClone(vrm.humanoid.rawRestPose)
+      try {
+        expect(await controller.play(id, { duration: metadata.duration })).toBe(true)
+        for (let tick = 0; tick < Math.ceil((metadata.duration + 1) * 60); tick++) {
+          controller.update(1 / 60)
+          vrm.update(1 / 60)
+          root.updateMatrixWorld(true)
+          for (const kind of ['raw', 'normalized'] as const) {
+            const node = (bone: VRMHumanBoneName) => (kind === 'raw' ? vrm.humanoid.getRawBoneNode(bone)! : vrm.humanoid.getNormalizedBoneNode(bone)!)
+            const shoulder = node('rightUpperArm').getWorldPosition(new Vector3()).applyQuaternion(inverseFrame)
+            const elbow = node('rightLowerArm').getWorldPosition(new Vector3()).applyQuaternion(inverseFrame)
+            const hand = node('rightHand').getWorldPosition(new Vector3()).applyQuaternion(inverseFrame)
+            const upper = elbow.clone().sub(shoulder)
+            const lower = hand.clone().sub(elbow)
+            const limit = kind === 'raw' ? 2.55 : 2.35001
+            expect(upper.angleTo(lower), `${id} ${kind} frame ${tick}`).toBeLessThan(limit)
+            expect(upper.length()).toBeCloseTo(0.25, 5)
+            expect(lower.length()).toBeCloseTo(0.22, 5)
+            const reach = hand.clone().sub(shoulder).normalize()
+            const pole = new Vector3(-0.8, -1, 0)
+            pole.addScaledVector(reach, -pole.dot(reach)).normalize()
+            const elbowOffset = upper.clone().addScaledVector(reach, -upper.dot(reach))
+            expect(elbowOffset.dot(pole), `${id} ${kind} reversed pole at frame ${tick}`).toBeGreaterThanOrEqual(-0.00001)
+          }
+        }
+        expect(controller.snapshot.activeId).toBe('default-idle')
+        expect([...vrm.nodeConstraintManager!.constraints]).toEqual(constraints)
+        expect(constraints.map(({ source, destination, weight }) => ({ source, destination, weight }))).toEqual(bindings)
+        expect(vrm.humanoid.rawRestPose).toEqual(rawRest)
+      }
+      finally {
+        controller.dispose()
+      }
+    }
+  })
+
+  it('keeps built-in loops periodic and adjacent quaternion samples smooth', async () => {
+    const { vrm } = createJointRig({ armRest: 0.3 })
+    for (const metadata of builtinMotionMetadata) {
+      const clip = await createMotionCatalog().load(metadata.id, vrm, new AbortController().signal)
+      for (const track of clip.tracks) {
+        const size = track.getValueSize()
+        const first = Array.from(track.values.slice(0, size))
+        const last = Array.from(track.values.slice(-size))
+        if (metadata.loop) {
+          for (let axis = 0; axis < size; axis++)
+            expect(last[axis], `${metadata.id} ${track.name} loop seam`).toBeCloseTo(first[axis], 5)
+        }
+        if (size === 4) {
+          for (let offset = 4; offset < track.values.length; offset += 4) {
+            const previous = new Quaternion().fromArray(track.values, offset - 4)
+            const next = new Quaternion().fromArray(track.values, offset)
+            expect(previous.angleTo(next), `${metadata.id} ${track.name} phase ${offset / 4}`).toBeLessThan(0.5)
+          }
+        }
+      }
+    }
+  })
+
+  it('gives the walking gait alternating grounded support and raised swing feet', async () => {
+    for (const scale of [0.6, 1.8]) {
+      const { vrm, root } = createJointRig({ scale })
+      root.updateMatrixWorld(true)
+      const restHeight = position(vrm, 'leftFoot').y
+      const clip = await createMotionCatalog().load('walk-circle', vrm, new AbortController().signal)
+      const mixer = new AnimationMixer(vrm.scene)
+      mixer.clipAction(clip).play()
+      const raised: Record<string, number> = { left: 0, right: 0 }
+      for (let sample = 0; sample < 120; sample++) {
+        mixer.setTime(sample / 120 * clip.duration)
+        vrm.update(0)
+        root.updateMatrixWorld(true)
+        const left = position(vrm, 'leftFoot')
+        const right = position(vrm, 'rightFoot')
+        raised.left = Math.max(raised.left, left.y - restHeight)
+        raised.right = Math.max(raised.right, right.y - restHeight)
+        expect(Math.min(left.y, right.y)).toBeCloseTo(restHeight, 3)
+        expect(left.y).toBeGreaterThan(restHeight - 0.0005 * scale)
+        expect(right.y).toBeGreaterThan(restHeight - 0.0005 * scale)
+        expect(Math.abs(left.z)).toBeLessThan(0.15 * scale)
+        expect(Math.abs(right.z)).toBeLessThan(0.15 * scale)
+      }
+      expect(raised.left).toBeGreaterThan(0.025 * scale)
+      expect(raised.right).toBeGreaterThan(0.025 * scale)
+      mixer.stopAllAction()
+    }
+  })
+
+  it('separates the kiss contact and release phases from the thoughtful pose', async () => {
+    const { vrm, root } = createJointRig()
+    const catalog = createMotionCatalog()
+    const kiss = await catalog.load('blow-kiss', vrm, new AbortController().signal)
+    const mixer = new AnimationMixer(vrm.scene)
+    mixer.clipAction(kiss).play()
+    mixer.setTime(kiss.duration * 0.35)
+    root.updateMatrixWorld(true)
+    const contact = position(vrm, 'rightHand')
+    mixer.setTime(kiss.duration * 0.7)
+    root.updateMatrixWorld(true)
+    const release = position(vrm, 'rightHand')
+    expect(release.z).toBeGreaterThan(contact.z + 0.1)
+    expect(release.x).toBeLessThan(contact.x - 0.1)
+    mixer.stopAllAction()
+    const thoughtful = await catalog.load('thoughtful-idle', vrm, new AbortController().signal)
+    mixer.clipAction(thoughtful).play()
+    mixer.setTime(thoughtful.duration * 0.5)
+    root.updateMatrixWorld(true)
+    expect(position(vrm, 'rightHand').y).toBeLessThan(contact.y)
+    mixer.stopAllAction()
   })
 })

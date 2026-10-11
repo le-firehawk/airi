@@ -2143,6 +2143,13 @@ vrm:
       celebrate: Celebrate
       stretch: Stretch
       present: Present
+      blow-kiss: Blow a kiss
+      laugh: Laugh
+      head-bob: Head bob
+      walk-circle: Walk in a circle
+      shrug: Shrug
+      attentive-idle: Attentive idle
+      thoughtful-idle: Thoughtful idle
     default-idle: Default idle
     idle: Idle motion
     idle-description: This choice is saved for this avatar. Select Default idle to restore AIRI's original motion.

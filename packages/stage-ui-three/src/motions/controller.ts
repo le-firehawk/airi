@@ -38,6 +38,7 @@ interface ActiveMotion {
   speed: number
   circleRadius: number | undefined
   stageRadius?: number
+  strideLength?: number
 }
 
 function bounded(value: number | undefined, fallback: number, minimum: number, maximum: number) {
@@ -427,6 +428,7 @@ export class MotionController {
         : undefined
       this.transition(id, clip, loop, speed, deadline, circleRadius)
       this.active.stageRadius = stageRadius
+      this.active.strideLength = bounded(metadata.strideLength, 0.44, 0.05, 0.8)
       this.stageTurn = 0
       return true
     }
@@ -626,7 +628,7 @@ export class MotionController {
       const direction = Math.sign(plan.center.x)
       const pathSpeed = transformStageOffset(new Vector3(direction * radiusX * Math.sin(phase), -radiusY * Math.cos(phase), 0), plan.cameraToParent).length()
       // Distance follows gait cadence. Larger stages create larger paths rather than faster sliding feet.
-      const strideSpeed = this.height * 0.44 / this.active.sourceClip.duration * this.active.speed
+      const strideSpeed = this.height * (this.active.strideLength ?? 0.44) / this.active.sourceClip.duration * this.active.speed
       this.stageTurn += Math.min(Math.PI, strideSpeed / Math.max(this.height * 0.05, pathSpeed)) * delta
       this.targetPosition.set(plan.center.x - direction * Math.cos(this.stageTurn) * radiusX, plan.center.y - Math.sin(this.stageTurn) * radiusY, 0)
       transformStageOffset(this.targetPosition, plan.cameraToParent).add(this.restPosition)
@@ -636,7 +638,9 @@ export class MotionController {
     }
     else if (this.active.circleRadius !== undefined && !this.stage) {
       const elapsed = this.active.elapsed
-      const turn = elapsed * this.active.speed * Math.PI / 2
+      // The unbound preview keeps the reference running turn rate and scales other gaits by their travel cadence.
+      const cadence = (this.active.strideLength ?? 0.44) / 0.44 * 0.72 / this.active.sourceClip.duration
+      const turn = elapsed * this.active.speed * Math.PI / 2 * cadence
       const entry = Math.min(1, elapsed / 0.6)
       const radius = this.active.circleRadius * entry * entry * (3 - 2 * entry)
       // The circle starts with its tangent along the avatar's rest heading, without an initial quarter-turn target.

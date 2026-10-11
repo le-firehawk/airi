@@ -37,7 +37,17 @@ It preserves an active gesture and changes the idle that follows it.
 ## Catalog and loaders
 
 `createMotionCatalog()` exposes metadata before any procedural code or animation asset loads.
-The built-in IDs are `natural-idle`, `bow`, `dance`, `run-circle`, `wave`, `nod`, `shake-head`, `celebrate`, `stretch`, and `present`.
+The catalog includes 17 built-in motions:
+
+- Idle: `natural-idle`, `attentive-idle`, and `thoughtful-idle`.
+- Gestures: `bow`, `wave`, `nod`, `shake-head`, `celebrate`, `stretch`, `present`, `blow-kiss`, `laugh`, and `shrug`.
+- Rhythm: `dance` and `head-bob`.
+- Stage travel: `run-circle` and `walk-circle`.
+
+Kiss and thoughtful gestures use measured hand targets near the head.
+Laugh uses uneven body pulses and leaves facial expression and audio ownership unchanged.
+The UI reads these entries from the shared catalog, including search, queue, and idle selection.
+Fresh AI preferences include non-idle entries. Existing saved choices remain unchanged until the user selects additional motions.
 
 Register imported motions with `catalog.register(metadata, loader)`.
 Each loader receives the target `VRMCore` and an `AbortSignal`.
@@ -86,7 +96,11 @@ The path starts at the saved placement and uses the available inset canvas space
 A 12-pixel edge margin surrounds the conservative body envelope.
 The path needs at least 24 horizontal and 16 vertical pixels of radius.
 Explicit radius limits cannot turn a blocked run into an in-place jog.
-Stride cadence sets travel speed. Tangent heading respects the camera and placement coordinate systems.
+Stride cadence sets travel speed.
+Walking uses a 1.2-second cycle and 0.26 avatar heights of travel per cycle.
+Running retains its 0.72-second cycle and 0.44 avatar heights per cycle.
+The optional `strideLength` metadata uses avatar heights per complete gait cycle, bounded from 0.05 to 0.8.
+Both gaits use the same admission checks, root owner, timeout, stop, queue, and resize handling. Tangent heading respects the camera and placement coordinate systems.
 This is screen-plane travel. It does not simulate physical ground contact or move the native desktop window.
 
 A run freezes automatic framing so its path cannot expand in response to its own camera movement.
@@ -98,6 +112,7 @@ If a selected imported idle no longer fits, the supplied idle preserves the exis
 
 Built-in envelopes reserve limb, bob, and turning-silhouette clearance around the load-time bind-geometry reference.
 Imported clips use a much wider articulation estimate, including the sanitized hips-translation limit.
+Thoughtful idle reserves extra forward clearance for its raised forearm.
 These envelopes are conservative estimates, not sampled swept-pose guarantees.
 Unusual proportions, props, clothing, morphs, and secondary physics still require visual checks.
 The solver never changes the camera to make a rejected motion pass.
@@ -123,6 +138,9 @@ Procedural bow, dance, and idle motions use a two-link leg solution to preserve 
 The circle motion combines alternating strides, knee flexion, foot movement, arm swings, and pelvis counterrotation.
 Upper-leg swing stays within 0.52 radians. The hips bob stays within 2.4% of the estimated humanoid height.
 These bounds limit motion displacement. Avatar proportions, clothing, and spring settings still require visual checks.
+Walking uses alternating support and swing phases with planted-foot leg solutions and a lower pelvis during long steps.
+Its first hips offset is zero, so body-track anchoring preserves the support height.
+Loop endpoints match, including the breathing idles and rhythmic head motion.
 Optional bones are omitted when the avatar does not provide them.
 
 ## Joint geometry
@@ -135,6 +153,15 @@ Arm targets separate elevation, forward swing, longitudinal twist, and elbow fle
 Each elbow uses one anatomical hinge, with flexion bounded between 0.04 and 2.2 radians.
 Above 60 degrees, optional clavicles share arm elevation, up to 0.45 radians.
 Rigs without clavicles retain the requested hand direction.
+Near-head gestures use a bounded two-link arm solution and an outward elbow pole.
+The solver measures head and arm rest points without reading current playback or stage transforms.
+It shares raised-arm elevation with available clavicles, then accounts for the resulting shoulder translation.
+General reach limits normalized elbow flexion to 2 radians.
+Kiss and thoughtful poses explicitly permit up to 2.35 radians to reach the lower face without stretching the arm.
+Their raw-joint tests allow up to 2.55 radians after authored forearm constraints.
+Every existing motion retains its original elbow limit and test bounds.
+Unreachable targets clamp to the selected reach range rather than stretching either bone.
+These limits require posed-mesh checks for each model. A numeric pass does not establish skin or clothing quality.
 Knee bends use the same anatomical frame, including avatars that face the opposite direction.
 
 The bundled 48-second Relaxed arms idle retains its body and finger tracks.

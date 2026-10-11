@@ -79,6 +79,13 @@ export const builtinMotionMetadata: readonly Readonly<MotionMetadata>[] = Object
   { id: 'celebrate', name: 'Celebrate', category: 'gesture', duration: 2.8, loop: false, source: 'builtin', description: 'Raise both arms with a soft knee bounce.', tags: ['happy', 'success'] },
   { id: 'stretch', name: 'Stretch', category: 'gesture', duration: 4, loop: false, source: 'builtin', description: 'An overhead stretch with a gentle side bend.', tags: ['relax'] },
   { id: 'present', name: 'Present', category: 'gesture', duration: 3, loop: false, source: 'builtin', description: 'Open one arm toward the side.', tags: ['explain', 'welcome'] },
+  { id: 'blow-kiss', name: 'Blow a kiss', category: 'gesture', duration: 3.8, loop: false, source: 'builtin', description: 'Bring one hand near the lips, then release a kiss with an open arm.', tags: ['affection', 'greeting'] },
+  { id: 'laugh', name: 'Laugh', category: 'gesture', duration: 3.6, loop: false, source: 'builtin', description: 'A short body laugh with uneven chest pulses and a gentle recovery.', tags: ['happy', 'amused'] },
+  { id: 'head-bob', name: 'Head bob', category: 'dance', duration: 2.4, loop: true, source: 'builtin', description: 'A small rhythmic head groove with delayed chest and knee movement.', tags: ['music', 'rhythm'] },
+  { id: 'walk-circle', name: 'Walk in a circle', category: 'locomotion', duration: 1.2, loop: true, source: 'builtin', rootMotion: 'circle', strideLength: 0.26, description: 'Walk along a bounded stage path with short steps and relaxed arm swings.', tags: ['walk', 'calm', 'travel'] },
+  { id: 'shrug', name: 'Shrug', category: 'gesture', duration: 2.8, loop: false, source: 'builtin', description: 'Raise both forearms with open palms and a small head tilt.', tags: ['uncertain', 'question'] },
+  { id: 'attentive-idle', name: 'Attentive idle', category: 'idle', duration: 7, loop: true, source: 'builtin', description: 'An alert standing pose with slow breathing and small listening movements.', tags: ['listen', 'calm', 'standing'] },
+  { id: 'thoughtful-idle', name: 'Thoughtful idle', category: 'idle', duration: 8, loop: true, source: 'builtin', description: 'Rest one hand near the chin with a subtle breathing cycle.', tags: ['think', 'calm', 'standing'] },
 ] satisfies MotionMetadata[])
 
 /** Creates an independent registry. Procedural track code loads only when a motion is selected. */

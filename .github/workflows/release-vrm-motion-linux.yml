@@ -90,7 +90,10 @@ jobs:
         run: pnpm -F @proj-airi/stage-tamagotchi exec vitest run --configLoader runner --project node
       - name: Test imports, games, and prompts
         if: ${{ !cancelled() && steps.repository-types.outcome == 'success' }}
-        run: pnpm -F @proj-airi/stage-ui exec vitest run --configLoader runner --project node src/features/motions/vrm src/features/companion-games src/composables/use-airi-runtime-prompt.test.ts src/composables/use-optimistic.test.ts src/libs/chat-sync/cloud-mapper.test.ts src/libs/speech/streaming-pipeline.test.ts src/workers/vad/vad.test.ts src/stores/ai/chat-llm/llm.test.ts src/tools/web-search.test.ts
+        run: pnpm -F @proj-airi/stage-ui exec vitest run --configLoader runner --project node src/features/motions/vrm src/features/companion-games src/composables/use-airi-runtime-prompt.test.ts src/composables/use-optimistic.test.ts src/libs/chat-sync/cloud-mapper.test.ts src/libs/speech/streaming-pipeline.test.ts src/workers/vad/vad.test.ts src/stores/ai/chat-llm/llm.test.ts src/tools/web-search.test.ts src/composables/use-stage-render-lifecycle.test.ts
+      - name: Test Live2D lifecycle regressions
+        if: ${{ !cancelled() && steps.repository-types.outcome == 'success' }}
+        run: pnpm -F @proj-airi/stage-ui-live2d exec vitest run --configLoader runner --config vitest.node.config.ts
       - name: Test affected API regressions
         if: ${{ !cancelled() && steps.repository-types.outcome == 'success' }}
         run: >-

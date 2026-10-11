@@ -101,6 +101,25 @@ describe('stage motion bounds', () => {
     expect(planStageMotion(normal, envelope, true)).toBeUndefined()
   })
 
+  it('reserves forward clearance for thoughtful idle before approving a close-up', () => {
+    const frame = stage()
+    const original = frame.bounds.clone()
+    const thoughtful = builtinMotionMetadata.find(entry => entry.id === 'thoughtful-idle')!
+    const attentive = builtinMotionMetadata.find(entry => entry.id === 'attentive-idle')!
+    const thoughtfulEnvelope = createStageMotionEnvelope(frame.bounds, thoughtful, 1.7)!
+    const attentiveEnvelope = createStageMotionEnvelope(frame.bounds, attentive, 1.7)!
+    expect(thoughtfulEnvelope.max.z - frame.bounds.max.z).toBeCloseTo(1.7 * 0.25)
+    expect(frame.bounds.min.z - thoughtfulEnvelope.min.z).toBeCloseTo(1.7 * 0.25)
+    expect(thoughtfulEnvelope.max.z).toBeGreaterThan(attentiveEnvelope.max.z)
+    expect(frame.bounds.equals(original)).toBe(true)
+
+    frame.camera.position.z = 3
+    expect(planStageMotion(frame, attentiveEnvelope, false)).toBeDefined()
+    expect(planStageMotion(frame, thoughtfulEnvelope, false)).toBeUndefined()
+    frame.camera.position.z = 5
+    expect(planStageMotion(frame, thoughtfulEnvelope, false)).toBeDefined()
+  })
+
   it('reserves wider imported articulation clearance and permits it when enough room exists', () => {
     const frame = stage()
     const metadata = { ...run, id: 'imported', source: 'imported' as const, rootMotion: undefined }

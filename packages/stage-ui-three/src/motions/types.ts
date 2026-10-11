@@ -12,6 +12,8 @@ export interface MotionMetadata {
   loop: boolean
   source: 'builtin' | 'imported'
   rootMotion?: 'circle'
+  /** Travel per complete gait cycle, as a fraction of measured avatar height. Default: 0.44. */
+  strideLength?: number
 }
 
 /** Loaders retarget to this avatar. Aborted results never enter its mixer or cache. */

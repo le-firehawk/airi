@@ -2,6 +2,7 @@
 import type { MotionStageFitResult } from '@proj-airi/stage-ui-three/motions'
 import type { ModelSettingsRuntimeSnapshot } from '@proj-airi/stage-ui/components/scenarios/settings/model-settings/runtime'
 
+import { errorMessageFrom } from '@moeru/std'
 import { electron } from '@proj-airi/electron-eventa'
 import {
   getElectronEventaContext,
@@ -72,8 +73,9 @@ watch(() => desktopCompanion.snapshot, (snapshot, previous) => {
 useScreenAmbientLight({ stageCanvas: () => widgetStageRef.value?.canvasElement() })
 const stageCanvas = toRef(() => widgetStageRef.value?.canvasElement())
 const componentStateStage = ref<'pending' | 'loading' | 'mounted'>('pending')
-const stageMounted = computed(() => componentStateStage.value === 'mounted')
-const isLoading = computed(() => !stageMounted.value)
+const stageRenderError = shallowRef<Error>()
+const stageMounted = computed(() => componentStateStage.value === 'mounted' && !stageRenderError.value)
+const isLoading = computed(() => !stageMounted.value && !stageRenderError.value)
 
 const isIgnoringMouseEvents = ref(false)
 const shouldFadeOnCursorWithin = ref(false)
@@ -113,7 +115,7 @@ const isTransparentByThreeExact = useThreeSceneIsTransparentAtPoint(
 )
 
 const settingsStore = useSettings()
-const { alwaysOnTop, stageModelRenderer, stageModelSelectedUrl } = storeToRefs(settingsStore)
+const { alwaysOnTop, stageModelRenderer, stageModelSelected, stageModelSelectedUrl } = storeToRefs(settingsStore)
 const modelStore = useModelStore()
 const expressionStore = useExpressionStore()
 const { sceneMutationLocked, scenePhase } = storeToRefs(modelStore)
@@ -144,7 +146,7 @@ const shouldUseThreeTransparencyHitTest = computed(() => shouldSampleStageTransp
  * region sampler reports `true` and the stage stays visible.
  */
 const isTransparent = computed(() => {
-  if (stagePaused.value || componentStateStage.value !== 'mounted' || !fadeOnHoverEnabled.value)
+  if (stagePaused.value || !stageMounted.value || !fadeOnHoverEnabled.value)
     return true
 
   // TresCanvas leaves preserveDrawingBuffer off, so VRM's canvas reads back empty and
@@ -176,7 +178,7 @@ const isPointerOverStageCanvas = computed(() =>
  * lands there: it draws a DOM panel and exposes no canvas to read.
  */
 const isTransparentForMouseEvents = computed(() => {
-  if (stagePaused.value || componentStateStage.value !== 'mounted')
+  if (stagePaused.value || !stageMounted.value)
     return false
 
   // Load-bearing, not a convenience. A scene swap unmounts the canvas while the state
@@ -206,6 +208,18 @@ const controlsOverlayActive = computed(() => notificationInteractionActive.value
 
 const modelSettingsRuntimeSnapshot = computed<ModelSettingsRuntimeSnapshot>(() => {
   const hasModel = !!stageModelSelectedUrl.value
+
+  if (stageRenderError.value) {
+    return createEmptyModelSettingsRuntimeSnapshot({
+      ownerInstanceId: modelSettingsRuntimeOwnerInstanceId,
+      modelId: stageModelSelected.value,
+      renderer: stageModelRenderer.value ?? 'disabled',
+      phase: 'error',
+      controlsLocked: true,
+      lastError: errorMessageFrom(stageRenderError.value) ?? 'Failed to render stage',
+      updatedAt: Date.now(),
+    })
+  }
 
   if (stageModelRenderer.value === 'live2d') {
     const phase = resolveComponentStateToRuntimePhase(componentStateStage.value, { hasModel })
@@ -466,6 +480,7 @@ onUnmounted(() => {
         <WidgetStage
           ref="widgetStageRef"
           v-model:state="componentStateStage"
+          v-model:render-error="stageRenderError"
           h-full w-full
           flex-1
           :cursor-position="cursorPosition"

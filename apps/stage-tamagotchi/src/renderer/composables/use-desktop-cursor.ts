@@ -1,15 +1,19 @@
 import { startLoopGetCursorScreenPoint } from '@proj-airi/electron-eventa'
 import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
 import { useEventListener, useIntervalFn, useWindowSize } from '@vueuse/core'
-import { computed, ref, watch } from 'vue'
+import { computed, ref, shallowRef, watch } from 'vue'
 
 import { useDesktopCompanionStore } from '../stores/desktop-companion'
 
-/** Uses Electron DIP samples when supported. Native Wayland uses recent pointer events inside this window only. */
+/**
+ * Uses Electron DIP samples when supported. Native Wayland uses pointer events inside this window only.
+ * Hit testing requires a fresh sample. Gaze retains the last observed point after exit, blur, or stream expiry.
+ */
 export function useDesktopCursor() {
   const desktop = useDesktopCompanionStore()
   const { width, height } = useWindowSize()
   const local = ref<{ x: number, y: number }>()
+  const gazePosition = shallowRef<{ x: number, y: number }>()
   const lastLocalAt = ref(0)
   const now = ref(Date.now())
   const startCursor = useElectronEventaInvoke(startLoopGetCursorScreenPoint)
@@ -26,7 +30,7 @@ export function useDesktopCursor() {
     if (document.hidden)
       local.value = undefined
   })
-  // A lost leave event or a stalled IPC stream returns gaze to neutral instead of preserving stale coordinates.
+  // Freshness controls hit testing only. Gaze keeps the last observed point when the pointer is unavailable.
   useIntervalFn(() => now.value = Date.now(), 250)
   watch(globalAvailable, (available) => {
     if (available)
@@ -40,6 +44,10 @@ export function useDesktopCursor() {
       return local.value
     return undefined
   })
+  watch(sampledPoint, (sample) => {
+    if (sample && Number.isFinite(sample.x) && Number.isFinite(sample.y))
+      gazePosition.value = { x: sample.x, y: sample.y }
+  }, { immediate: true, flush: 'sync' })
   const hasFreshSample = computed(() => Boolean(sampledPoint.value))
   const center = computed(() => ({ x: width.value / 2, y: height.value / 2 }))
   const point = computed(() => sampledPoint.value ?? center.value)
@@ -52,5 +60,5 @@ export function useDesktopCursor() {
     const nearHorizontal = (Math.abs(sample.y) <= 10 || Math.abs(sample.y - height.value) <= 10) && sample.x > -10 && sample.x < width.value + 10
     return nearVertical || nearHorizontal
   })
-  return { x: computed(() => point.value.x), y: computed(() => point.value.y), globalAvailable, hasFreshSample, isOutsideWindow, isAroundWindowBorder }
+  return { x: computed(() => point.value.x), y: computed(() => point.value.y), gazePosition, globalAvailable, hasFreshSample, isOutsideWindow, isAroundWindowBorder }
 }

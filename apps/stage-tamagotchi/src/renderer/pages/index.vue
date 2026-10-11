@@ -84,7 +84,7 @@ const openOnboarding = useElectronEventaInvoke(electronOpenOnboarding)
 // read its answer rather than mounting a second set of listeners over the same element.
 const isOutside = computed(() => controlsIslandRef.value?.isOutside ?? true)
 const isOutsideFor250Ms = refDebounced(isOutside, 250)
-const { x: relativeMouseX, y: relativeMouseY, hasFreshSample, isOutsideWindow, isAroundWindowBorder } = useDesktopCursor()
+const { x: relativeMouseX, y: relativeMouseY, gazePosition: cursorPosition, hasFreshSample, isOutsideWindow, isAroundWindowBorder } = useDesktopCursor()
 // NOTICE: In real-world use cases of Fade on Hover feature, the cursor may move around the edge of the
 // model rapidly, causing flickering effects when checking pixel transparency strictly.
 // Here we use render-target pixel sampling to keep detection aligned with the actual render output.
@@ -401,11 +401,6 @@ onMounted(() => {
 onUnmounted(() => {
   void voice.stopListening()
 })
-
-const cursorPosition = computed(() => ({
-  x: relativeMouseX.value,
-  y: relativeMouseY.value,
-}))
 </script>
 
 <template>

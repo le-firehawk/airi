@@ -585,7 +585,7 @@ desktop-companion:
   display: 'Display {id}: {width} × {height} DIP at ({x}, {y}), scale {scale}'
   cursor:
     electron-screen: Cursor tracking uses Electron desktop coordinates across connected displays.
-    window-local: Cursor tracking uses pointer events inside the AIRI window and returns to neutral when they become stale.
+    window-local: Cursor tracking uses pointer events inside the AIRI window only. In VRM mouse tracking mode, the eyes keep looking toward the last observed pointer position.
   wayland-limit: Native Wayland does not expose global cursor coordinates or window positioning through Electron. The explicit XWayland launch option uses --ozone-platform=x11.
   source:
     spotlight: Spotlight

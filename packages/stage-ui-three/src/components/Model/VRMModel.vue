@@ -58,7 +58,7 @@ import {
 
 } from 'vue'
 
-import { useVRMEyeFocusFor } from '../../composables/eye-tracking'
+import { useVRMEyeFocusFor, VRMEyeFocus } from '../../composables/eye-tracking'
 import {
   createIblProbeController,
   injectDiffuseIBL,
@@ -71,7 +71,6 @@ import {
   loadVRMAnimation,
   reAnchorRootPositionTrack,
   useBlink,
-  useIdleEyeSaccades,
 } from '../../composables/vrm/animation'
 import { loadVrm } from '../../composables/vrm/core'
 import { useVRMEmote } from '../../composables/vrm/expression'
@@ -181,7 +180,7 @@ let loadSequence = 0
 const raycaster = new Raycaster()
 
 // Animation related ref
-const vrmAnimationMixer = ref<AnimationMixer>()
+const vrmAnimationMixer = shallowRef<AnimationMixer>()
 const motionController = shallowRef<MotionController>()
 const { onBeforeRender, stop, start } = useLoop()
 
@@ -197,7 +196,23 @@ type UpdatableMaterial = Material & {
 
 // Expressions
 const blink = useBlink()
-const idleEyeSaccades = useIdleEyeSaccades()
+const eyeFocus = new VRMEyeFocus()
+const lookAtOrigin = new Vector3()
+const manualEyeFocus = shallowRef<Vec3>()
+const defaultTookAt = computed(() => new Vector3(0, eyeHeight.value, -100))
+const focusPos = useVRMEyeFocusFor({
+  cameraPosition: () => props.cameraPosition,
+  context: () => ({
+    camera: camera.value,
+    raycaster,
+    defaultLookAt: defaultTookAt.value,
+    lookAtOrigin: vrm.value?.lookAt?.getLookAtWorldPosition(lookAtOrigin)
+      ?? lookAtOrigin.set(modelOffset.value.x, modelOffset.value.y + eyeHeight.value, modelOffset.value.z),
+  }),
+  screenBoundingBox: props.screenBoundingBox,
+  source: () => props.cursorPosition,
+  trackingMode: () => props.trackingMode,
+})
 // shallowRef: the composable object must stay non-reactive, otherwise Vue
 // deep-unwraps nested refs/computed (e.g. isEmoteActive) and breaks reads
 // like vrmEmote.value.isEmoteActive.value in the render loop.
@@ -477,6 +492,7 @@ function bindManagedVrmInstanceRenderLoop() {
       activeVrm?.humanoid.update()
     })
     const lookAtMs = measureFrameStep(tracingEnabled, () => {
+      eyeFocus.update(activeVrm?.lookAt, manualEyeFocus.value ?? focusPos(), delta)
       activeVrm?.lookAt?.update?.(delta)
     })
     const isEmoteActive = vrmEmote.value?.isEmoteActive?.value ?? false
@@ -602,6 +618,7 @@ function componentCleanUp(
   airiIblProbe?.dispose()
   airiIblProbe = null
   clearActiveManagedVrmRefs()
+  manualEyeFocus.value = undefined
   modelLoaded.value = false
 
   if (hasCleanupWork && isStageThreeRuntimeTraceEnabled()) {
@@ -615,8 +632,6 @@ function componentCleanUp(
     })
   }
 }
-
-const defaultTookAt = computed(() => new Vector3(0, eyeHeight.value, -100))
 
 function computeBoundingBox(vrmScene: Object3D) {
   const box = new Box3()
@@ -956,18 +971,6 @@ async function loadModel() {
   }
 }
 
-const focusPos = useVRMEyeFocusFor({
-  cameraPosition: () => props.cameraPosition,
-  context: () => ({
-    camera: camera.value,
-    raycaster,
-    defaultLookAt: defaultTookAt.value,
-  }),
-  screenBoundingBox: props.screenBoundingBox,
-  source: () => props.cursorPosition,
-  trackingMode: () => props.trackingMode,
-})
-
 onMounted(async () => {
   // watch if the model needs to be reloaded
   // Registered BEFORE the initial load to avoid missing src changes
@@ -1020,9 +1023,20 @@ onMounted(async () => {
     })
     updateIblProbe(mode)
   }, { immediate: true })
-  watch(focusPos, (newPos) => {
-    idleEyeSaccades.instantUpdate(vrm.value, newPos)
-  }, { immediate: true })
+  watch([
+    () => props.cursorPosition?.x,
+    () => props.cursorPosition?.y,
+    () => props.trackingMode,
+    () => props.cameraPosition.x,
+    () => props.cameraPosition.y,
+    () => props.cameraPosition.z,
+    () => props.modelOffset.x,
+    () => props.modelOffset.y,
+    () => props.modelOffset.z,
+    camera,
+  ], () => {
+    manualEyeFocus.value = undefined
+  }, { flush: 'sync' })
 })
 
 onUnmounted(() => {
@@ -1094,7 +1108,7 @@ defineExpose({
   },
   scene: computed(() => vrm.value?.scene),
   lookAtUpdate(target: Vec3) {
-    idleEyeSaccades.instantUpdate(vrm.value, target)
+    manualEyeFocus.value = { ...target }
   },
 })
 </script>

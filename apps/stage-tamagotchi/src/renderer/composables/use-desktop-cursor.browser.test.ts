@@ -52,7 +52,7 @@ function setup(global: boolean, initial?: Promise<DesktopCompanionSnapshot>) {
 }
 
 describe('desktop cursor source and renderer snapshots', () => {
-  it('uses only recent window pointer events on native Wayland', async () => {
+  it('retains Wayland gaze after exit without keeping stale hit-test coordinates', async () => {
     const { cursor, store, start } = setup(false)
     await expect.poll(() => store.ready).toBe(true)
     window.dispatchEvent(new PointerEvent('pointermove', { clientX: 123, clientY: 234 }))
@@ -61,6 +61,7 @@ describe('desktop cursor source and renderer snapshots', () => {
     expect(cursor.y.value).toBe(234)
     expect(cursor.hasFreshSample.value).toBe(true)
     expect(cursor.isOutsideWindow.value).toBe(false)
+    expect(cursor.gazePosition.value).toEqual({ x: 123, y: 234 })
     expect(start).not.toHaveBeenCalled()
     document.documentElement.dispatchEvent(new PointerEvent('pointerleave'))
     await nextTick()
@@ -69,6 +70,7 @@ describe('desktop cursor source and renderer snapshots', () => {
     expect(cursor.hasFreshSample.value).toBe(false)
     expect(cursor.isOutsideWindow.value).toBe(true)
     expect(cursor.isAroundWindowBorder.value).toBe(false)
+    expect(cursor.gazePosition.value).toEqual({ x: 123, y: 234 })
   })
 
   it('expires local fallback coordinates after a lost leave event', async () => {
@@ -77,6 +79,33 @@ describe('desktop cursor source and renderer snapshots', () => {
     window.dispatchEvent(new PointerEvent('pointermove', { clientX: 80, clientY: 100 }))
     expect(cursor.x.value).toBe(80)
     await expect.poll(() => cursor.x.value, { timeout: 3000 }).toBe(window.innerWidth / 2)
+    expect(cursor.hasFreshSample.value).toBe(false)
+    expect(cursor.gazePosition.value).toEqual({ x: 80, y: 100 })
+  })
+
+  it('keeps gaze through blur and resumes from the next local pointer event', async () => {
+    const { cursor, store } = setup(false)
+    await expect.poll(() => store.ready).toBe(true)
+    expect(cursor.gazePosition.value).toBeUndefined()
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 50, clientY: 75 }))
+    window.dispatchEvent(new Event('blur'))
+    expect(cursor.hasFreshSample.value).toBe(false)
+    expect(cursor.gazePosition.value).toEqual({ x: 50, y: 75 })
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 350, clientY: 275 }))
+    expect(cursor.hasFreshSample.value).toBe(true)
+    expect(cursor.gazePosition.value).toEqual({ x: 350, y: 275 })
+  })
+
+  it('keeps a reliable global point outside the window after its stream expires', async () => {
+    const { cursor, store } = setup(true)
+    await expect.poll(() => store.ready).toBe(true)
+    await context.emit(desktopCursorSample, { screenDip: { x: -1700, y: -100 }, localCss: { x: -300, y: -200 }, displayId: 7, sampledAt: Date.now(), layoutRevision: 0 })
+    expect(cursor.hasFreshSample.value).toBe(true)
+    expect(cursor.isOutsideWindow.value).toBe(true)
+    expect(cursor.gazePosition.value).toEqual({ x: -300, y: -200 })
+    await expect.poll(() => cursor.hasFreshSample.value, { timeout: 3000 }).toBe(false)
+    expect(cursor.gazePosition.value).toEqual({ x: -300, y: -200 })
+    expect(cursor.isAroundWindowBorder.value).toBe(false)
   })
 
   it('uses CSS-local global samples once and invalidates them after hotplug', async () => {
@@ -96,6 +125,7 @@ describe('desktop cursor source and renderer snapshots', () => {
     await expect.poll(() => store.ready).toBe(true)
     await context.emit(desktopCursorSample, { screenDip: { x: 0, y: 0 }, localCss: { x: 80, y: 80 }, displayId: 7, sampledAt: Date.now() - 3000, layoutRevision: 0 })
     expect(cursor.x.value).toBe(window.innerWidth / 2)
+    expect(cursor.gazePosition.value).toBeUndefined()
   })
 
   it('does not overwrite a live preference change with an older hydration response', async () => {

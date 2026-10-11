@@ -42,6 +42,31 @@ import { gameletPluginKitDescriptor } from './kits/gamelet'
 import { createGameletOrchestrationRuntime } from './kits/gamelet/orchestration'
 import { widgetPluginKitDescriptor } from './kits/widget'
 
+const throttledWork = vi.hoisted(() => ({
+  timers: [] as Array<{ flush: () => void, cancel: () => void }>,
+  pending: [] as Promise<unknown>[],
+}))
+const hostDisposals: Array<() => Promise<void>> = []
+
+// https://github.com/le-firehawk/airi/actions/runs/38100464151/job/114355166518
+// ROOT CAUSE:
+//
+// Config saves resolve Electron's userData path when their throttled callbacks run.
+// Keep the real throttle and filesystem work, but finish both before the next fixture changes that path.
+vi.mock('es-toolkit', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('es-toolkit')>()
+  return {
+    ...actual,
+    throttle: (...[callback, ...options]: Parameters<typeof actual.throttle>) => {
+      const timer = actual.throttle(function (this: unknown, ...args: unknown[]) {
+        throttledWork.pending.push(Promise.resolve(Reflect.apply(callback, this, args)))
+      }, ...options)
+      throttledWork.timers.push(timer)
+      return timer
+    },
+  }
+})
+
 const appMock = vi.hoisted(() => ({
   getPath: vi.fn(),
   getVersion: vi.fn(() => '0.12.0-beta.5'),
@@ -446,6 +471,7 @@ async function setupExtensionHostForTest() {
 async function setupExtensionHostServiceInternalForTest() {
   const widgets = createWidgetsManagerDouble()
   const service = await setupExtensionHostServiceInternal({ widgetsManager: widgets.widgetsManager })
+  hostDisposals.push(service.dispose)
   return { service, ...widgets }
 }
 
@@ -513,10 +539,35 @@ describe('setupExtensionHost', () => {
   })
 
   afterEach(async () => {
+    // A failed assertion can leave an intentional runtime or cookie fault unconsumed.
+    // Restore those boundaries before cleanup, and keep cleanup failures visible.
+    vi.restoreAllMocks()
+    sessionMock.defaultSession.cookies.remove.mockReset()
+    sessionMock.defaultSession.cookies.set.mockReset()
+    const disposals = await Promise.allSettled([
+      ...lifecycleMock.beforeQuitHooks,
+      ...hostDisposals,
+    ].map(dispose => Promise.resolve().then(dispose)))
+    lifecycleMock.beforeQuitHooks.length = 0
+    hostDisposals.length = 0
+
+    for (const timer of throttledWork.timers) {
+      timer.flush()
+      timer.cancel()
+    }
+    const writes = await Promise.allSettled(throttledWork.pending)
+    throttledWork.timers.length = 0
+    throttledWork.pending.length = 0
     await removeDirWithRetry(userDataDir)
     contextState.lastContext = undefined
-    vi.restoreAllMocks()
     vi.clearAllMocks()
+
+    const failures = [...disposals, ...writes]
+      .filter(result => result.status === 'rejected')
+      .map(result => result.reason)
+    if (failures.length > 0) {
+      throw new AggregateError(failures, 'Extension Host fixture cleanup failed.')
+    }
   })
 
   it('lists manifests from plugin subdirectories', async () => {

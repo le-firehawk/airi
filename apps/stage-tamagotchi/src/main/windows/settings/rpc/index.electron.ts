@@ -22,6 +22,7 @@ import {
   electronSpotlightShortcutGet,
   electronSpotlightShortcutSet,
 } from '../../../../shared/eventa'
+import { onWindowClosed } from '../../../libs/electron/window-lifecycle'
 import { createAuthService } from '../../../services/airi/auth'
 import { createGodotStageService } from '../../../services/airi/godot-stage'
 import { registerIOTraceRecording } from '../../../services/airi/io-trace-recording/register'
@@ -50,7 +51,8 @@ export async function setupSettingsWindowInvokes(params: {
   // manage events within eventa's context system.
   ipcMain.setMaxListeners(0)
 
-  const { context } = createContext(ipcMain, params.settingsWindow)
+  const { context, dispose } = createContext(ipcMain, params.settingsWindow)
+  onWindowClosed(params.settingsWindow, dispose)
 
   await setupBaseWindowElectronInvokes({ context, window: params.settingsWindow, i18n: params.i18n, serverChannel: params.serverChannel })
 
@@ -60,12 +62,12 @@ export async function setupSettingsWindowInvokes(params: {
   createGodotStageService({ context, manager: params.godotStageManager, window: params.settingsWindow })
   createAuthService({ context, window: params.settingsWindow })
   const stopIOTraceRecording = registerIOTraceRecording(context, params.ioTraceRecording)
-  params.settingsWindow.once('closed', stopIOTraceRecording)
+  onWindowClosed(params.settingsWindow, stopIOTraceRecording)
 
   // Register the global shortcut service for the settings window.
   params.globalShortcut.registerWindow({
     context,
-    onClosed: listener => params.settingsWindow.on('closed', listener),
+    onClosed: listener => onWindowClosed(params.settingsWindow, listener),
   })
 
   defineInvokeHandler(context, electronCenterMainWindow, () => centerWindowOnDisplay(params.getMainWindow?.()))

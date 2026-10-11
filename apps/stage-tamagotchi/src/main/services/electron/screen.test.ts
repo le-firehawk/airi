@@ -44,7 +44,7 @@ vi.mock('@proj-airi/electron-vueuse/main', () => ({
 function setup() {
   const context = createContext()
   const closed = vi.fn()
-  const window = { getContentBounds: () => ({ x: -1800, y: -200, width: 450, height: 600 }), webContents: { getZoomFactor: () => 1.25 }, once: closed }
+  const window = { isDestroyed: () => false, off: vi.fn(), getContentBounds: () => ({ x: -1800, y: -200, width: 450, height: 600 }), webContents: { getZoomFactor: () => 1.25 }, once: closed }
   createScreenService({ context: context as never, window: window as never })
   return { context, closed }
 }

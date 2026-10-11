@@ -22,6 +22,7 @@ import {
   electronAuthStartLogin,
   electronAuthStatus,
 } from '../../../shared/eventa'
+import { onWindowClosed } from '../../libs/electron/window-lifecycle'
 import { startLoopbackServer } from './http-server/http/auth'
 
 const log = useLogg('auth-service').useGlobalConfig()
@@ -75,7 +76,7 @@ export function createAuthService(params: {
   window: BrowserWindow
 }): void {
   authContexts.add(params.context)
-  params.window.once('closed', () => {
+  onWindowClosed(params.window, () => {
     authContexts.delete(params.context)
     const attempt = activeAttempt
     if (attempt?.window !== params.window)

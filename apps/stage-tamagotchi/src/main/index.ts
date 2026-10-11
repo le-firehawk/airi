@@ -30,6 +30,7 @@ import { createGlobalAppConfig } from './configs/global'
 import { createIOTraceRecordingConfig } from './configs/io-trace-recording'
 import { emitAppBeforeQuit, emitAppWindowAllClosed } from './libs/bootkit/lifecycle'
 import { getElectronMainDirname, setElectronMainDirname } from './libs/electron/location'
+import { onWindowClosed } from './libs/electron/window-lifecycle'
 import { createI18n } from './libs/i18n'
 import { setupAppleSpeechTranscriptionService } from './services/airi/apple-speech-transcription'
 import { setupAppleVisionService } from './services/airi/apple-vision'
@@ -321,7 +322,7 @@ app.whenReady().then(async () => {
         onWindowCreated: (window) => {
           const webContentsId = window.webContents.id
           extensionManagementWebContentsId = webContentsId
-          window.once('closed', () => {
+          onWindowClosed(window, () => {
             if (extensionManagementWebContentsId === webContentsId) {
               extensionManagementWebContentsId = undefined
             }

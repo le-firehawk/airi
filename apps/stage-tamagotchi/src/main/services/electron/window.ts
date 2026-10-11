@@ -16,6 +16,7 @@ import {
   electronWindowSetAlwaysOnTop,
 } from '../../../shared/eventa'
 import { onAppBeforeQuit, onAppWindowAllClosed } from '../../libs/bootkit/lifecycle'
+import { onWindowClosed } from '../../libs/electron/window-lifecycle'
 import { resizeWindowByDelta, setWindowAlwaysOnTop } from '../../windows/shared/window'
 
 export function createWindowService(params: { context: ReturnType<typeof createContext>['context'], window: BrowserWindow }) {
@@ -40,13 +41,11 @@ export function createWindowService(params: { context: ReturnType<typeof createC
     },
   })
 
-  // The loop stops with its window; these cover the app closing first.
+  // The loop stops with its window. These hooks cover the app closing first.
   const offAllClosed = onAppWindowAllClosed(() => stop())
   const offBeforeQuit = onAppBeforeQuit(() => stop())
-  params.window.once('closed', () => {
-    offAllClosed()
-    offBeforeQuit()
-  })
+  onWindowClosed(params.window, offAllClosed)
+  onWindowClosed(params.window, offBeforeQuit)
   defineInvokeHandler(params.context, startLoopGetBounds, () => start())
   defineInvokeHandler(params.context, electronGetWindowLifecycleState, (_, options) => {
     if (params.window.webContents.id === options?.raw.ipcMainEvent.sender.id)

@@ -21,6 +21,7 @@ import {
   desktopReactionRequested,
 } from '../../../shared/eventa/desktop-companion'
 import { onAppBeforeQuit } from '../../libs/bootkit/lifecycle'
+import { onWindowClosed } from '../../libs/electron/window-lifecycle'
 import { DesktopCompanionFileStorage } from './desktop-companion-storage'
 import { DesktopNotificationCenter } from './desktop-notifications'
 
@@ -85,8 +86,6 @@ export async function createDesktopCompanionService(params: { window: BrowserWin
   const offReaction = center.onReaction((intent) => {
     void context.emit(desktopReactionRequested, intent).catch(() => {})
   })
-  params.window.once('closed', () => {
-    offSnapshot()
-    offReaction()
-  })
+  onWindowClosed(params.window, offSnapshot)
+  onWindowClosed(params.window, offReaction)
 }

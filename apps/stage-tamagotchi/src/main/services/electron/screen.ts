@@ -10,6 +10,7 @@ import { app, Notification, screen } from 'electron'
 
 import { desktopCapabilitiesChanged, desktopCapabilitiesGet, desktopCursorSample } from '../../../shared/eventa/desktop-companion'
 import { onAppBeforeQuit, onAppWindowAllClosed } from '../../libs/bootkit/lifecycle'
+import { onWindowClosed } from '../../libs/electron/window-lifecycle'
 import { createDesktopCursorSample, resolveDesktopCapabilities } from './desktop-capabilities'
 
 export function createScreenService(params: { context: ReturnType<typeof createContext>['context'], window: BrowserWindow }) {
@@ -57,16 +58,14 @@ export function createScreenService(params: { context: ReturnType<typeof createC
   screen.on('display-metrics-changed', updateDisplays)
   defineInvokeHandler(params.context, desktopCapabilitiesGet, capabilities)
 
-  // The loop stops with its window; these cover the app closing first.
+  // The loop stops with its window. These hooks cover the app closing first.
   const offAllClosed = onAppWindowAllClosed(() => stop())
   const offBeforeQuit = onAppBeforeQuit(() => stop())
-  params.window.once('closed', () => {
-    offAllClosed()
-    offBeforeQuit()
-    screen.removeListener('display-added', updateDisplays)
-    screen.removeListener('display-removed', updateDisplays)
-    screen.removeListener('display-metrics-changed', updateDisplays)
-  })
+  onWindowClosed(params.window, offAllClosed)
+  onWindowClosed(params.window, offBeforeQuit)
+  onWindowClosed(params.window, () => screen.removeListener('display-added', updateDisplays))
+  onWindowClosed(params.window, () => screen.removeListener('display-removed', updateDisplays))
+  onWindowClosed(params.window, () => screen.removeListener('display-metrics-changed', updateDisplays))
   defineInvokeHandler(params.context, startLoopGetCursorScreenPoint, () => {
     if (supportsGlobalCursor)
       start()

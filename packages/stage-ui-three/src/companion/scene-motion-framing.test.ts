@@ -1,7 +1,7 @@
 import type { SceneMotionFramingResult, SceneMotionFramingTick } from './scene-motion-framing'
 
 import { Bone, Box3, BoxGeometry, BufferGeometry, Float32BufferAttribute, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, PerspectiveCamera, Skeleton, SkinnedMesh, Uint16BufferAttribute, Vector3 } from 'three'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { SceneMotionFraming } from './scene-motion-framing'
 
@@ -46,6 +46,54 @@ function skinnedTriangle() {
 }
 
 describe('scene motion framing', () => {
+  beforeEach(() => {
+    // Functional assertions control the CPU clock. The separate benchmark keeps the real clock.
+    vi.useFakeTimers({ toFake: ['performance'] })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.useRealTimers()
+  })
+
+  it('yields after a deformation batch reaches the CPU deadline and resumes the same snapshot', () => {
+    const { adapter, input, mesh, camera } = fixture(6)
+    mesh.geometry = new BoxGeometry(6, 6, 6, 3, 3, 3)
+    const getVertexPosition = Mesh.prototype.getVertexPosition
+    const vertices = vi.spyOn(Mesh.prototype, 'getVertexPosition').mockImplementation(function (this: Mesh, index, target) {
+      const vertex = getVertexPosition.call(this, index, target)
+      if (index === 0)
+        vi.advanceTimersByTime(3)
+      return vertex
+    })
+    expect(adapter.tick(input).status).toBe('unavailable')
+    expect(vertices).toHaveBeenCalledTimes(64)
+    expect(camera.position.z).toBe(5)
+    expect(performance.now()).toBe(3)
+
+    const complete = applied(adapter.tick({ ...input, nowMs: 16 }))
+    expect(vertices).toHaveBeenCalledTimes(mesh.geometry.getAttribute('position').count)
+    expect(complete.factor).toBeGreaterThan(1)
+    expect(complete.limited).toBe(true)
+  })
+
+  it('includes pose capture in the CPU deadline and retries without publishing partial bounds', () => {
+    const { adapter, input, root, camera } = fixture(6)
+    const updateMatrixWorld = root.updateMatrixWorld
+    vi.spyOn(root, 'updateMatrixWorld').mockImplementationOnce(function (this: Group, force) {
+      updateMatrixWorld.call(this, force)
+      vi.advanceTimersByTime(3)
+    })
+    const vertices = vi.spyOn(Mesh.prototype, 'getVertexPosition')
+    expect(adapter.tick(input).status).toBe('unavailable')
+    expect(vertices).not.toHaveBeenCalled()
+    expect(camera.position.z).toBe(5)
+    expect(performance.now()).toBe(3)
+
+    expect(applied(adapter.tick({ ...input, nowMs: 100 })).factor).toBeGreaterThan(1)
+    expect(vertices).toHaveBeenCalled()
+  })
+
   it('applies a world-space offset while preserving projection, quaternion, and screen anchor', () => {
     const { adapter, input, camera } = fixture(6)
     input.anchorWorld.set(0.4, -0.4, 0)
@@ -164,18 +212,193 @@ describe('scene motion framing', () => {
     const { adapter, input, root } = fixture()
     const { mesh, bone } = skinnedTriangle()
     root.add(mesh)
-    const sample = vi.spyOn(mesh, 'computeBoundingBox')
+    const sample = vi.spyOn(SkinnedMesh.prototype, 'getVertexPosition')
     const first = applied(adapter.tick(input))
-    expect(sample).toHaveBeenCalledTimes(1)
+    expect(sample).toHaveBeenCalledTimes(3)
     bone.position.x = 8
     const cached = applied(adapter.tick({ ...input, nowMs: 50, motionRevision: 1 }))
     expect(cached.sampled).toBe(false)
     expect(cached.factor).toBe(first.factor)
-    expect(sample).toHaveBeenCalledTimes(1)
+    expect(sample).toHaveBeenCalledTimes(3)
     const updated = applied(adapter.tick({ ...input, nowMs: 100, motionRevision: 2 }))
     expect(updated.sampled).toBe(true)
     expect(updated.factor).toBeGreaterThan(first.factor)
-    expect(sample).toHaveBeenCalledTimes(2)
+    expect(sample).toHaveBeenCalledTimes(6)
+    sample.mockRestore()
+  })
+
+  it('spreads exact skinning across frames without publishing a partial pose', () => {
+    const { input, root, camera } = fixture()
+    root.clear()
+    const { mesh, bone } = skinnedTriangle()
+    root.add(mesh)
+    bone.position.x = 8
+    const adapter = new SceneMotionFraming('model-1', { maxVertexVisitsPerFrame: 1 })
+    const first = adapter.tick(input)
+    expect(first.status).toBe('unavailable')
+    expect(camera.position.z).toBe(5)
+    bone.position.x = -8
+    expect(adapter.tick({ ...input, nowMs: 16 }).status).toBe('unavailable')
+    const complete = applied(adapter.tick({ ...input, nowMs: 32 }))
+    const reference = fixture()
+    reference.root.clear()
+    const captured = skinnedTriangle()
+    captured.bone.position.x = 8
+    reference.root.add(captured.mesh)
+    const expected = applied(reference.adapter.tick(reference.input))
+    expect(complete.factor).toBeCloseTo(expected.factor, 10)
+    expect(complete.limited).toBe(true)
+  })
+
+  it('keeps completed geometry during later samples and warms it before playback', () => {
+    const { input, root, camera } = fixture()
+    root.clear()
+    const { mesh, bone } = skinnedTriangle()
+    root.add(mesh)
+    const adapter = new SceneMotionFraming('model-1', { maxVertexVisitsPerFrame: 1, maxSampleMs: 8 })
+    for (const nowMs of [0, 16, 32]) {
+      expect(adapter.tick({ ...input, nowMs, motionActive: false }).status).toBe('applied')
+      expect(camera.position.z).toBe(5)
+    }
+    bone.position.x = 8
+    const first = applied(adapter.tick({ ...input, nowMs: 100, motionActive: true }))
+    const second = applied(adapter.tick({ ...input, nowMs: 116, motionActive: true }))
+    expect(second.factor).toBe(first.factor)
+    expect(applied(adapter.tick({ ...input, nowMs: 132, motionActive: true })).factor).toBeGreaterThan(first.factor)
+  })
+
+  it.each(['removed', 'hidden', 'material-visible', 'geometry', 'attribute', 'attribute-version', 'morph-mode'] as const)('invalidates unfinished samples after %s changes', (change) => {
+    const { input, root, camera } = fixture()
+    root.clear()
+    const { mesh, bone } = skinnedTriangle()
+    root.add(mesh)
+    bone.position.x = 8
+    const hiddenMaterial = new MeshBasicMaterial({ visible: false })
+    root.add(new Mesh(new BoxGeometry(100, 100, 100), hiddenMaterial))
+    const adapter = new SceneMotionFraming('model-1', { maxVertexVisitsPerFrame: 1, maxSampleMs: 8 })
+    expect(adapter.tick(input).status).toBe('unavailable')
+    if (change === 'removed')
+      root.remove(mesh)
+    if (change === 'hidden')
+      mesh.visible = false
+    if (change === 'material-visible')
+      hiddenMaterial.visible = true
+    if (change === 'geometry')
+      mesh.geometry = mesh.geometry.clone()
+    if (change === 'attribute')
+      mesh.geometry.setAttribute('position', mesh.geometry.getAttribute('position').clone())
+    if (change === 'attribute-version')
+      mesh.geometry.getAttribute('position').needsUpdate = true
+    if (change === 'morph-mode')
+      mesh.geometry.morphTargetsRelative = true
+    expect(adapter.tick({ ...input, nowMs: 16 }).status).toBe('unavailable')
+    expect(adapter.tick({ ...input, nowMs: 32 }).status).toBe('unavailable')
+    expect(camera.position.z).toBe(5)
+  })
+
+  it.each(['motion', 'manual', 'idle', 'reset'] as const)('cancels unfinished poses on %s transitions', (change) => {
+    const { input, root, camera } = fixture()
+    root.clear()
+    const { mesh, bone } = skinnedTriangle()
+    root.add(mesh)
+    bone.position.x = 8
+    const adapter = new SceneMotionFraming('model-1', { maxVertexVisitsPerFrame: 1, maxSampleMs: 8 })
+    expect(adapter.tick(input).status).toBe('unavailable')
+    bone.position.x = 0
+    if (change === 'reset')
+      adapter.reset()
+    adapter.tick({ ...input, nowMs: 16, motionRevision: change === 'motion' ? 1 : 0, manualControl: change === 'manual', motionActive: change === 'idle' ? false : undefined })
+    adapter.tick({ ...input, nowMs: 32, motionRevision: change === 'motion' ? 1 : 0, motionActive: change === 'idle' ? false : undefined })
+    expect(camera.position.z).toBe(5)
+    if (change === 'idle')
+      expect(adapter.tick({ ...input, nowMs: 100, motionActive: true }).status).toBe('unavailable')
+  })
+
+  it('captures morph weights and skinning together without mutating the live mesh bounds', () => {
+    const { input, root } = fixture()
+    root.clear()
+    const { mesh, bone } = skinnedTriangle()
+    mesh.geometry.morphAttributes.position = [new Float32BufferAttribute([3, 0, 0, 3, 0, 0, 3, 0, 0], 3)]
+    mesh.geometry.morphTargetsRelative = true
+    mesh.updateMorphTargets()
+    mesh.morphTargetInfluences![0] = 1
+    bone.position.x = 5
+    root.add(mesh)
+    const adapter = new SceneMotionFraming('model-1', { maxVertexVisitsPerFrame: 2, maxSampleMs: 8 })
+    expect(adapter.tick(input).status).toBe('unavailable')
+    mesh.morphTargetInfluences![0] = 0
+    bone.position.x = -8
+    expect(adapter.tick({ ...input, nowMs: 16 }).status).toBe('unavailable')
+    expect(applied(adapter.tick({ ...input, nowMs: 32 })).factor).toBeGreaterThan(3)
+    expect(mesh.boundingBox).toBeNull()
+  })
+
+  it.each([[-0.5, 1.5], [1, 1]])('retains Three.js skinning behavior for weights %j', (firstWeight, secondWeight) => {
+    const { input, root } = fixture()
+    root.clear()
+    const { mesh, bone } = skinnedTriangle()
+    const second = new Bone()
+    mesh.add(second)
+    mesh.bind(new Skeleton([bone, second]))
+    mesh.geometry.setAttribute('skinIndex', new Uint16BufferAttribute([0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0], 4))
+    mesh.geometry.setAttribute('skinWeight', new Float32BufferAttribute([firstWeight, secondWeight, 0, 0, firstWeight, secondWeight, 0, 0, firstWeight, secondWeight, 0, 0], 4))
+    bone.position.x = 2
+    second.position.x = 5
+    root.add(mesh)
+    const expected = applied(new SceneMotionFraming('model-1', { maxSampleMs: 8 }).tick(input))
+    input.camera.position.set(0, 0, 5)
+    input.camera.updateMatrixWorld(true)
+    const adapter = new SceneMotionFraming('model-1', { maxVertexVisitsPerFrame: 1, maxSampleMs: 8 })
+    adapter.tick(input)
+    adapter.tick({ ...input, nowMs: 16 })
+    expect(applied(adapter.tick({ ...input, nowMs: 32 })).factor).toBeCloseTo(expected.factor, 10)
+  })
+
+  it('rejects a later over-budget mesh before deforming any earlier mesh', () => {
+    const { input, root } = fixture()
+    root.clear()
+    const first = skinnedTriangle()
+    const second = skinnedTriangle()
+    root.add(first.mesh, second.mesh)
+    const vertices = vi.spyOn(SkinnedMesh.prototype, 'getVertexPosition')
+    try {
+      const adapter = new SceneMotionFraming('model-1', { maxVertexVisits: 5, maxSampleMs: 8 })
+      expect(adapter.tick(input).status).toBe('unavailable')
+      expect(vertices).not.toHaveBeenCalled()
+    }
+    finally {
+      vertices.mockRestore()
+    }
+  })
+
+  it('captures meshes sharing one skeleton before later bone movement', () => {
+    const { input, root } = fixture()
+    root.clear()
+    const { mesh, bone } = skinnedTriangle()
+    const shared = mesh.clone(false)
+    root.add(mesh, shared)
+    bone.position.x = 8
+    const expected = applied(new SceneMotionFraming('model-1', { maxSampleMs: 8 }).tick(input))
+    input.camera.position.set(0, 0, 5)
+    input.camera.updateMatrixWorld(true)
+    const adapter = new SceneMotionFraming('model-1', { maxVertexVisitsPerFrame: 2, maxSampleMs: 8 })
+    expect(adapter.tick(input).status).toBe('unavailable')
+    bone.position.x = -8
+    expect(adapter.tick({ ...input, nowMs: 16 }).status).toBe('unavailable')
+    expect(applied(adapter.tick({ ...input, nowMs: 32 })).factor).toBeCloseTo(expected.factor, 10)
+  })
+
+  it('rejects a morph workload that cannot fit one frame before deformation', () => {
+    const { input, root } = fixture()
+    root.clear()
+    const { mesh } = skinnedTriangle()
+    mesh.geometry.morphAttributes.position = [mesh.geometry.getAttribute('position')]
+    mesh.updateMorphTargets()
+    root.add(mesh)
+    const adapter = new SceneMotionFraming('model-1', { maxVertexVisitsPerFrame: 1, maxSampleMs: 8 })
+    expect(adapter.tick(input).status).toBe('unavailable')
+    expect(adapter.tick({ ...input, nowMs: 100 }).status).toBe('unavailable')
+    expect(mesh.boundingBox).toBeNull()
   })
 
   it('includes current morph target deformation in visible mesh bounds', () => {
@@ -267,7 +490,7 @@ describe('scene motion framing', () => {
     expect(camera.position.z).toBe(5)
   })
 
-  it('preserves an intentional close-up on initial idle without sampling geometry', () => {
+  it('preserves an intentional close-up while priming initial idle geometry', () => {
     const { adapter, input, camera } = fixture(6)
     const result = applied(adapter.tick({ ...input, motionActive: false }))
     expect(result.factor).toBe(1)

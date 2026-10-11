@@ -222,8 +222,9 @@ export class MotionController {
       return
     const step = Math.min(delta, 0.1)
     this.active.elapsed += delta
-    this.updateFades(this.mixer.time + step)
-    this.mixer.update(step)
+    // Clip time follows elapsed time. Only movement smoothing needs a bounded integration step.
+    this.updateFades(this.mixer.time + delta)
+    this.mixer.update(delta)
     for (const [action, deadline] of this.retiring) {
       if (this.mixer.time >= deadline) {
         action.stop()

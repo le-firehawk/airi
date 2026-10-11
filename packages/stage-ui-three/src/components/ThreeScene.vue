@@ -580,9 +580,7 @@ function onVrmFrame(root: Group) {
   }
   const snapshot = modelRef.value?.getMotionController()?.snapshot
   const motionActive = !!snapshot && (snapshot.loadingId !== undefined || snapshot.activeId !== snapshot.idleId)
-  // Preserve an intentional idle close-up until an actual motion needs more room.
-  if (!motionActive && !framing)
-    return
+  // Idle primes bounded geometry samples without changing the user's close-up.
   framing ??= new SceneMotionFraming(framingModelId, { maxZoomOut: 2.5 })
   const target = controlsRef.value?.controls?.target
   if (target)

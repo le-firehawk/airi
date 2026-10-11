@@ -114,11 +114,23 @@ Set `motionActive: false` during idle. This keeps initial close-ups unchanged an
 Idle restoration uses `shrinkDelayMs` and `shrinkRate`. It stops immediately when manual control begins.
 Leave `motionActive` undefined only for callers that intentionally want continuous full-body fitting.
 
-Live sampling includes visible meshes, current skinning, current morph weights, and bounded instance transforms.
+Live sampling captures visible meshes, skinning matrices, morph weights, and bounded instance transforms from one pose.
 Invisible ancestors, invisible materials, transparent zero-opacity meshes, and interaction colliders are excluded.
-The default cadence is 100 milliseconds. Rapid motion replacements cannot bypass that cadence.
-Node, mesh, vertex-work, and instance limits keep each sample bounded.
-Incomplete or malformed geometry produces `unavailable`. It never changes the camera using partial bounds.
+The minimum sampling cadence is 100 milliseconds. Rapid motion replacements cannot bypass that cadence.
+Each rendered frame processes at most 4,096 vertex/morph visits within a two-millisecond CPU slice.
+Pose capture counts toward that slice. Vertex processing checks time every 64 vertices.
+The sampler also bounds scene nodes, meshes, total vertex work, and instance transforms.
+
+An unfinished sample keeps its captured pose while animation continues. Only complete geometry reaches the camera solver.
+The previous complete bounds remain available during sampling. Delayed samples report `limited: true`.
+Geometry edits, visibility changes, motion replacements, manual control, and reset discard unfinished work.
+Malformed or over-budget geometry produces `unavailable`. Partial bounds never authorize a camera change.
+
+Initial idle collects one reference sample without changing the saved close-up.
+After that reference completes, playback can widen immediately while a new exact sample runs.
+An immediate first motion can precede this reference. Its first camera fit waits for the complete sample.
+In the synthetic 499,000-vertex test, completion took about two seconds at 60 rendered frames per second.
+Sampling latency does not pause the avatar animation. See [the frame-budget report](../../../../docs/ai/vrm-motion-frame-budget.md).
 Off-axis perspective projections are unsupported and leave the camera unchanged.
 
 The first complete sample supplies a reference envelope. It is not a measured rest pose or a motion's swept envelope.

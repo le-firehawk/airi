@@ -1,10 +1,11 @@
-import type { Material, Matrix4, Object3D, PerspectiveCamera } from 'three'
+import type { Box3, Matrix4, Object3D, PerspectiveCamera } from 'three'
 
 import type { FramingLens, MotionFramingOptions } from './motion-framing'
 
-import { Box3, InstancedMesh, Mesh, SkinnedMesh, Vector3 } from 'three'
+import { Vector3 } from 'three'
 
-import { combineMotionEnvelopes, MotionFramingController, transformMotionEnvelope } from './motion-framing'
+import { combineMotionEnvelopes, MotionFramingController } from './motion-framing'
+import { SceneBoundsSample } from './scene-bounds'
 
 /** The caller ticks after animation, spring bones, and model transforms have been updated. */
 export interface SceneMotionFramingTick {
@@ -34,6 +35,10 @@ export interface SceneMotionFramingOptions extends MotionFramingOptions {
   maxMeshes?: number
   /** Vertex visits, including active morph targets. @default 500000 */
   maxVertexVisits?: number
+  /** Maximum vertex and morph visits in one rendered frame. @default 4096 */
+  maxVertexVisitsPerFrame?: number
+  /** CPU milliseconds per sampling frame, including pose capture. @default 2 */
+  maxSampleMs?: number
   /** Maximum transforms per instanced mesh. @default 256 */
   maxInstances?: number
 }
@@ -51,17 +56,8 @@ interface Baseline {
   lens: FramingLens
 }
 
-interface SampleResult {
-  bounds: Box3 | undefined
-  complete: boolean
-}
-
 function bounded(value: number | undefined, fallback: number, minimum: number, maximum: number) {
   return Number.isFinite(value) ? Math.min(maximum, Math.max(minimum, value!)) : fallback
-}
-
-function visibleMaterial(material: Material) {
-  return material.visible && (!material.transparent || material.opacity > 0)
 }
 
 function validMatrix(matrix: Matrix4) {
@@ -92,6 +88,10 @@ export class SceneMotionFraming {
   private readonly maxMeshes: number
   private readonly maxVertexVisits: number
   private readonly maxInstances: number
+  private readonly maxVertexVisitsPerFrame: number
+  private readonly maxSampleMs: number
+  private pendingSample: SceneBoundsSample | undefined
+  private delayedSample = false
   private readonly restoreDelayMs: number
   private readonly restoreRate: number
   private baseline: Baseline | undefined
@@ -101,6 +101,7 @@ export class SceneMotionFraming {
   private restBounds: Box3 | undefined
   private lastSampleAt = -Infinity
   private lastMotionRevision = -1
+  private lastMotionActive: boolean | undefined
   private lastTime = -1
   private suspendedRevision: number | undefined
   private sampleComplete = false
@@ -114,6 +115,8 @@ export class SceneMotionFraming {
     this.maxNodes = Math.floor(bounded(options.maxNodes, 4096, 1, 16_384))
     this.maxMeshes = Math.floor(bounded(options.maxMeshes, 256, 1, 1024))
     this.maxVertexVisits = Math.floor(bounded(options.maxVertexVisits, 500_000, 1, 2_000_000))
+    this.maxVertexVisitsPerFrame = Math.floor(bounded(options.maxVertexVisitsPerFrame, 4096, 1, 16_384))
+    this.maxSampleMs = bounded(options.maxSampleMs, 2, 0.1, 8)
     this.maxInstances = Math.floor(bounded(options.maxInstances, 256, 1, 1024))
     this.restoreDelayMs = bounded(options.shrinkDelayMs, 750, 0, 10_000)
     this.restoreRate = bounded(options.shrinkRate, 0.75, 0.01, 4)
@@ -138,9 +141,12 @@ export class SceneMotionFraming {
     this.restBounds = undefined
     this.lastSampleAt = -Infinity
     this.lastMotionRevision = -1
+    this.lastMotionActive = undefined
     this.lastTime = -1
     this.suspendedRevision = undefined
     this.sampleComplete = false
+    this.pendingSample = undefined
+    this.delayedSample = false
     this.idleSince = undefined
     this.appliedFactor = 1
     this.appliedOffset.set(0, 0, 0)
@@ -161,8 +167,12 @@ export class SceneMotionFraming {
     }
     const delta = this.lastTime < 0 ? 0 : Math.min(0.1, (frame.nowMs - this.lastTime) / 1000)
     this.lastTime = frame.nowMs
+    if (frame.motionRevision !== this.lastMotionRevision || (frame.motionActive === false && this.lastMotionActive !== false))
+      this.pendingSample = undefined
     this.lastMotionRevision = frame.motionRevision
+    this.lastMotionActive = frame.motionActive
     if (frame.manualControl) {
+      this.pendingSample = undefined
       this.suspendedRevision = frame.cameraRevision
       return { status: 'manual', sampled: false }
     }
@@ -200,6 +210,7 @@ export class SceneMotionFraming {
     if (!this.lastApplied || !sameMatrix(frame.camera.matrixWorld, this.lastApplied)
       || !sameMatrix(frame.camera.projectionMatrix, baseline.projection) || !sameLens(lensFor(frame.camera), baseline.lens)) {
       this.suspendedRevision = frame.cameraRevision
+      this.pendingSample = undefined
       return { status: 'manual', sampled: false }
     }
     if (this.root && this.root !== frame.root)
@@ -209,19 +220,52 @@ export class SceneMotionFraming {
     if (!validMatrix(frame.root.matrixWorld))
       return { status: 'unavailable', sampled: false }
 
-    if (frame.motionActive === false)
+    if (frame.motionActive === false && this.restBounds) {
+      this.pendingSample = undefined
       return this.restoreIdle(frame, baseline, delta)
+    }
     this.idleSince = undefined
 
-    const sampled = frame.nowMs - this.lastSampleAt >= this.sampleIntervalMs
+    const sampled = !!this.pendingSample || frame.nowMs - this.lastSampleAt >= this.sampleIntervalMs
     if (sampled) {
-      this.lastSampleAt = frame.nowMs
-      const sample = this.sampleBounds(frame.root, frame.camera)
-      this.liveBounds = sample.bounds
-      this.sampleComplete = sample.complete
-      if (!this.restBounds && sample.complete && sample.bounds)
-        this.restBounds = sample.bounds.clone()
+      const deadline = performance.now() + this.maxSampleMs
+      try {
+        if (!this.pendingSample) {
+          this.lastSampleAt = frame.nowMs
+          this.pendingSample = SceneBoundsSample.capture(frame.root, frame.camera, {
+            maxNodes: this.maxNodes,
+            maxMeshes: this.maxMeshes,
+            maxVertexVisits: this.maxVertexVisits,
+            maxVertexVisitsPerFrame: this.maxVertexVisitsPerFrame,
+            maxInstances: this.maxInstances,
+          }, deadline)
+        }
+        if (!this.pendingSample || !this.pendingSample.valid(frame.camera, deadline)) {
+          this.pendingSample = undefined
+          this.sampleComplete = false
+          this.liveBounds = undefined
+        }
+        else {
+          const bounds = this.pendingSample.advance(this.maxVertexVisitsPerFrame, deadline)
+          if (bounds) {
+            this.liveBounds = bounds
+            this.sampleComplete = true
+            this.restBounds ??= bounds.clone()
+            this.delayedSample = frame.nowMs !== this.lastSampleAt
+            this.pendingSample = undefined
+          }
+        }
+      }
+      catch {
+        // Malformed or changed geometry cannot authorize camera movement from a partial sample.
+        this.pendingSample = undefined
+        this.sampleComplete = false
+        this.liveBounds = undefined
+      }
     }
+    // Prime one complete reference during idle without changing the user's close-up.
+    if (frame.motionActive === false)
+      return this.restoreIdle(frame, baseline, delta)
     if (!this.sampleComplete || !this.liveBounds || !this.restBounds)
       return { status: 'unavailable', sampled }
 
@@ -259,7 +303,7 @@ export class SceneMotionFraming {
     this.appliedFactor = result.solution.factor
     this.appliedOffset.copy(result.solution.cameraOffset)
     this.lastApplied = frame.camera.matrixWorld.clone()
-    return { status: 'applied', factor: result.solution.factor, limited: result.solution.limited || (!!frame.motionActive && !preflightEnvelope), sampled }
+    return { status: 'applied', factor: result.solution.factor, limited: result.solution.limited || this.delayedSample || !!this.pendingSample || (!!frame.motionActive && !preflightEnvelope), sampled }
   }
 
   private restoreIdle(frame: SceneMotionFramingTick, baseline: Baseline, delta: number): SceneMotionFramingResult {
@@ -291,83 +335,5 @@ export class SceneMotionFraming {
     camera.position.copy(worldPosition)
     camera.updateMatrixWorld(true)
     return true
-  }
-
-  private sampleBounds(root: Object3D, camera: PerspectiveCamera): SampleResult {
-    let ancestor = root.parent
-    let ancestors = 0
-    while (ancestor) {
-      if (!ancestor.visible || ++ancestors > this.maxNodes)
-        return { bounds: undefined, complete: false }
-      ancestor = ancestor.parent
-    }
-    const pending = [{ node: root, visible: true }]
-    const meshes: Mesh[] = []
-    let visited = 0
-    while (pending.length > 0) {
-      const { node, visible } = pending.pop()!
-      if (++visited > this.maxNodes || pending.length + node.children.length > this.maxNodes - visited)
-        return { bounds: undefined, complete: false }
-      const rendered = visible && node.visible
-      if (rendered && node instanceof Mesh && camera.layers.test(node.layers)) {
-        const materialVisible = Array.isArray(node.material) ? node.material.some(visibleMaterial) : visibleMaterial(node.material)
-        if (materialVisible && !node.name.startsWith('vrm_interaction_') && !node.name.startsWith('VRMC_springBone_collider')) {
-          meshes.push(node)
-          if (meshes.length > this.maxMeshes)
-            return { bounds: undefined, complete: false }
-        }
-      }
-      for (const child of node.children)
-        pending.push({ node: child, visible: rendered })
-    }
-    // Traversal proved a bounded subtree. This updates SkinnedMesh bind inverses before CPU skinning reads bone matrices.
-    root.updateMatrixWorld(true)
-    const rootInverse = root.matrixWorld.clone().invert()
-    const bounds: Box3[] = []
-    let vertexVisits = 0
-    for (const mesh of meshes) {
-      const positions = mesh.geometry.getAttribute('position')
-      if (!positions || !Number.isSafeInteger(positions.count) || positions.count <= 0)
-        continue
-      const activeMorphs = mesh.morphTargetInfluences?.filter(value => value !== 0).length ?? 0
-      const morphs = mesh.geometry.morphAttributes.position?.length ?? 0
-      vertexVisits += positions.count * (1 + Math.max(activeMorphs, morphs))
-      if (vertexVisits > this.maxVertexVisits)
-        return { bounds: undefined, complete: false }
-      let local: Box3 | null
-      try {
-        if (mesh instanceof SkinnedMesh) {
-          mesh.computeBoundingBox()
-          local = mesh.boundingBox
-        }
-        else if (mesh instanceof InstancedMesh) {
-          if (mesh.count > this.maxInstances || mesh.morphTexture)
-            return { bounds: undefined, complete: false }
-          mesh.geometry.computeBoundingBox()
-          mesh.computeBoundingBox()
-          local = mesh.boundingBox
-        }
-        else if (activeMorphs > 0) {
-          local = new Box3()
-          const vertex = new Vector3()
-          for (let i = 0; i < positions.count; i++)
-            local.expandByPoint(mesh.getVertexPosition(i, vertex))
-        }
-        else {
-          mesh.geometry.computeBoundingBox()
-          local = mesh.geometry.boundingBox
-        }
-      }
-      catch {
-        // Invalid imported geometry cannot change the user's camera or create a partial visibility claim.
-        return { bounds: undefined, complete: false }
-      }
-      const transformed = local && transformMotionEnvelope(local, rootInverse.clone().multiply(mesh.matrixWorld))
-      if (!transformed)
-        return { bounds: undefined, complete: false }
-      bounds.push(transformed)
-    }
-    const combined = combineMotionEnvelopes(bounds)
-    return { bounds: combined, complete: !!combined }
   }
 }

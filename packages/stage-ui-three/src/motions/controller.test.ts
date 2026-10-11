@@ -629,6 +629,16 @@ describe('motion controller', () => {
     controller.dispose()
   })
 
+  it('advances the clip clock through a slow frame without truncating playback', async () => {
+    const { controller } = createController()
+    await controller.play('dance', { duration: 15 })
+    const initialTime = controller.mixer.time
+    controller.update(0.8)
+    expect(controller.mixer.time - initialTime).toBeCloseTo(0.8, 10)
+    expect(controller.snapshot.activeId).toBe('dance')
+    controller.dispose()
+  })
+
   it('counts large frame gaps toward action deadlines and handles invalid deltas', async () => {
     const { controller } = createController()
     await controller.play('dance')

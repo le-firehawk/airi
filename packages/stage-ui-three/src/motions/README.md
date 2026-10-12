@@ -69,6 +69,7 @@ An in-flight result with an outdated revision cannot start playback.
 - `reset` returns immediately to idle for an invisible, detached avatar.
 - `dispose` cancels requests, releases mixer bindings, and restores the temporary movement transform.
 - A canceled request resolves false even if its asset transport cannot abort.
+- `playResult` returns a request-specific rejection reason. UI messages distinguish readiness, camera interaction, missing clips, load failure, space, cancellation, and queue capacity.
 - A failed load returns to idle and permits the next queued action to proceed.
 
 Body transitions use a 0.3-second crossfade from each action's current effective weight.
@@ -118,6 +119,8 @@ Unusual proportions, props, clothing, morphs, and secondary physics still requir
 The solver never changes the camera to make a rejected motion pass.
 Users can enlarge the stage or zoom out before retrying.
 The explicit Fit model for motion action fits built-in envelopes and validates circle clearance before applying a new view.
+It reads the current canvas size before fitting, including a resize that has not reached the next rendered frame.
+A successful fit preserves bounds readiness so the resize panel retains its result.
 It preserves the lens, orientation, and model placement, and uses a full-body orbit pivot.
 A failed fit leaves the close-up unchanged. A successful fit stops playback, game ownership, and pending notification reactions.
 

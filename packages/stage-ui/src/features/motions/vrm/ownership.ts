@@ -1,5 +1,5 @@
 import type { NotificationWaveContext, NotificationWaveIntent } from '@proj-airi/stage-ui-three/companion'
-import type { MotionController, MotionPlayOptions } from '@proj-airi/stage-ui-three/motions'
+import type { MotionController, MotionPlayOptions, MotionPlayResult } from '@proj-airi/stage-ui-three/motions'
 
 import type { MotionIntentName } from '../../companion-games/motion-adapter'
 
@@ -103,15 +103,24 @@ export class MotionOwnership {
   }
 
   async playUser(id: string, options: MotionPlayOptions = {}) {
-    if (this.blocked())
-      return false
+    return (await this.playUserResult(id, options)).accepted
+  }
+
+  /** User commands keep their own rejection reason across replacement, cancellation, and concurrent queue admission. */
+  async playUserResult(id: string, options: MotionPlayOptions = {}): Promise<MotionPlayResult | { accepted: false, reason: 'paused' | 'interaction-busy' }> {
+    if (this.disposed)
+      return { accepted: false, reason: 'not-ready' }
+    if (this.state.paused)
+      return { accepted: false, reason: 'paused' }
+    if (this.state.manipulationActive)
+      return { accepted: false, reason: 'interaction-busy' }
     this.revokeGame()
     if (options.mode === 'queue' && this.operation?.kind === 'user') {
       this.operation.deadline = Date.now() + 65_000 * Math.min(17, this.controller.snapshot.queuedIds.length + 2)
       this.revision++
-      return this.controller.play(id, options)
+      return this.controller.playResult(id, options)
     }
-    return this.begin('user', crypto.randomUUID(), id, options).started
+    return this.begin('user', crypto.randomUUID(), id, options).result
   }
 
   async playConversation(id: string) {
@@ -242,19 +251,20 @@ export class MotionOwnership {
     const operation: Operation = { id, kind, signal: new AbortController(), started: false, deadline: Date.now() + (kind === 'game' ? 4000 : kind === 'notification' ? 5000 : 65_000), complete, finished }
     this.operation = operation
     this.revision++
-    const started = this.controller.play(motionId, options).then((accepted) => {
+    const result = this.controller.playResult(motionId, options).then((result): MotionPlayResult => {
       if (this.operation !== operation || operation.signal.signal.aborted)
-        return false
-      operation.started = accepted
-      if (!accepted)
+        return { accepted: false, reason: 'cancelled' }
+      operation.started = result.accepted
+      if (!result.accepted)
         this.finish(operation, false)
-      return accepted
-    }).catch(() => {
-      if (this.operation === operation)
-        this.finish(operation, false)
-      return false
+      return result
+    }).catch((): MotionPlayResult => {
+      if (this.operation !== operation || operation.signal.signal.aborted)
+        return { accepted: false, reason: 'cancelled' }
+      this.finish(operation, false)
+      return { accepted: false, reason: 'load-failed' }
     })
-    return { started, finished }
+    return { started: result.then(result => result.accepted), result, finished }
   }
 
   private finish(operation: Operation, accepted: boolean, now = Date.now()) {

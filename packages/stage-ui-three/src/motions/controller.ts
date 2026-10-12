@@ -3,7 +3,7 @@ import type { AnimationAction, Box3, Group } from 'three'
 
 import type { MotionCatalog } from './catalog'
 import type { MotionStageFrame, StageMotionPlan } from './stage-bounds'
-import type { MotionControllerSnapshot, MotionMetadata, MotionPlayOptions } from './types'
+import type { MotionControllerSnapshot, MotionMetadata, MotionPlayOptions, MotionPlayResult } from './types'
 
 import { AnimationClip, AnimationMixer, LoopOnce, LoopRepeat, Quaternion, Vector3 } from 'three'
 
@@ -186,7 +186,7 @@ export class MotionController {
     const metadata = this.catalog.get(this.active.id)
     if (!metadata)
       return
-    if (!this.admitToStage(metadata, this.active.stageRadius)) {
+    if (!this.admitToStage(metadata, this.active.stageRadius).accepted) {
       const idle = this.catalog.get(this.idleId)
       const envelope = idle && this.stageBounds && createStageMotionEnvelope(this.stageBounds, idle, this.height)
       const idlePlan = envelope ? planStageMotion(frame, envelope, false) : undefined
@@ -209,20 +209,25 @@ export class MotionController {
 
   /** Resolves true when playback starts or a request enters the queue. Stale or invalid requests resolve false. */
   async play(id: string, options: MotionPlayOptions = {}): Promise<boolean> {
+    return (await this.playResult(id, options)).accepted
+  }
+
+  /** Returns this request's admission result. Later requests, idle loads, and snapshot errors cannot change its reason. */
+  async playResult(id: string, options: MotionPlayOptions = {}): Promise<MotionPlayResult> {
     if (this.disposed)
-      return false
+      return { accepted: false, reason: 'not-ready' }
     const metadata = this.catalog.get(id)
     if (!metadata) {
       this.error = `Motion "${id}" is not registered.`
-      return false
+      return { accepted: false, reason: 'unavailable' }
     }
     if (options.mode === 'queue' && (this.loadingId || this.active.deadline !== Infinity)) {
       if (this.queued.length >= 16) {
         this.error = 'The motion queue is full. Stop playback to clear it.'
-        return false
+        return { accepted: false, reason: 'queue-full' }
       }
       this.queued.push({ id, options: { ...options, mode: 'replace' } })
-      return true
+      return { accepted: true }
     }
     if (options.mode !== 'queue')
       this.queued.length = 0
@@ -254,7 +259,7 @@ export class MotionController {
         return false
       if (this.clips.get(id)?.revision !== this.catalog.getRevision(id))
         return false
-      if (!this.admitToStage(metadata, undefined, this.active.deadline === Infinity))
+      if (!this.admitToStage(metadata, undefined, this.active.deadline === Infinity).accepted)
         return false
       if (id === this.idleId && clip === this.idleClip) {
         this.error = undefined
@@ -403,7 +408,7 @@ export class MotionController {
     return clip
   }
 
-  private async start(id: string, options: MotionPlayOptions, metadata: Readonly<MotionMetadata>) {
+  private async start(id: string, options: MotionPlayOptions, metadata: Readonly<MotionMetadata>): Promise<MotionPlayResult> {
     this.playbackRequest?.abort()
     const request = new AbortController()
     this.playbackRequest = request
@@ -412,12 +417,13 @@ export class MotionController {
     try {
       const clip = await this.loadClip(id, request.signal)
       if (request.signal.aborted || this.disposed)
-        return false
+        return { accepted: false, reason: 'cancelled' }
       const stageRadius = options.radius === undefined ? undefined : bounded(options.radius, this.height * 0.12, 0, this.height * 2)
-      if (!this.admitToStage(metadata, stageRadius)) {
+      const admission = this.admitToStage(metadata, stageRadius)
+      if (!admission.accepted) {
         // Queue admission uses the current viewport after loading, not the size when the item was enqueued.
         this.queued.length = 0
-        return false
+        return admission
       }
       const speed = bounded(options.speed, 1, 0.25, 2)
       const loop = options.loop ?? metadata.loop
@@ -430,15 +436,16 @@ export class MotionController {
       this.active.stageRadius = stageRadius
       this.active.strideLength = bounded(metadata.strideLength, 0.44, 0.05, 0.8)
       this.stageTurn = 0
-      return true
+      return { accepted: true }
     }
     catch {
+      const result: MotionPlayResult = { accepted: false, reason: request.signal.aborted || this.disposed ? 'cancelled' : 'load-failed' }
       if (!request.signal.aborted && !this.disposed) {
         this.error = `Motion "${id}" failed to load.`
         // A failed queued motion cannot strand later requests or suppress the idle.
         this.advanceQueue()
       }
-      return false
+      return result
     }
     finally {
       if (this.playbackRequest === request) {
@@ -559,16 +566,16 @@ export class MotionController {
     void this.start(next.id, next.options, metadata)
   }
 
-  private admitToStage(metadata: Readonly<MotionMetadata>, radius?: number, commit = true) {
+  private admitToStage(metadata: Readonly<MotionMetadata>, radius?: number, commit = true): MotionPlayResult {
     if (!this.stage)
-      return true
+      return { accepted: true }
     if (this.stage.manualControl) {
       this.error = 'Finish adjusting the camera before starting a motion.'
-      return false
+      return { accepted: false, reason: 'manual-camera' }
     }
     if (!this.stageBounds) {
       this.error = 'The stage is preparing model bounds. Try the motion again when the model is ready.'
-      return false
+      return { accepted: false, reason: 'not-ready' }
     }
     const envelope = createStageMotionEnvelope(this.stageBounds, metadata, this.height)
     if (envelope && this.stageEnvelope && (this.retiring.size > 0 || Math.abs(this.movementYaw) > 0.0001))
@@ -576,13 +583,13 @@ export class MotionController {
     const plan = envelope && planStageMotion(this.stage, envelope, metadata.rootMotion === 'circle', radius)
     if (!plan) {
       this.error = 'This motion needs more room. Enlarge the model window or zoom out, then try again.'
-      return false
+      return { accepted: false, reason: 'insufficient-room' }
     }
     if (commit) {
       this.stageEnvelope = envelope
       this.stagePlan = plan
     }
-    return true
+    return { accepted: true }
   }
 
   private waitForStageBounds(signal: AbortSignal): Promise<boolean> {

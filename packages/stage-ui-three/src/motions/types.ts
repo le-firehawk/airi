@@ -46,3 +46,8 @@ export interface MotionControllerSnapshot {
 
 /** An explicit fit request changes the view only when the loaded stage has enough usable pixels. */
 export type MotionStageFitResult = 'applied' | 'not-ready' | 'insufficient-room'
+
+/** Each rejected playback request retains its own reason, independent of later controller snapshots. */
+export type MotionPlayResult
+  = | { accepted: true }
+    | { accepted: false, reason: 'not-ready' | 'manual-camera' | 'insufficient-room' | 'queue-full' | 'cancelled' | 'load-failed' | 'unavailable' }

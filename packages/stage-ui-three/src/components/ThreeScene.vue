@@ -631,12 +631,14 @@ function onVrmFrame(root: Group) {
   motionStageReady.value = controller?.stageBoundsReady ?? false
 }
 
-function resetMotionFraming() {
+function resetMotionFraming(preserveStageReadiness = false) {
   framing?.reset({ restore: true })
   framing = undefined
-  framingRoot = undefined
   automaticCameraPosition = undefined
-  motionStageReady.value = false
+  if (!preserveStageReadiness) {
+    framingRoot = undefined
+    motionStageReady.value = false
+  }
   cameraRevision++
 }
 
@@ -864,8 +866,17 @@ const orbitPicker = new OrbitPivotPicker(
 
 useEventListener(() => tresContextRef.value?.renderer.instance.domElement, 'wheel', () => orbitPicker.cancel(), { passive: true })
 
-watch([() => props.modelId, () => props.modelSrc, () => props.paused, controlEnable, modelRef], () => {
+function cancelSceneManipulation() {
   orbitPicker.cancel()
+  controlsRef.value?.cancelPivotTransition()
+  activePointer = undefined
+  pointerManipulation.value = false
+  orbitManipulation.value = false
+  pivotTransitionActive.value = false
+}
+
+watch([() => props.modelId, () => props.modelSrc, () => props.paused, controlEnable, modelRef], () => {
+  cancelSceneManipulation()
   orbitPickFailed.value = false
 }, { flush: 'sync' })
 
@@ -884,13 +895,23 @@ function resetOrbitPivot() {
 function fitMotionStage(): MotionStageFitResult {
   orbitPicker.cancel()
   const controller = modelRef.value?.getMotionController()
-  if (!canFitMotionStage.value || !controller?.stageBoundsReady)
+  const canvas = tresContextRef.value?.renderer.instance.domElement
+  const root = framingRoot
+  if (!canFitMotionStage.value || !controller?.stageBoundsReady || !canvas || !root)
     return 'not-ready'
+  const { clientWidth: width, clientHeight: height } = canvas
+  if (width <= 0 || height <= 0)
+    return 'not-ready'
+  // Native resize and Vue's camera watcher can finish after the last motion frame. Fit must use the current canvas.
+  camera.value.aspect = width / height
+  camera.value.updateProjectionMatrix()
+  controller.setStageFrame({ camera: camera.value, root, width, height, manualControl: false })
   const view = controller.suggestStageMotionView(controlsRef.value?.controls?.maxDistance)
   if (!view)
     return 'insufficient-room'
   controller.reset()
-  resetMotionFraming()
+  // Fitting keeps the loaded controller and its bounds. A false readiness pulse discards the resize panel's success feedback.
+  resetMotionFraming(true)
   controlsRef.value?.cancelPivotTransition()
   camera.value.position.copy(view.position)
   modelOrigin.value = toVec3(view.target)
@@ -968,11 +989,10 @@ function handleCanvasInteraction(event: PointerEvent) {
 useEventListener(defaultWindow, 'pointerup', () => {
   pointerManipulation.value = false
 })
-useEventListener(defaultWindow, 'blur', () => {
-  orbitPicker.cancel()
-  activePointer = undefined
-  pointerManipulation.value = false
-  orbitManipulation.value = false
+useEventListener(defaultWindow, 'blur', cancelSceneManipulation)
+useEventListener(defaultWindow?.document, 'visibilitychange', () => {
+  if (defaultWindow?.document.hidden)
+    cancelSceneManipulation()
 })
 
 onMounted(() => {

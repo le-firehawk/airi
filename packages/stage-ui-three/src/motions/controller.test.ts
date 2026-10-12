@@ -98,6 +98,38 @@ describe('motion catalog', () => {
 })
 
 describe('motion controller', () => {
+  it('retains a failed load result while the next queued motion clears the snapshot error', async () => {
+    const { controller } = createController()
+    const load = Promise.withResolvers<AnimationClip>()
+    controller.catalog.register({ id: 'slow-failure', name: 'Slow failure', category: 'gesture', duration: 1, source: 'imported', loop: false }, () => load.promise)
+    try {
+      const result = controller.playResult('slow-failure')
+      expect(await controller.play('bow', { mode: 'queue' })).toBe(true)
+      load.reject(new Error('Unreadable animation'))
+      expect(await result).toEqual({ accepted: false, reason: 'load-failed' })
+      await vi.waitFor(() => expect(controller.snapshot.activeId).toBe('bow'))
+      expect(controller.snapshot.error).toBeUndefined()
+    }
+    finally {
+      controller.dispose()
+    }
+  })
+
+  it('retains cancellation when the replacement request has a different rejection reason', async () => {
+    const { controller } = createController()
+    controller.catalog.register({ id: 'slow-result', name: 'Slow result', category: 'gesture', duration: 1, source: 'imported', loop: false }, () => new Promise<AnimationClip>(() => {}))
+    try {
+      const result = controller.playResult('slow-result')
+      controller.stop()
+      expect(await controller.playResult('missing')).toEqual({ accepted: false, reason: 'unavailable' })
+      expect(await result).toEqual({ accepted: false, reason: 'cancelled' })
+      expect(controller.snapshot.error).toContain('not registered')
+    }
+    finally {
+      controller.dispose()
+    }
+  })
+
   it('starts with the supplied idle and restores it after a selected idle', async () => {
     const { controller } = createController()
     expect(controller.snapshot.activeId).toBe('default-idle')

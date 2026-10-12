@@ -1,3 +1,5 @@
+import type { MotionPlayResult } from '@proj-airi/stage-ui-three/motions'
+
 import type { MotionCommand } from './command'
 
 import { defineEventa } from '@moeru/eventa'
@@ -8,7 +10,9 @@ export type { MotionCommand } from './command'
 export const motionCommand = defineEventa<MotionCommand>('airi:vrm-motion:command')
 export const motionLibraryChanged = defineEventa('airi:vrm-motion:library-changed')
 export const motionPreferencesChanged = defineEventa<{ modelId: string }>('airi:vrm-motion:preferences-changed')
-export const motionCommandResult = defineEventa<{ modelId: string, requestId: string, accepted: boolean }>('airi:vrm-motion:command-result')
+/** Only the matching model and request consume an admission result. Rejections carry request-local reasons. */
+export type MotionCommandResult = { modelId: string, requestId: string } & (MotionPlayResult | { accepted: false, reason: 'paused' | 'interaction-busy' | 'invalid-command' })
+export const motionCommandResult = defineEventa<MotionCommandResult>('airi:vrm-motion:command-result')
 
 let context: ReturnType<typeof createContext>['context'] | undefined
 

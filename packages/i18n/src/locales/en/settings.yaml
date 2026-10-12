@@ -2175,9 +2175,19 @@ vrm:
     import-description: Choose self-contained .vrma files up to 16 MB each. Files stay on this device. Import only motions you have permission to use.
     choose-files: Choose VRMA files
     imported: 'Imported {count} motions.'
-    requested: Motion requested. Open the VRM stage or preview to play it.
+    requested: Waiting for the motion to load. Open the VRM stage or preview if it is closed.
     accepted: Motion accepted.
-    rejected: Motion unavailable or queue full.
+    rejections:
+      not-ready: The model is not ready. Wait for it to load, then try again.
+      manual-camera: Finish adjusting the camera before starting a motion.
+      interaction-busy: Finish adjusting the camera or model, or choosing an orbit center, then try again.
+      insufficient-room: This motion needs more room. Enlarge the model window or zoom out, then try again.
+      queue-full: The motion queue is full. Stop playback to clear it.
+      cancelled: This motion request was cancelled by another action.
+      load-failed: This motion failed to load. Try again or import the animation again.
+      unavailable: This motion is no longer available. Choose another motion.
+      paused: Motion playback is paused. Resume playback, then try again.
+      invalid-command: This motion request is invalid. Select the motion again.
     error: Motion error
     errors:
       format: Choose a valid binary VRMA animation file.

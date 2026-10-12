@@ -30,6 +30,7 @@ interface PickMesh {
 export interface OrbitPickScheduler {
   frame: (callback: () => void) => () => void
   task: (callback: () => void) => () => void
+  timeout: (callback: () => void, delay: number) => () => void
   now: () => number
 }
 
@@ -43,7 +44,21 @@ const browserScheduler: OrbitPickScheduler = {
     return () => cancelAnimationFrame(handle)
   },
   task(callback) {
-    const handle = setTimeout(callback, 0)
+    // Message tasks yield to input and paint without the nested timer minimum delay.
+    const channel = new MessageChannel()
+    const cancel = () => {
+      channel.port1.close()
+      channel.port2.close()
+    }
+    channel.port1.onmessage = () => {
+      cancel()
+      callback()
+    }
+    channel.port2.postMessage(null)
+    return cancel
+  },
+  timeout(callback, delay) {
+    const handle = setTimeout(callback, delay)
     return () => clearTimeout(handle)
   },
   now: () => performance.now(),
@@ -51,12 +66,15 @@ const browserScheduler: OrbitPickScheduler = {
 
 /**
  * Owns one click-time pose and ray until completion or cancellation. A newer click replaces the pending pick.
- * Two animation frames let the loading state paint before vertex work. Each later task has a bounded CPU budget.
+ * Two animation frames let the loading state paint before vertex work. Each later task has a bounded deformation budget.
+ * A ten-second deadline clears loading and releases manipulation ownership even if animation frames stop.
  */
 export class OrbitPivotPicker {
   private revision = 0
   private disposed = false
   private cancelScheduled: (() => void) | undefined
+  private cancelTimeout: (() => void) | undefined
+  private expiresAt = 0
   private meshes: PickMesh[] = []
   private meshIndex = 0
   private raycaster = new Raycaster()
@@ -83,6 +101,8 @@ export class OrbitPivotPicker {
     const revision = this.revision
     this.onBusy(true)
     try {
+      this.expiresAt = this.scheduler.now() + 10_000
+      this.cancelTimeout = this.scheduler.timeout(() => this.fail(revision, new Error('Orbit center lookup timed out')), 10_000)
       model.updateWorldMatrix(true, false)
       model.updateMatrixWorld(true)
       camera.updateWorldMatrix(true, false)
@@ -180,11 +200,7 @@ export class OrbitPivotPicker {
           drawEnd,
         })
       })
-      this.cancelScheduled = this.scheduler.frame(() => {
-        if (revision !== this.revision)
-          return
-        this.cancelScheduled = this.scheduler.frame(() => this.advance(revision))
-      })
+      this.scheduleFrame(revision, () => this.scheduleFrame(revision, () => this.advance(revision)))
     }
     catch (error) {
       this.fail(revision, error)
@@ -196,6 +212,8 @@ export class OrbitPivotPicker {
     this.revision++
     this.cancelScheduled?.()
     this.cancelScheduled = undefined
+    this.cancelTimeout?.()
+    this.cancelTimeout = undefined
     for (const mesh of this.meshes)
       mesh.surface.geometry.dispose()
     this.meshes = []
@@ -221,13 +239,16 @@ export class OrbitPivotPicker {
     if (this.disposed || revision !== this.revision)
       return
     this.cancelScheduled = undefined
-    const deadline = this.scheduler.now() + 2
     let visits = 0
     try {
+      if (this.scheduler.now() >= this.expiresAt)
+        throw new Error('Orbit center lookup timed out')
       if (this.meshes.some(mesh => !this.isCurrent(mesh))) {
         this.cancel()
         return
       }
+      // Validation must not consume the deformation budget. Otherwise a slow check can yield forever at vertex zero.
+      const deadline = this.scheduler.now() + 2
       while (this.meshIndex < this.meshes.length) {
         const mesh = this.meshes[this.meshIndex]!
         const count = mesh.positions.length / 3
@@ -319,6 +340,20 @@ export class OrbitPivotPicker {
       && geometry.morphAttributes.position === mesh.morphs
       && (geometry.morphAttributes.position?.length ?? 0) === mesh.morphAttributes.length
       && mesh.morphAttributes.every(({ attribute, version }, index) => geometry.morphAttributes.position?.[index] === attribute && attributeVersion(attribute) === version)
+  }
+
+  private scheduleFrame(revision: number, callback: () => void) {
+    this.cancelScheduled = this.scheduler.frame(() => {
+      if (this.disposed || revision !== this.revision)
+        return
+      this.cancelScheduled = undefined
+      try {
+        callback()
+      }
+      catch (error) {
+        this.fail(revision, error)
+      }
+    })
   }
 
   private schedule(revision: number) {

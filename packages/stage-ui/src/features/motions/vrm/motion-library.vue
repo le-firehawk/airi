@@ -157,7 +157,7 @@ async function remove() {
 const unsubscribe = getMotionBus().on(motionCommandResult, ({ body }) => {
   if (body?.requestId !== pendingRequest.value || body?.modelId !== modelId.value)
     return
-  status.value = t(body.accepted ? 'settings.vrm.motions.accepted' : 'settings.vrm.motions.rejected')
+  status.value = t(body.accepted ? 'settings.vrm.motions.accepted' : `settings.vrm.motions.rejections.${body.reason}`)
 })
 onScopeDispose(unsubscribe)
 </script>

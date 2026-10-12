@@ -1,8 +1,13 @@
+import type { MotionPlayOptions } from '@proj-airi/stage-ui-three/motions'
+
+import type { MotionCommandResult } from './bus'
+import type { MotionCommand } from './command'
+
 import { VRMCore, VRMHumanoid } from '@pixiv/three-vrm-core'
 import { MotionController } from '@proj-airi/stage-ui-three/motions'
 import { createPinia, disposePinia, setActivePinia } from 'pinia'
-import { AnimationClip, Group, Object3D, VectorKeyframeTrack } from 'three'
-import { expect, it, vi } from 'vitest'
+import { AnimationClip, Box3, Group, Object3D, PerspectiveCamera, Vector3, VectorKeyframeTrack } from 'three'
+import { afterEach, expect, it, vi } from 'vitest'
 import { effectScope, nextTick, ref, shallowRef } from 'vue'
 
 import { getMotionBus, motionCommand, motionCommandResult } from './bus'
@@ -119,4 +124,177 @@ it('does not relabel the mounted avatar while a selected model URL is still reso
     second.dispose()
     errors.mockRestore()
   }
+})
+
+it('returns the model-not-ready reason through the real command bus', async () => {
+  const pinia = createPinia()
+  setActivePinia(pinia)
+  const scope = effectScope()
+  const controller = createController()
+  const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+  const results: unknown[] = []
+  const command: MotionCommand = { modelId: 'unloaded-avatar', requestId: 'not-ready', type: 'play', motionId: 'bow', options: {} }
+  const unsubscribe = getMotionBus().on(motionCommandResult, ({ body }) => {
+    if (body?.requestId === command.requestId)
+      results.push(body)
+  })
+  try {
+    scope.run(() => useVrmMotionHost({ modelId: command.modelId, loadedModelId: 'previous-avatar', controller }))
+    await getMotionBus().emit(motionCommand, command)
+    expect(results).toEqual([{ modelId: command.modelId, requestId: command.requestId, accepted: false, reason: 'not-ready' }])
+  }
+  finally {
+    unsubscribe()
+    scope.stop()
+    disposePinia(pinia)
+    controller.dispose()
+    errors.mockRestore()
+  }
+})
+
+const cleanups: (() => void)[] = []
+afterEach(async () => {
+  for (const cleanup of cleanups.splice(0))
+    cleanup()
+  await Promise.resolve()
+  vi.restoreAllMocks()
+})
+
+function setupHost() {
+  const pinia = createPinia()
+  setActivePinia(pinia)
+  const scope = effectScope()
+  const controller = shallowRef(createController())
+  const modelId = ref<string>(crypto.randomUUID())
+  const loadedModelId = ref<string | undefined>(modelId.value)
+  const paused = ref(false)
+  const manipulationActive = ref(false)
+  vi.spyOn(console, 'error').mockImplementation(() => {})
+  const results: MotionCommandResult[] = []
+  const unsubscribe = getMotionBus().on(motionCommandResult, ({ body }) => {
+    if (body)
+      results.push(body)
+  })
+  const host = scope.run(() => useVrmMotionHost({ modelId, loadedModelId, controller, paused, manipulationActive }))!
+  cleanups.push(() => {
+    unsubscribe()
+    scope.stop()
+    disposePinia(pinia)
+    controller.value.dispose()
+  })
+  function send(motionId: string, options: MotionPlayOptions = {}) {
+    const requestId = crypto.randomUUID()
+    getMotionBus().emit(motionCommand, { modelId: modelId.value, requestId, type: 'play', motionId, options })
+    return requestId
+  }
+  async function result(requestId: string) {
+    await vi.waitFor(() => expect(results.some(result => result.requestId === requestId)).toBe(true))
+    return results.find(result => result.requestId === requestId)!
+  }
+  return { controller, modelId, loadedModelId, paused, manipulationActive, host, results, send, result }
+}
+
+it.each(['not-ready', 'manual-camera', 'insufficient-room'] as const)('reports %s stage admission through the real host and bus', async (reason) => {
+  const fixture = setupHost()
+  const camera = new PerspectiveCamera(45, 4 / 3, 0.1, 100)
+  camera.position.set(0, 0.9, reason === 'insufficient-room' ? 1 : 5)
+  camera.lookAt(0, 0.9, 0)
+  fixture.controller.value.setStageFrame({
+    camera,
+    root: new Group(),
+    width: 1200,
+    height: 900,
+    manualControl: reason === 'manual-camera',
+    bounds: reason === 'not-ready' ? undefined : new Box3(new Vector3(-0.3, 0, -0.2), new Vector3(0.3, 1.7, 0.2)),
+  })
+  expect(await fixture.result(fixture.send('bow'))).toMatchObject({ accepted: false, reason })
+})
+
+it('returns immediate unavailable-model replies after the sender records its request ID', async () => {
+  const fixture = setupHost()
+  fixture.loadedModelId.value = undefined
+  let pending = ''
+  const received: MotionCommandResult[] = []
+  const unsubscribe = getMotionBus().on(motionCommandResult, ({ body }) => {
+    if (body?.requestId === pending)
+      received.push(body)
+  })
+  try {
+    pending = useVrmMotionsStore().play(fixture.modelId.value, 'bow')
+    await fixture.result(pending)
+    expect(received).toEqual([{ modelId: fixture.modelId.value, requestId: pending, accepted: false, reason: 'not-ready' }])
+  }
+  finally {
+    unsubscribe()
+  }
+})
+
+it('distinguishes a full queue, blocked playback, and loader failure from stale controller errors', async () => {
+  const fixture = setupHost()
+  expect(await fixture.result(fixture.send('bow', { loop: true }))).toMatchObject({ accepted: true })
+  for (let index = 0; index < 16; index++)
+    expect(await fixture.result(fixture.send('wave', { mode: 'queue' }))).toMatchObject({ accepted: true })
+  expect(await fixture.result(fixture.send('wave', { mode: 'queue' }))).toMatchObject({ accepted: false, reason: 'queue-full' })
+  fixture.paused.value = true
+  expect(await fixture.result(fixture.send('bow'))).toMatchObject({ accepted: false, reason: 'paused' })
+  fixture.paused.value = false
+  fixture.manipulationActive.value = true
+  expect(await fixture.result(fixture.send('bow'))).toMatchObject({ accepted: false, reason: 'interaction-busy' })
+  fixture.manipulationActive.value = false
+  fixture.controller.value.catalog.register({ id: 'broken', name: 'Broken', category: 'gesture', duration: 1, source: 'imported', loop: false }, () => {
+    throw new Error('broken file')
+  })
+  expect(await fixture.result(fixture.send('broken'))).toMatchObject({ accepted: false, reason: 'load-failed' })
+  expect(await fixture.result(fixture.send('bow'))).toMatchObject({ accepted: true })
+})
+
+it('keeps a cancelled load separate from the replacement request rejection', async () => {
+  const fixture = setupHost()
+  fixture.controller.value.catalog.register({ id: 'slow', name: 'Slow', category: 'gesture', duration: 1, source: 'imported', loop: false }, () => new Promise<AnimationClip>(() => {}))
+  const slow = fixture.send('slow')
+  expect(fixture.controller.value.snapshot.loadingId).toBe('slow')
+  const unavailable = fixture.send('missing')
+  expect(await fixture.result(unavailable)).toMatchObject({ accepted: false, reason: 'unavailable' })
+  expect(await fixture.result(slow)).toMatchObject({ accepted: false, reason: 'cancelled' })
+  expect(fixture.controller.value.snapshot.error).toContain('not registered')
+})
+
+it('discards an old model load result after a new model takes ownership', async () => {
+  const fixture = setupHost()
+  const first = fixture.controller.value
+  first.catalog.register({ id: 'slow', name: 'Slow', category: 'gesture', duration: 1, source: 'imported', loop: false }, () => new Promise<AnimationClip>(() => {}))
+  const old = fixture.send('slow')
+  fixture.modelId.value = 'replacement-avatar'
+  fixture.loadedModelId.value = fixture.modelId.value
+  fixture.controller.value = createController()
+  await nextTick()
+  expect(await fixture.result(fixture.send('missing'))).toMatchObject({ accepted: false, reason: 'unavailable' })
+  expect(fixture.results.some(result => result.requestId === old)).toBe(false)
+  first.dispose()
+})
+
+it('blocks catalog motions during orbit-center interaction and resumes when it ends', async () => {
+  const fixture = setupHost()
+  const entries = fixture.controller.value.catalog.list().filter(entry => entry.source === 'builtin' && entry.id !== 'relaxed-idle')
+  fixture.manipulationActive.value = true
+  for (const entry of entries)
+    expect(await fixture.result(fixture.send(entry.id))).toMatchObject({ accepted: false, reason: 'interaction-busy' })
+  fixture.manipulationActive.value = false
+  for (const entry of entries)
+    expect(await fixture.result(fixture.send(entry.id))).toMatchObject({ accepted: true })
+})
+
+it('rejects invalid options with the same correlation ID before controller playback', async () => {
+  const fixture = setupHost()
+  expect(await fixture.result(fixture.send('bow', { speed: Number.NaN }))).toMatchObject({ accepted: false, reason: 'invalid-command' })
+  expect(fixture.controller.value.snapshot.activeId).toBe('default-idle')
+})
+
+it('reports cancellation for an explicit stop while a motion loads', async () => {
+  const fixture = setupHost()
+  fixture.controller.value.catalog.register({ id: 'slow-stop', name: 'Slow stop', category: 'gesture', duration: 1, source: 'imported', loop: false }, () => new Promise<AnimationClip>(() => {}))
+  const pending = fixture.send('slow-stop')
+  useVrmMotionsStore().stop(fixture.modelId.value)
+  expect(await fixture.result(pending)).toMatchObject({ accepted: false, reason: 'cancelled' })
+  expect(fixture.controller.value.snapshot.activeId).toBe('default-idle')
 })

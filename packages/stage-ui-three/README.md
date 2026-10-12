@@ -113,6 +113,10 @@ The app shell supplies the localized reset label through `orbitPivotResetLabel`.
 
 Orbit picking captures the clicked pose and camera before asynchronous work starts.
 The loading overlay gets a paint opportunity before geometry work begins.
-Vertex skinning and triangle tests run in bounded tasks, so reset, a newer click, and model or view changes can cancel them.
+Vertex skinning and triangle tests run in bounded message tasks without nested timer delays.
+Validation runs before each deformation budget starts, so expensive checks cannot prevent progress.
+Reset, a newer click, and model or view changes cancel pending work.
+Window blur, hidden documents, and paused scenes release both picking and recentering ownership.
+A ten-second deadline clears the loading state on stalled frame scheduling or excessive work.
 The picker skins each vertex once per pose. Instanced geometry retains its transforms and per-instance morph weights.
 The app shell supplies `orbitPivotLoadingLabel` and `orbitPivotErrorLabel` with the reset label.

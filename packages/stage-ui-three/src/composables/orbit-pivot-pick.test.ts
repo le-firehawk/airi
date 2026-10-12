@@ -12,6 +12,7 @@ const center = { x: 200, y: 200 }
 function setup() {
   const frames: (() => void)[] = []
   const tasks: (() => void)[] = []
+  const timeouts: (() => void)[] = []
   function enqueue(queue: (() => void)[], callback: () => void) {
     queue.push(callback)
     return () => {
@@ -23,6 +24,7 @@ function setup() {
   const scheduler: OrbitPickScheduler = {
     frame: callback => enqueue(frames, callback),
     task: callback => enqueue(tasks, callback),
+    timeout: callback => enqueue(timeouts, callback),
     now: () => 0,
   }
   const busy = vi.fn()
@@ -39,7 +41,7 @@ function setup() {
     while (frames.length || tasks.length)
       (frames.shift() ?? tasks.shift())!()
   }
-  return { picker, scheduler, frames, tasks, busy, picked, error, camera, group, mesh, drain }
+  return { picker, scheduler, frames, tasks, timeouts, busy, picked, error, camera, group, mesh, drain }
 }
 
 describe('deferred orbit pivot picking', () => {
@@ -280,5 +282,85 @@ describe('deferred orbit pivot picking', () => {
     expect(state.picked).not.toHaveBeenCalled()
     expect(state.frames).toHaveLength(0)
     expect(state.busy).toHaveBeenLastCalledWith(false)
+  })
+})
+
+// Report: user confirmation of a stuck orbit lookup, 2026-10-11.
+// ROOT CAUSE:
+// Validation could exhaust the deformation budget before vertex zero, so every task yielded without progress.
+// The deformation budget now starts after validation. An independent deadline also releases loading when frames stop.
+describe('orbit picker progress under validation load', () => {
+  it('clears ownership when animation frames stop before geometry starts', () => {
+    const state = setup()
+    state.picker.pick(state.group, state.camera, center, rect)
+    const staleFrame = state.frames[0]!
+    expect(state.busy).toHaveBeenLastCalledWith(true)
+    state.timeouts[0]!()
+    staleFrame()
+    expect(state.busy).toHaveBeenLastCalledWith(false)
+    expect(state.error).toHaveBeenCalledExactlyOnceWith(new Error('Orbit center lookup timed out'))
+    expect(state.frames).toHaveLength(0)
+    expect(state.timeouts).toHaveLength(0)
+    expect(state.picked).not.toHaveBeenCalled()
+    state.picker.pick(state.group, state.camera, center, rect)
+    state.drain()
+    expect(state.picked).toHaveBeenCalledTimes(1)
+    expect(state.timeouts).toHaveLength(0)
+  })
+
+  it('times out active work before a delayed watchdog runs', () => {
+    const state = setup()
+    state.mesh.geometry = new BoxGeometry(1, 1, 1, 64, 64, 64)
+    state.picker.pick(state.group, state.camera, center, rect)
+    state.frames.shift()!()
+    state.frames.shift()!()
+    state.scheduler.now = () => 10_001
+    state.drain()
+    expect(state.error).toHaveBeenCalledExactlyOnceWith(new Error('Orbit center lookup timed out'))
+    expect(state.busy).toHaveBeenLastCalledWith(false)
+    expect(state.timeouts).toHaveLength(0)
+    expect(state.picked).not.toHaveBeenCalled()
+  })
+
+  it('ignores an expired deadline after a new pick starts', () => {
+    const state = setup()
+    state.picker.pick(state.group, state.camera, center, rect)
+    const staleTimeout = state.timeouts[0]!
+    state.picker.pick(state.group, state.camera, center, rect)
+    staleTimeout()
+    expect(state.busy).toHaveBeenLastCalledWith(true)
+    expect(state.error).not.toHaveBeenCalled()
+    state.drain()
+    expect(state.picked).toHaveBeenCalledTimes(1)
+    expect(state.timeouts).toHaveLength(0)
+  })
+
+  it('clears ownership if scheduling the second frame throws', () => {
+    const state = setup()
+    state.picker.pick(state.group, state.camera, center, rect)
+    state.scheduler.frame = () => {
+      throw new Error('Frame scheduling failed')
+    }
+    state.frames.shift()!()
+    expect(state.busy).toHaveBeenLastCalledWith(false)
+    expect(state.error).toHaveBeenCalledExactlyOnceWith(new Error('Frame scheduling failed'))
+    expect(state.timeouts).toHaveLength(0)
+  })
+
+  it('finishes when unchanged geometry validation consumes the task budget', () => {
+    const state = setup()
+    let now = 0
+    state.scheduler.now = () => now
+    const original = state.mesh.geometry.getAttribute.bind(state.mesh.geometry)
+    vi.spyOn(state.mesh.geometry, 'getAttribute').mockImplementation((name) => {
+      now += 3
+      return original(name)
+    })
+    state.picker.pick(state.group, state.camera, center, rect)
+    for (let turn = 0; turn < 100 && (state.frames.length || state.tasks.length); turn++)
+      (state.frames.shift() ?? state.tasks.shift())!()
+    expect(state.picked).toHaveBeenCalledTimes(1)
+    expect(state.busy).toHaveBeenLastCalledWith(false)
+    state.picker.dispose()
   })
 })

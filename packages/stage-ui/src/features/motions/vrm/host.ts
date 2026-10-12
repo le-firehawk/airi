@@ -2,6 +2,8 @@ import type { NotificationWaveIntent } from '@proj-airi/stage-ui-three/companion
 import type { MotionController } from '@proj-airi/stage-ui-three/motions'
 import type { MaybeRefOrGetter } from 'vue'
 
+import type { MotionCommandResult } from './bus'
+
 import { loadRelaxedIdleClip } from '@proj-airi/stage-ui-three/motions'
 import { onScopeDispose, ref, toValue, watch } from 'vue'
 
@@ -130,31 +132,37 @@ export function useVrmMotionHost(options: {
       return
     const parsed = v.safeParse(motionCommandSchema, body)
     const controller = currentController()
+    const requestGeneration = generation
     if (!parsed.success || !controller) {
-      bus.emit(motionCommandResult, { ...correlation.output, accepted: false })
+      // Local senders store their request ID after emit returns. Even immediate rejections must arrive after that assignment.
+      await Promise.resolve()
+      if (requestGeneration === generation && controller === currentController())
+        bus.emit(motionCommandResult, { ...correlation.output, accepted: false, reason: parsed.success ? 'not-ready' : 'invalid-command' })
       return
     }
     const command = parsed.output
-    const requestGeneration = generation
-    let accepted = false
+    let result: MotionCommandResult = { ...correlation.output, accepted: false, reason: 'not-ready' }
     try {
       if (command.type === 'stop') {
         ownership?.stop()
-        accepted = true
+        result = { ...correlation.output, accepted: true }
       }
       else {
         const runtime = ownership
-        const started = runtime?.playUser(command.motionId, command.options)
+        const started = runtime?.playUserResult(command.motionId, command.options)
         refreshMotionRevision()
-        accepted = await started ?? false
+        const playback = await started
+        if (playback)
+          result = { ...correlation.output, ...playback }
         refreshMotionRevision()
       }
     }
     catch (error) {
       console.error('Motion command failed', error)
+      result = { ...correlation.output, accepted: false, reason: 'load-failed' }
     }
     if (requestGeneration === generation && controller === currentController())
-      bus.emit(motionCommandResult, { ...correlation.output, accepted })
+      bus.emit(motionCommandResult, result)
   })
 
   const removeGameListener = bus.on(gameMotionRequest, async ({ body }) => {

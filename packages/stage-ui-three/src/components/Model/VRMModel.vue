@@ -78,6 +78,7 @@ import { createVrmInteractionColliders } from '../../composables/vrm/interaction
 import { resolveInternalVrmHooks } from '../../composables/vrm/internal-hooks'
 import { useVRMLipSync } from '../../composables/vrm/lip-sync'
 import { MotionController } from '../../motions'
+import { updateMotionExpressions } from '../../motions/expression'
 import {
   createThreeRendererMemorySnapshot,
   createVrmSceneSummarySnapshot,
@@ -518,7 +519,11 @@ function bindManagedVrmInstanceRenderLoop() {
       vrmEmote.value?.update(delta, { skipVisemes: isLipSyncActive })
     })
     const expressionMs = measureFrameStep(tracingEnabled, () => {
-      activeVrm?.expressionManager?.update()
+      updateMotionExpressions(activeVrm?.expressionManager, motionController.value?.expressionCue, {
+        speech: isLipSyncActive,
+        // Neutral transitions and mouth-only custom emotes also retain priority.
+        emote: vrmEmote.value?.currentEmotion.value != null,
+      })
     })
     const nodeConstraintMs = measureFrameStep(tracingEnabled, () => {
       activeVrm?.nodeConstraintManager?.update()

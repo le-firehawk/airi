@@ -3,12 +3,13 @@ import type { AnimationAction, Box3, Group } from 'three'
 
 import type { MotionCatalog } from './catalog'
 import type { MotionStageFrame, StageMotionPlan } from './stage-bounds'
-import type { MotionControllerSnapshot, MotionMetadata, MotionPlayOptions, MotionPlayResult } from './types'
+import type { MotionControllerSnapshot, MotionExpressionCue, MotionMetadata, MotionPlayOptions, MotionPlayResult } from './types'
 
 import { AnimationClip, AnimationMixer, LoopOnce, LoopRepeat, Quaternion, Vector3 } from 'three'
 
 import { builtinMotionMetadata, createMotionCatalog } from './catalog'
 import { JointKinematics } from './joint-kinematics'
+import { sampleLaughPhrase } from './laugh'
 import { createBodyClip, measureRig } from './rig'
 import { createStageMotionEnvelope, fitStageMotionView, planStageMotion, transformStageOffset } from './stage-bounds'
 
@@ -58,6 +59,7 @@ export class MotionController {
   private readonly clips = new Map<string, ClipEntry>()
   private readonly retiring = new Map<AnimationAction, number>()
   private readonly fades = new Map<AnimationAction, WeightFade>()
+  private readonly laughActions = new WeakSet<AnimationAction>()
   private readonly queued: QueuedMotion[] = []
   private readonly restPosition: Vector3
   private readonly restRotation: Quaternion
@@ -125,6 +127,32 @@ export class MotionController {
       cachedClipCount: this.clips.size,
       error: this.error,
     }
+  }
+
+  /** The renderer applies this cue after speech and emotes. Mixer weights preserve interruption and stop fades. */
+  get expressionCue(): MotionExpressionCue | undefined {
+    if (this.disposed)
+      return undefined
+    let smile = 0
+    let mouth = 0
+    let squint = 0
+    const accumulate = (action: AnimationAction) => {
+      if (!this.laughActions.has(action))
+        return
+      const weight = action.getEffectiveWeight()
+      if (weight <= 0)
+        return
+      const phrase = sampleLaughPhrase(action.time / action.getClip().duration)
+      smile += phrase.smile * weight
+      mouth += phrase.mouth * weight
+      squint += phrase.squint * weight
+    }
+    accumulate(this.active.action)
+    for (const action of this.retiring.keys())
+      accumulate(action)
+    if (smile <= 0 && mouth <= 0 && squint <= 0)
+      return undefined
+    return { smile: Math.min(1, smile), mouth: Math.min(1, mouth), squint: Math.min(1, squint) }
   }
 
   /** Framing stays fixed until both travel and its smooth return have reached the saved transform. */
@@ -461,6 +489,11 @@ export class MotionController {
     // A live motion keeps its pose while a separate playback instance restarts the same immutable tracks.
     if (deadline !== Infinity && next.isScheduled() && next.getEffectiveWeight() > 0)
       next = this.mixer.clipAction(new AnimationClip(clip.name, clip.duration, clip.tracks))
+    // Imported clips with the same label retain their own expression ownership.
+    if (id === 'laugh' && this.catalog.get(id)?.source === 'builtin')
+      this.laughActions.add(next)
+    else
+      this.laughActions.delete(next)
     const initialWeight = next.isScheduled() ? next.getEffectiveWeight() : 0
     this.retiring.delete(next)
     if (previous.action !== next)

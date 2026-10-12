@@ -5,6 +5,7 @@ import type { ArmPose } from './joint-kinematics'
 import { AnimationClip, Euler, Quaternion, QuaternionKeyframeTrack, Vector3, VectorKeyframeTrack } from 'three'
 
 import { JointKinematics } from './joint-kinematics'
+import { sampleLaughPhrase } from './laugh'
 import { measureRig } from './rig'
 import { createRunGaitPose } from './run-gait'
 
@@ -121,17 +122,36 @@ export function createProceduralClip(vrm: VRMCore, id: string, duration: number)
         break
       }
       case 'laugh': {
-        const pulse = Math.sin(progress * Math.PI * 8) ** 2 * (0.8 + 0.2 * Math.sin(phase)) * hold
-        drop = rig.height * 0.005 * pulse
-        pose.spine = [0.1 * hold + 0.035 * pulse, 0, 0.02 * hold]
-        pose.chest = [0.025 * pulse, -0.025 * hold, 0]
-        pose.head = [-0.055 * hold + 0.035 * pulse, 0.015 * hold, -0.025 * hold]
-        leftArm.forward += 0.12 * hold
-        rightArm.forward += 0.28 * hold
-        leftArm.elbow += 0.38 * hold
-        rightArm.elbow += 0.85 * hold
-        leftArm.elevation += 0.03 * pulse
-        rightArm.elevation += 0.04 * pulse
+        const phrase = sampleLaughPhrase(progress)
+        // The pelvis yields backward under the chest while the ankle targets remain fixed.
+        drop = rig.height * (0.0025 * phrase.recover + 0.002 * phrase.compression)
+        depth = -rig.height * (0.003 * phrase.recover + 0.002 * phrase.compression)
+        pose.spine = [0.035 * phrase.recover - 0.018 * phrase.inhale + 0.03 * phrase.compression, -0.012 * phrase.recover, 0.018 * phrase.recover]
+        pose.chest = [-0.035 * phrase.inhale + 0.045 * phrase.chest, 0.008 * phrase.recover, -0.006 * phrase.recover]
+        pose.neck = [-0.009 * phrase.inhale + 0.016 * phrase.head, 0, 0]
+        pose.head = [-0.035 * phrase.inhale - 0.032 * phrase.recover + 0.015 * phrase.head, 0.018 * phrase.recover, -0.025 * phrase.recover]
+        pose.leftShoulder = [0, 0, 0.025 * phrase.inhale + 0.026 * phrase.chest]
+        pose.rightShoulder = [0, 0, -0.03 * phrase.inhale - 0.034 * phrase.chest]
+        leftArm.forward += 0.07 * phrase.head - 0.025 * phrase.inhale
+        leftArm.elbow += 0.13 * phrase.recover
+        leftArm.twist = -0.07 * phrase.recover
+        leftArm.wrist = 0.04 * phrase.head
+        rightHandTarget = joints.restPoint('spine')!.add(new Vector3(
+          -rig.height * (0.035 + 0.01 * phrase.recover),
+          rig.height * (0.05 + 0.006 * phrase.head),
+          rig.height * (0.1 + 0.006 * phrase.chest),
+        ))
+        reachWeight = phrase.gesture
+        rightArm.wrist = -0.1 * phrase.gesture
+        for (const side of ['left', 'right'] as const) {
+          const sign = side === 'left' ? -1 : 1
+          for (const [index, finger] of (['Index', 'Middle', 'Ring', 'Little'] as const).entries()) {
+            const curl = (0.14 + index * 0.025) * phrase.gesture
+            pose[`${side}${finger}Proximal`] = [0, sign * curl, 0]
+            pose[`${side}${finger}Intermediate`] = [0, sign * curl * 0.7, 0]
+            pose[`${side}${finger}Distal`] = [0, sign * curl * 0.4, 0]
+          }
+        }
         break
       }
       case 'head-bob': {
@@ -266,17 +286,21 @@ export function createProceduralClip(vrm: VRMCore, id: string, duration: number)
     const arms = new Map([...joints.arm('left', leftArm), ...joints.arm('right', rightArm)])
     if (rightHandTarget) {
       // Only kiss and thoughtful poses need this near-head range. Other motions retain the original arm limits.
-      for (const [bone, target] of joints.reachArm('right', rightHandTarget, 2.35, rightArm.wrist))
+      for (const [bone, target] of joints.reachArm('right', rightHandTarget, id === 'laugh' ? 2 : 2.35, rightArm.wrist))
         arms.get(bone)?.slerp(target, reachWeight)
     }
     for (const [bone, values] of rotations) {
       const angles = pose[bone]
       euler.set(angles?.[0] ?? 0, angles?.[1] ?? 0, angles?.[2] ?? 0, 'XYZ')
       const arm = arms.get(bone)
-      if (arm)
+      if (arm) {
+        if (angles)
+          arm.premultiply(joints.rotation(quaternion.setFromEuler(euler)))
         arm.toArray(values, values.length)
-      else
+      }
+      else {
         joints.rotation(quaternion.setFromEuler(euler)).toArray(values, values.length)
+      }
     }
   }
 

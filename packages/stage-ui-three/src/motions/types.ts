@@ -51,3 +51,10 @@ export type MotionStageFitResult = 'applied' | 'not-ready' | 'insufficient-room'
 export type MotionPlayResult
   = | { accepted: true }
     | { accepted: false, reason: 'not-ready' | 'manual-camera' | 'insufficient-room' | 'queue-full' | 'cancelled' | 'load-failed' | 'unavailable' }
+
+/** Temporary face weights sampled from the controller's live and retiring laugh actions. */
+export interface MotionExpressionCue {
+  smile: number
+  mouth: number
+  squint: number
+}

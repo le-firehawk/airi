@@ -103,6 +103,23 @@ function expectRelaxed(vrm: VRMCore, frame: Quaternion) {
 }
 
 describe('procedural joint geometry', () => {
+  // The October 12, 2026 recording showed uniform body pulses with motionless clavicles.
+  // ROOT CAUSE:
+  // A shared oscillator replaced breath phases. Authored exhalations now lead delayed shoulder and head movement.
+  it('gives laugh an opening breath and delayed shoulder response instead of a held oscillating pose', async () => {
+    const { vrm, root } = createJointRig()
+    const clip = await createMotionCatalog().load('laugh', vrm, new AbortController().signal)
+    const mixer = new AnimationMixer(vrm.scene)
+    mixer.clipAction(clip).play()
+    mixer.setTime(clip.duration * 0.13)
+    root.updateMatrixWorld(true)
+    expect(vrm.humanoid.getNormalizedBoneNode('chest')!.rotation.x).toBeLessThan(-0.015)
+    mixer.setTime(clip.duration * 0.26)
+    root.updateMatrixWorld(true)
+    expect(Math.abs(vrm.humanoid.getNormalizedBoneNode('rightShoulder')!.rotation.z)).toBeGreaterThan(0.015)
+    mixer.stopAllAction()
+  })
+
   it.each([
     { facing: 0, armRest: 0, shoulders: true, rawRotations: false },
     { facing: Math.PI, armRest: 0, shoulders: true, rawRotations: false, version: '0' as const },
@@ -288,7 +305,7 @@ describe('procedural joint geometry', () => {
     expect(vrm.humanoid.rawRestPose).toEqual(rawRest)
   })
 
-  it.each(['bow', 'dance', 'natural-idle'])('plants both feet in %s across facing directions and source scales', async (id) => {
+  it.each(['bow', 'dance', 'natural-idle', 'laugh'])('plants both feet in %s across facing directions and source scales', async (id) => {
     for (const facing of [0, Math.PI]) {
       for (const scale of [0.6, 1.8]) {
         const { vrm, root } = createJointRig({ facing, scale, tilt: 0.15, rawRotations: true })

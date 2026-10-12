@@ -6,7 +6,8 @@ It includes original procedural motions without model files or third-party motio
 ## Use
 
 Use this runtime for body gestures, a selected idle, and short bounded locomotion.
-Keep expression weights, lipsync, gaze, and spring bones in their existing VRM owners.
+Keep lipsync, explicit emotions, gaze, and spring bones in their existing VRM owners.
+The built-in laugh exposes a temporary facial cue alongside its body tracks.
 
 The host creates a dedicated movement group between its placement group and `vrm.scene`.
 The controller captures that movement group's initial position and rotation.
@@ -145,6 +146,26 @@ Walking uses alternating support and swing phases with planted-foot leg solution
 Its first hips offset is zero, so body-track anchoring preserves the support height.
 Loop endpoints match, including the breathing idles and rhythmic head motion.
 Optional bones are omitted when the avatar does not provide them.
+
+## Authored laugh phrase
+
+Laugh uses an opening breath, four uneven decaying exhalations, and a slower recovery.
+The chest follows the abdominal pulse. The head follows later, while the shoulders and hand settle at separate times.
+The pelvis yields backward with shallow knee flexion. The leg solver retains both ankle targets.
+One hand moves toward the torso, and the other remains relaxed.
+The existing arm and raw-joint constraints remain active. The model, rig, skin weights, and materials remain unchanged.
+
+Body and facial timing share `sampleLaughPhrase`.
+The controller exposes the weighted cue from active and fading built-in laugh actions.
+Imported clips cannot claim this cue by using the same clip name.
+`updateMotionExpressions` composes smile, mouth, and squint only while the expression manager applies mesh morphs, then restores the underlying weights.
+Explicit emotions, including their neutral transition, take priority.
+Live lipsync takes priority over the laugh mouth and over a smile whose authored mouth override affects speech.
+The squint cannot reduce an active blink. Speech suppresses the squint. Blink timing and gaze remain under their existing owners.
+Binary expressions are omitted because they cannot fade smoothly.
+
+These phases define timing and ownership, not a guarantee of natural appearance.
+Review the actual skinned model in motion, including entry, recovery, interruption, and speech interaction.
 
 ## Joint geometry
 

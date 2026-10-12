@@ -3,17 +3,36 @@ import type { MotionPlayOptions } from '@proj-airi/stage-ui-three/motions'
 import type { MotionCommandResult } from './bus'
 import type { MotionCommand } from './command'
 
+import { setImmediate } from 'node:timers/promises'
+
 import { VRMCore, VRMHumanoid } from '@pixiv/three-vrm-core'
 import { MotionController } from '@proj-airi/stage-ui-three/motions'
 import { createPinia, disposePinia, setActivePinia } from 'pinia'
 import { AnimationClip, Box3, Group, Object3D, PerspectiveCamera, Vector3, VectorKeyframeTrack } from 'three'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { effectScope, nextTick, ref, shallowRef } from 'vue'
 
 import { getMotionBus, motionCommand, motionCommandResult } from './bus'
 import { useVrmMotionHost } from './host'
 import { defaultMotionPreferences } from './library'
 import { useVrmMotionsStore } from './store'
+
+const savedPreferences = vi.hoisted(() => new Map<string, unknown>())
+
+// NOTICE:
+// These host tests run in Node, which has no browser storage driver.
+// library.ts creates localforage instances during module initialization.
+// Keep persistence tests in library*.browser.test.ts and remove this fixture if these tests move to browser mode.
+vi.mock('localforage', () => ({
+  default: {
+    createInstance: (options: LocalForageOptions) => ({
+      getItem: vi.fn(async (key: string) => options.storeName === 'preferences' ? savedPreferences.get(key) ?? null : null),
+      iterate: vi.fn(async () => undefined),
+    }),
+  },
+}))
+
+beforeEach(() => savedPreferences.clear())
 
 function createController() {
   const scene = new Group()
@@ -69,8 +88,6 @@ it('does not relabel the mounted avatar while a selected model URL is still reso
   const controller = shallowRef(first)
   const modelId = ref('avatar-a')
   const loadedModelId = ref<string | undefined>('avatar-a')
-  // Node has no IndexedDB driver. Keep the real store and its caught, expected storage failures.
-  const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
   const results: boolean[] = []
   const stopResults = getMotionBus().on(motionCommandResult, ({ body }) => {
     if (body?.requestId === 'selected-before-loaded')
@@ -79,6 +96,7 @@ it('does not relabel the mounted avatar while a selected model URL is still reso
   try {
     const host = scope.run(() => useVrmMotionHost({ modelId, loadedModelId, controller }))!
     const store = useVrmMotionsStore()
+    await setImmediate()
     expect(await host.interact('wave')).toBe(true)
     expect(first.snapshot.activeId).toBe('wave')
     const beforeFitStop = host.motionRevision.value
@@ -88,10 +106,10 @@ it('does not relabel the mounted avatar while a selected model URL is still reso
 
     await host.interact('bow')
     await host.interact('wave')
+    savedPreferences.set('avatar-b', { ...defaultMotionPreferences(), idleId: 'bow', aiEnabled: true, aiMotionIds: ['nod'] })
     const firstRevision = host.motionRevision.value
     modelId.value = 'avatar-b'
     expect(host.motionRevision.value).toBeGreaterThan(firstRevision)
-    store.preferences['avatar-b'] = { ...defaultMotionPreferences(), idleId: 'bow', aiEnabled: true, aiMotionIds: ['nod'] }
     await nextTick()
     expect(first.snapshot.activeId).toBe(first.snapshot.idleId)
     expect(first.snapshot.idleId).toBe('default-idle')
@@ -111,7 +129,8 @@ it('does not relabel the mounted avatar while a selected model URL is still reso
 
     controller.value = second
     loadedModelId.value = 'avatar-b'
-    await nextTick()
+    await setImmediate()
+    expect(store.preferences['avatar-b'].idleId).toBe('bow')
     expect(await host.interact('nod')).toBe(true)
     expect(second.snapshot.activeId).toBe('nod')
     expect(first.snapshot.activeId).toBe('default-idle')
@@ -122,7 +141,6 @@ it('does not relabel the mounted avatar while a selected model URL is still reso
     disposePinia(pinia)
     first.dispose()
     second.dispose()
-    errors.mockRestore()
   }
 })
 
@@ -131,7 +149,6 @@ it('returns the model-not-ready reason through the real command bus', async () =
   setActivePinia(pinia)
   const scope = effectScope()
   const controller = createController()
-  const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
   const results: unknown[] = []
   const command: MotionCommand = { modelId: 'unloaded-avatar', requestId: 'not-ready', type: 'play', motionId: 'bow', options: {} }
   const unsubscribe = getMotionBus().on(motionCommandResult, ({ body }) => {
@@ -148,7 +165,6 @@ it('returns the model-not-ready reason through the real command bus', async () =
     scope.stop()
     disposePinia(pinia)
     controller.dispose()
-    errors.mockRestore()
   }
 })
 
@@ -160,7 +176,7 @@ afterEach(async () => {
   vi.restoreAllMocks()
 })
 
-function setupHost() {
+async function setupHost() {
   const pinia = createPinia()
   setActivePinia(pinia)
   const scope = effectScope()
@@ -169,7 +185,6 @@ function setupHost() {
   const loadedModelId = ref<string | undefined>(modelId.value)
   const paused = ref(false)
   const manipulationActive = ref(false)
-  vi.spyOn(console, 'error').mockImplementation(() => {})
   const results: MotionCommandResult[] = []
   const unsubscribe = getMotionBus().on(motionCommandResult, ({ body }) => {
     if (body)
@@ -191,11 +206,26 @@ function setupHost() {
     await vi.waitFor(() => expect(results.some(result => result.requestId === requestId)).toBe(true))
     return results.find(result => result.requestId === requestId)!
   }
+  // Finish successful startup hydration before a command can change controller state.
+  await setImmediate()
   return { controller, modelId, loadedModelId, paused, manipulationActive, host, results, send, result }
 }
 
+// https://github.com/le-firehawk/airi/actions/runs/38191280005
+// ROOT CAUSE:
+// Browser storage failed in Node after the console spies were restored.
+// Mock only the persistence boundary and keep real store hydration in the host tests.
+it('loads motion metadata and default preferences without browser storage', async () => {
+  const fixture = await setupHost()
+  const store = useVrmMotionsStore()
+  await store.load()
+  await store.loadPreferences(fixture.modelId.value)
+  expect(store.imported).toEqual([])
+  expect(store.preferences[fixture.modelId.value]).toEqual(defaultMotionPreferences())
+})
+
 it.each(['not-ready', 'manual-camera', 'insufficient-room'] as const)('reports %s stage admission through the real host and bus', async (reason) => {
-  const fixture = setupHost()
+  const fixture = await setupHost()
   const camera = new PerspectiveCamera(45, 4 / 3, 0.1, 100)
   camera.position.set(0, 0.9, reason === 'insufficient-room' ? 1 : 5)
   camera.lookAt(0, 0.9, 0)
@@ -211,7 +241,7 @@ it.each(['not-ready', 'manual-camera', 'insufficient-room'] as const)('reports %
 })
 
 it('returns immediate unavailable-model replies after the sender records its request ID', async () => {
-  const fixture = setupHost()
+  const fixture = await setupHost()
   fixture.loadedModelId.value = undefined
   let pending = ''
   const received: MotionCommandResult[] = []
@@ -230,7 +260,7 @@ it('returns immediate unavailable-model replies after the sender records its req
 })
 
 it('distinguishes a full queue, blocked playback, and loader failure from stale controller errors', async () => {
-  const fixture = setupHost()
+  const fixture = await setupHost()
   expect(await fixture.result(fixture.send('bow', { loop: true }))).toMatchObject({ accepted: true })
   for (let index = 0; index < 16; index++)
     expect(await fixture.result(fixture.send('wave', { mode: 'queue' }))).toMatchObject({ accepted: true })
@@ -249,7 +279,7 @@ it('distinguishes a full queue, blocked playback, and loader failure from stale 
 })
 
 it('keeps a cancelled load separate from the replacement request rejection', async () => {
-  const fixture = setupHost()
+  const fixture = await setupHost()
   fixture.controller.value.catalog.register({ id: 'slow', name: 'Slow', category: 'gesture', duration: 1, source: 'imported', loop: false }, () => new Promise<AnimationClip>(() => {}))
   const slow = fixture.send('slow')
   expect(fixture.controller.value.snapshot.loadingId).toBe('slow')
@@ -260,7 +290,7 @@ it('keeps a cancelled load separate from the replacement request rejection', asy
 })
 
 it('discards an old model load result after a new model takes ownership', async () => {
-  const fixture = setupHost()
+  const fixture = await setupHost()
   const first = fixture.controller.value
   first.catalog.register({ id: 'slow', name: 'Slow', category: 'gesture', duration: 1, source: 'imported', loop: false }, () => new Promise<AnimationClip>(() => {}))
   const old = fixture.send('slow')
@@ -274,7 +304,7 @@ it('discards an old model load result after a new model takes ownership', async 
 })
 
 it('blocks catalog motions during orbit-center interaction and resumes when it ends', async () => {
-  const fixture = setupHost()
+  const fixture = await setupHost()
   const entries = fixture.controller.value.catalog.list().filter(entry => entry.source === 'builtin' && entry.id !== 'relaxed-idle')
   fixture.manipulationActive.value = true
   for (const entry of entries)
@@ -285,13 +315,13 @@ it('blocks catalog motions during orbit-center interaction and resumes when it e
 })
 
 it('rejects invalid options with the same correlation ID before controller playback', async () => {
-  const fixture = setupHost()
+  const fixture = await setupHost()
   expect(await fixture.result(fixture.send('bow', { speed: Number.NaN }))).toMatchObject({ accepted: false, reason: 'invalid-command' })
   expect(fixture.controller.value.snapshot.activeId).toBe('default-idle')
 })
 
 it('reports cancellation for an explicit stop while a motion loads', async () => {
-  const fixture = setupHost()
+  const fixture = await setupHost()
   fixture.controller.value.catalog.register({ id: 'slow-stop', name: 'Slow stop', category: 'gesture', duration: 1, source: 'imported', loop: false }, () => new Promise<AnimationClip>(() => {}))
   const pending = fixture.send('slow-stop')
   useVrmMotionsStore().stop(fixture.modelId.value)
